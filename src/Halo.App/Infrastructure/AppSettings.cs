@@ -64,6 +64,20 @@ internal sealed class AppSettings
 
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
+    /// <summary>Called by the uninstaller, before Halo's files are removed.</summary>
+    public static void RemoveStartupEntry()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            key?.DeleteValue("Halo", false);
+        }
+        catch (Exception)
+        {
+            // Uninstall must not fail over this.
+        }
+    }
+
     public static AppSettings Load()
     {
         try

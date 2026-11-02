@@ -34,6 +34,7 @@ internal sealed class HaloHost : IDisposable
     BatteryService _battery = null!;
     GlobalKeys _keys = null!;
     WhisperService _whisper = null!;
+    UpdateService _updates = null!;
     SearchCoordinator _search = null!;
     DownloadsService _downloads = null!;
     ShelfStore _shelf = null!;
@@ -198,6 +199,16 @@ internal sealed class HaloHost : IDisposable
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
+        _updates = Own(new UpdateService(_ui));
+        _updates.Ready += version =>
+            // Above routine messages, so a battery or clipboard toast can't bump it off the notch.
+            Post(new Activity("update-ready", ActivityKind.Message, PriorityDownloadDone,
+                new MessagePayload("", $"Halo {version} is ready · click to restart"), In(20))
+            {
+                Click = RestartForUpdate,
+            });
+        _updates.Start();
+
         Own(new TrayIcon(_settings, () => Application.Current.Shutdown(),
             replace => _keys.InterceptVolume = replace && _volume is not null,
             viz => OnMediaChanged(),
@@ -212,7 +223,7 @@ internal sealed class HaloHost : IDisposable
                 if (_settings.ShowNotifications) _ = StartNotificationsAsync();
                 else _activities.Remove("notification");
             },
-            _modules.TrayItems));
+            _modules.TrayItems, _updates, RestartForUpdate));
         if (CommandServer.IsEnabled)
         {
             Own(new CommandServer(_ui, HandleCommand));
@@ -382,6 +393,13 @@ internal sealed class HaloHost : IDisposable
         switch (parts[0].ToLowerInvariant())
         {
             case "ping": return "pong";
+            case "update-state":
+                return $"installed={_updates.IsInstalled} version={_updates.CurrentVersion} ready={_updates.ReadyVersion ?? "-"} last={_updates.LastResult}";
+            case "update-check": return Task.Run(_updates.CheckAsync).GetAwaiter().GetResult();
+            case "update-restart":
+                if (_updates.ReadyVersion is null) return "nothing ready";
+                _ui.BeginInvoke(RestartForUpdate);
+                return "restarting";
             case "diag": return Motion.Animator.Diagnostics;
             case "unmute":
                 _settings.MutedNotificationApps.Clear();
@@ -469,6 +487,12 @@ internal sealed class HaloHost : IDisposable
             default:
                 return _modules.PipeCommands.TryGetValue(parts[0], out var handler) ? handler(arg) : "error: unknown command";
         }
+    }
+
+    void RestartForUpdate()
+    {
+        // Velopack waits for this process to exit, swaps in the new version and starts it again.
+        if (_updates.RestartIntoUpdate()) Application.Current.Shutdown();
     }
 
     T Own<T>(T disposable) where T : IDisposable

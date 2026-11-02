@@ -14,7 +14,7 @@ internal sealed class TrayIcon : IDisposable
 
     public TrayIcon(AppSettings settings, Action onQuit, Action<bool> onReplaceVolumeChanged, Action<bool> onVisualizerChanged,
         Action onPlacementChanged, Action onVoiceLanguageChanged, Action onNotificationSettingsChanged,
-        IReadOnlyList<Modules.ModuleTrayItem> moduleItems)
+        IReadOnlyList<Modules.ModuleTrayItem> moduleItems, UpdateService updates, Action onRestartForUpdate)
     {
         _image = DrawIcon();
         var menu = new ContextMenuStrip { ShowImageMargin = false };
@@ -115,6 +115,27 @@ internal sealed class TrayIcon : IDisposable
         }
 
         menu.Items.Add(new ToolStripSeparator());
+        var update = new ToolStripMenuItem("Check for updates") { Enabled = updates.IsInstalled };
+        if (!updates.IsInstalled) update.ToolTipText = "Install Halo with Setup to get automatic updates";
+        update.Click += async (_, _) =>
+        {
+            if (updates.ReadyVersion is not null)
+            {
+                onRestartForUpdate();
+                return;
+            }
+            update.Text = "Checking for updates…";
+            update.Enabled = false;
+            var result = await updates.CheckAsync();
+            update.Enabled = true;
+            update.Text = result == "up to date" ? "Halo is up to date" : "Check for updates";
+        };
+        menu.Opening += (_, _) =>
+        {
+            if (updates.ReadyVersion is { } v) update.Text = $"Restart to update to {v}";
+        };
+        menu.Items.Add(new ToolStripLabel($"Version {updates.CurrentVersion}") { ForeColor = Color.Gray });
+        menu.Items.Add(update);
         menu.Items.Add("Open logs folder", null, (_, _) => Process.Start(new ProcessStartInfo(Paths.Logs) { UseShellExecute = true }));
         menu.Items.Add("Quit Halo", null, (_, _) => onQuit());
 

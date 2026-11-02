@@ -8,11 +8,20 @@ while music plays, green while charging, red for errors.
 
 ## Install
 
-1. Download `Halo-v0.2.2-win-x64.zip` from [Releases](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases).
-2. Unzip it anywhere (for example `%LOCALAPPDATA%\Programs\Halo`) and run `Halo.exe`.
-3. Optional: tray icon › **Start with Windows**.
+1. Download `HaloNotch-win-Setup.exe` from the [latest release](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases/latest) and run it.
+   - It installs for your account only (no admin prompt), adds Halo to the Start menu and starts it.
+   - Nothing else to install: .NET is included.
+2. Optional: tray icon › **Start with Windows**.
 
-Nothing else to install: .NET is included in the zip.
+Prefer no installer? `HaloNotch-win-Portable.zip` runs from any folder and updates itself the same way.
+
+**Updates are automatic.**
+- Halo checks for a new version shortly after it starts, then every 4 hours.
+- It downloads updates in the background; usually only the changed parts, a few MB.
+- When an update is ready, the notch shows "Halo x.y.z is ready · click to restart".
+- Ignore it and the update is applied the next time Halo quits.
+- The tray menu shows your version and has **Check for updates**.
+- Uninstall from Windows Settings › Apps. Your settings and data in `%LOCALAPPDATA%\Halo` are kept.
 
 - **Voice model:** on first launch Halo downloads the Whisper voice model (~148 MB, once) and says "Voice search ready" when done. Typing and circling work meanwhile. If you're offline then, it retries when you're back online or when you hold Right Alt.
 - **WebView2:** search results use the Microsoft Edge WebView2 Runtime, which comes with Windows 11 and current Edge. If it's missing, the notch offers a link to Microsoft's installer.
@@ -77,11 +86,23 @@ dotnet test tests/Halo.Core.Tests
 dotnet run --project src/Halo.App
 ```
 
-Release build (what you'd install):
+### Releasing an update
+
+To ship a version that every installed copy picks up:
+1. Bump `<Version>` in `Directory.Build.props`.
+2. Commit and push.
+3. Run:
 
 ```bash
-dotnet publish src/Halo.App -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -o artifacts/Halo
+powershell -File scripts/release.ps1 -Publish
 ```
+
+The script:
+- builds a self-contained Release;
+- packages it with [Velopack](https://velopack.io) (`vpk` is a repo-local dotnet tool), including a small delta from the previous release;
+- uploads `Setup.exe`, the portable zip and the update packages to a new GitHub release, using your `gh` login.
+
+Run it without `-Publish` to build the packages into `artifacts/releases` and try them first.
 
 On first launch Halo downloads the Whisper `base` model (~148 MB) to `%LOCALAPPDATA%\Halo\models`.
 Settings, logs and the browser profile live in `%LOCALAPPDATA%\Halo`. The tray icon has the options

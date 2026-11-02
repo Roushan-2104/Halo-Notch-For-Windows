@@ -12,6 +12,9 @@
     <RootNamespace>Halo</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PlatformTarget>x64</PlatformTarget>
+    <!-- Program.Main runs Velopack's install/update hooks before WPF starts. -->
+    <StartupObject>Halo.Program</StartupObject>
+    <ApplicationIcon>..\..\assets\halo.ico</ApplicationIcon>
     <Product>Halo</Product>
     <!-- DPI awareness is declared in app.manifest for WPF; WinForms is only used for the tray icon. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
@@ -27,6 +30,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Velopack" Version="1.2.158" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
