@@ -205,11 +205,21 @@ internal sealed class HaloHost : IDisposable
         var types = typeof(HaloHost).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(Modules.IHaloModule).IsAssignableFrom(t))
             .OrderBy(t => t.Name);
+        // Diagnostics: HALO_DISABLE_MODULES=music,clipboard starts Halo without those modules.
+        var disabled = (Environment.GetEnvironmentVariable("HALO_DISABLE_MODULES") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var type in types)
         {
             Safe($"module {type.Name}", () =>
             {
                 var module = (Modules.IHaloModule)Activator.CreateInstance(type)!;
+                if (disabled.Contains(module.Name))
+                {
+                    module.Dispose();
+                    Log.Info($"Module disabled: {module.Name}");
+                    return;
+                }
                 module.Start(new Modules.ModuleContext(module.Name, _ui, services, _notch, _activities, _modules));
                 Own(module);
                 Log.Info($"Module started: {module.Name}");

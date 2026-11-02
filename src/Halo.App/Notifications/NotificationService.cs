@@ -46,6 +46,8 @@ internal sealed class NotificationService : IDisposable
     readonly Dictionary<string, ImageSource?> _icons = new();
     readonly DispatcherTimer _poll;
     UserNotificationListener? _listener;
+    FileSystemWatcher? _store;
+    DispatcherTimer? _storeDebounce;
     bool _polling;
 
     public NotificationService(Dispatcher ui)
@@ -99,15 +101,57 @@ internal sealed class NotificationService : IDisposable
                 if (e.ChangeKind == UserNotificationChangedKind.Added) _ui.BeginInvoke(async () => await PollAsync());
             };
             Log.Info("Notifications: listening for events");
-            // Events can still be dropped (e.g. after sleep); a slow poll catches anything missed.
-            _poll.Interval = TimeSpan.FromSeconds(5);
         }
         catch (Exception)
         {
-            // Desktop apps don't get this event on most Windows builds; polling every 0.7 s is cheap.
-            Log.Info("Notifications: polling");
+            // Desktop apps don't get this event on most Windows builds; watch the store instead (below).
+        }
+
+        // Reading the whole notification list costs real CPU (it marshals every toast in Action Center),
+        // so don't poll it rapidly. Windows writes each new toast into its notification database, so a
+        // change to that file is the trigger; a slow poll is only a safety net if the file isn't there.
+        if (WatchStore())
+        {
+            _poll.Interval = TimeSpan.FromSeconds(30);
+            Log.Info("Notifications: watching the notification store");
+        }
+        else
+        {
+            _poll.Interval = TimeSpan.FromSeconds(2);
+            Log.Info("Notifications: polling every 2 s");
         }
         _poll.Start();
+    }
+
+    bool WatchStore()
+    {
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Microsoft\Windows\Notifications");
+        if (!Directory.Exists(dir)) return false;
+        try
+        {
+            // Writes come in bursts (database + WAL + SHM); coalesce them into one read.
+            _storeDebounce = new DispatcherTimer(TimeSpan.FromMilliseconds(120), DispatcherPriority.Background, async (s, _) =>
+            {
+                ((DispatcherTimer)s!).Stop();
+                await PollAsync();
+            }, _ui) { IsEnabled = false };
+            _store = new FileSystemWatcher(dir, "wpndatabase.db*")
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+            };
+            _store.Changed += (_, _) => _ui.BeginInvoke(() =>
+            {
+                _storeDebounce.Stop();
+                _storeDebounce.Start();
+            });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Can't watch the notification store", ex);
+            return false;
+        }
     }
 
     async Task PollAsync()
@@ -218,5 +262,10 @@ internal sealed class NotificationService : IDisposable
 
     public void ClearHistory() => History.Clear();
 
-    public void Dispose() => _poll.Stop();
+    public void Dispose()
+    {
+        _poll.Stop();
+        _storeDebounce?.Stop();
+        _store?.Dispose();
+    }
 }

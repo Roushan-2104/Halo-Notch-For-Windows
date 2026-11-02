@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <!-- 22621 projections (Windows 11 APIs like FocusSessionManager); still runs on Windows 10 2004+. -->
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <!-- Only for the tray NotifyIcon; its global usings are removed below to avoid WPF/WinForms name clashes. -->
