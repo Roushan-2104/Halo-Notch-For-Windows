@@ -154,6 +154,16 @@ internal static class Native
         return info.rcMonitor;
     }
 
+    public static MONITORINFO MonitorInfo(IntPtr monitor)
+    {
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        GetMonitorInfo(monitor, ref info);
+        return info;
+    }
+
+    /// <summary>MDT_EFFECTIVE_DPI = 0.</summary>
+    [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
+
     public static IntPtr PrimaryMonitor() => MonitorFromPoint(new POINT(0, 0), MONITOR_DEFAULTTOPRIMARY);
 
     public static void SetExStyle(IntPtr hwnd, long add, long remove = 0)

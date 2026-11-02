@@ -127,6 +127,7 @@ internal sealed class TickerFeature : IDisposable
         {
             s.Error = "offline";
             Schedule(s, RefreshSchedule.AfterFailure(++s.Failures, RefreshSchedule.Ticker(kind, false)));
+            UpdateDisplay();
             return;
         }
 
@@ -165,8 +166,11 @@ internal sealed class TickerFeature : IDisposable
 
     void UpdateDisplay()
     {
+        // Prices and "live" scores from hours ago (offline, rate-limited) mustn't keep rotating as if current.
+        var now = DateTime.UtcNow;
         var items = _sources.Values
             .Where(s => IsActive(s.Provider.Kind))
+            .Where(s => !RefreshSchedule.IsStale(s.Provider.Kind, s.Items.Any(i => i.Live), s.UpdatedUtc, now))
             .OrderBy(s => s.Provider.Kind)
             .SelectMany(s => s.Items)
             .ToList();

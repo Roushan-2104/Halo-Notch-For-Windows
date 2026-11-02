@@ -68,6 +68,20 @@ public static class WhenParser
     internal static string Clean(string word) =>
         word.Trim(',', ';', ':', '!', '?', '"', '(', ')', '-', '\u201C', '\u201D').TrimEnd('.').ToLowerInvariant();
 
+    /// <summary>
+    /// "in 1 hour" means one real hour, so add it in UTC: on the night the clocks go back, local wall time
+    /// + 1 h would fire two real hours later (and an hour early in spring).
+    /// </summary>
+    internal static DateTime Ahead(DateTime now, TimeSpan d) =>
+        now.Kind == DateTimeKind.Utc ? now + d : DateTime.SpecifyKind(Ahead(now, d, TimeZoneInfo.Local), now.Kind);
+
+    /// <summary><paramref name="local"/> + <paramref name="d"/> of real time, as wall-clock time in <paramref name="zone"/>.</summary>
+    public static DateTime Ahead(DateTime local, TimeSpan d, TimeZoneInfo zone)
+    {
+        var utc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone);
+        return TimeZoneInfo.ConvertTimeFromUtc(utc + d, zone);
+    }
+
     internal static DateTime? ParseWords(IReadOnlyList<string> w, DateTime now)
     {
         int n = w.Count;
@@ -75,11 +89,11 @@ public static class WhenParser
 
         // Relative: "in 20 minutes", "after an hour", "for 10 minutes", "20 minutes from now", "an hour later"
         if (w[0] is "in" or "after" or "within" or "for" && n > 1 && DurationParser.Parse(string.Join(' ', w.Skip(1))) is { } ahead)
-            return now + ahead;
+            return Ahead(now, ahead);
         if (n > 2 && w[n - 2] == "from" && w[n - 1] == "now" && DurationParser.Parse(string.Join(' ', w.Take(n - 2))) is { } fromNow)
-            return now + fromNow;
+            return Ahead(now, fromNow);
         if (n > 1 && w[n - 1] == "later" && DurationParser.Parse(string.Join(' ', w.Take(n - 1))) is { } later)
-            return now + later;
+            return Ahead(now, later);
 
         bool tomorrow = false, today = false, nextWeek = false;
         DayOfWeek? weekday = null;

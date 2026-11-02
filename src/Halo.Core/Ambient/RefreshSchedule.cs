@@ -23,6 +23,18 @@ public static class RefreshSchedule
         _ => Crypto,
     };
 
+    /// <summary>
+    /// Whether a ticker's last good data is too old to show as current: three missed refreshes, and never
+    /// less than 10 minutes (so one slow fetch doesn't blank a live score).
+    /// </summary>
+    public static bool IsStale(TickerKind kind, bool anyLive, DateTime? updatedUtc, DateTime nowUtc)
+    {
+        if (updatedUtc is not { } at) return false;
+        var limit = Ticker(kind, anyLive) * 3;
+        if (limit < TimeSpan.FromMinutes(10)) limit = TimeSpan.FromMinutes(10);
+        return nowUtc - at > limit;
+    }
+
     /// <summary>Delay after <paramref name="failures"/> consecutive failures: grows, never shorter than normal.</summary>
     public static TimeSpan AfterFailure(int failures, TimeSpan normal)
     {

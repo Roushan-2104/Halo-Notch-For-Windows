@@ -178,6 +178,10 @@ public partial class NotchWindow : Window
         _hwnd = new WindowInteropHelper(this).Handle;
         Native.SetExStyle(_hwnd, Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE);
         HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
+        Reposition();
+        // The primary monitor's scale changed (or the window moved to a monitor with another): WPF rescales
+        // the window, and the centre has to be worked out again at the new size.
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(Reposition, DispatcherPriority.Background);
     }
 
     IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -204,6 +208,7 @@ public partial class NotchWindow : Window
     /// </summary>
     public void Reposition()
     {
+        if (_hwnd != IntPtr.Zero && PlaceInPixels()) return;
         var area = SystemParameters.WorkArea;
         if (_services.Settings.PinToScreenEdge)
         {
@@ -215,6 +220,23 @@ public partial class NotchWindow : Window
             Left = area.Left + (area.Width - WindowWidth) / 2;
             Top = area.Top;
         }
+    }
+
+    /// <summary>
+    /// Centres the notch on the primary monitor in physical pixels at that monitor's own scale.
+    /// SystemParameters (used before the window exists) are in the system DPI captured at sign-in, which is
+    /// wrong once the primary monitor's scale differs from it (docking a 150% laptop to a 100% screen,
+    /// changing the scale in Settings): the notch ended up hundreds of pixels off centre.
+    /// </summary>
+    bool PlaceInPixels()
+    {
+        var monitor = Native.PrimaryMonitor();
+        if (Native.GetDpiForMonitor(monitor, 0, out uint dpi, out _) != 0 || dpi == 0) return false;
+        var info = Native.MonitorInfo(monitor);
+        var r = _services.Settings.PinToScreenEdge ? info.rcMonitor : info.rcWork;
+        int width = (int)Math.Round(WindowWidth * dpi / 96.0);
+        int x = r.Left + (r.Right - r.Left - width) / 2;
+        return Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, x, r.Top, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
     }
 
     public void BringToFront()
@@ -233,11 +255,27 @@ public partial class NotchWindow : Window
     internal void SetActivities(Activity? current, Activity? secondary)
     {
         bool wasAction = IsAction(_activity);
+        bool wasNotification = _mode == NotchMode.Notification;
         _activity = current;
         _secondary = secondary;
         Recompute();
         UpdateBubble();
         FlashForActivity();
+
+        // A notification that arrives (or is replaced by the next one) under a resting pointer is being
+        // read: hold it, as MouseEnter would have. Only while it still has a countdown, so the hold's own
+        // re-post doesn't loop back here.
+        if (_mode == NotchMode.Notification && Root.IsMouseOver && current?.ExpiresAt is not null)
+        {
+            _hoveringNotification = true;
+            NotificationHovered?.Invoke(true);
+        }
+        // The notification under the pointer went away: hovering opens the notch again.
+        if (wasNotification && _mode != NotchMode.Notification && Root.IsMouseOver && !_hoverExpanded)
+        {
+            _hoveringNotification = false;
+            StartHoverIn();
+        }
 
         bool isAction = IsAction(current);
         // An action that arrives under the pointer (e.g. while the notch is open) waits until it's seen.
@@ -245,7 +283,7 @@ public partial class NotchWindow : Window
         if (_heldActionId is { } held && (!isAction || current!.Id != held)) SetActionHold(false);
         if (isAction && Root.IsMouseOver && _heldActionId is null) SetActionHold(true);
         // The pointer stayed on the notch while an action pill was up; once it's gone, hovering works again.
-        if (wasAction && !isAction && Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
+        if (wasAction && !isAction && Root.IsMouseOver && !_hoverExpanded && _mode != NotchMode.Notification) StartHoverIn();
     }
 
     /// <summary>Raised while the pointer is on a one-shot action pill, so its countdown pauses.</summary>
@@ -734,6 +772,8 @@ public partial class NotchWindow : Window
         // A pressed button means a drag is passing through; the drop zone handles that case.
         if (Mouse.LeftButton == MouseButtonState.Pressed || !Root.IsMouseOver || !CanHover || Bubble.IsMouseOver) return;
         if (_mode == NotchMode.Compact && IsAction(_activity)) return;
+        // Hovering a notification holds it to be read; it never opens the notch over it.
+        if (_mode == NotchMode.Notification) return;
         _hoverExpanded = true;
         Recompute();
         UpdateBubble();

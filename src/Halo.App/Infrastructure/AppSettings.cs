@@ -43,6 +43,9 @@ internal sealed class AppSettings
     /// </summary>
     public bool ShowNotifications { get; set; } = true;
 
+    /// <summary>Halo's own soft ping for notifications and a chime for timers/reminders.</summary>
+    public bool NotchSounds { get; set; } = true;
+
     /// <summary>App IDs the user muted from the notch.</summary>
     public List<string> MutedNotificationApps { get; set; } = new();
 

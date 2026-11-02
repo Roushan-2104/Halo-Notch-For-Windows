@@ -36,6 +36,7 @@ internal sealed class HaloHost : IDisposable
     WhisperService _whisper = null!;
     UpdateService _updates = null!;
     int _testActionClicks, _testBubbleClicks;
+    DateTime _lastPing;
     DispatcherTimer? _updateReminder;
     SearchCoordinator _search = null!;
     DownloadsService _downloads = null!;
@@ -188,6 +189,14 @@ internal sealed class HaloHost : IDisposable
         _keys.VolumeKey += dir => _volume?.Step(dir);
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
+        NotchSound.Enabled = _settings.NotchSounds;
+        _modules.TrayItems.Add(new Modules.ModuleTrayItem("Notch sounds (ping and chime)", null, () => _settings.NotchSounds, on =>
+        {
+            _settings.NotchSounds = on;
+            _settings.Save();
+            NotchSound.Enabled = on;
+            if (on) NotchSound.Play(Halo.Core.Audio.PingKind.Notification);
+        }));
         _modules.TrayItems.Add(new Modules.ModuleTrayItem("Colour edge on events", null, () => _settings.HaloGlow, on =>
         {
             _settings.HaloGlow = on;
@@ -298,6 +307,13 @@ internal sealed class HaloHost : IDisposable
         }
 
         int more = _activities.Get("notification") is { Payload: NotificationPayload p } ? p.More + 1 : 0;
+        // Halo's own soft ping (Windows' sound can be turned off in its notification settings). A burst
+        // of toasts pings once.
+        if (DateTime.UtcNow - _lastPing > TimeSpan.FromSeconds(2))
+        {
+            _lastPing = DateTime.UtcNow;
+            NotchSound.Play(Halo.Core.Audio.PingKind.Notification);
+        }
         Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(6))
         {
             Click = () => OpenNotificationApp(n),
@@ -419,6 +435,9 @@ internal sealed class HaloHost : IDisposable
                 return "ok";
             case "test-action-state":
                 return $"clicks={_testActionClicks} bubbleClicks={_testBubbleClicks} shown={(_activities.Get("test-action") is { } t ? $"yes expires={(t.ExpiresAt is null ? "held" : "timed")}" : "no")}";
+            case "sound":
+                NotchSound.Play(arg.Trim() == "alert" ? Halo.Core.Audio.PingKind.Alert : Halo.Core.Audio.PingKind.Notification);
+                return "ok";
             case "edge-flash":
                 _notch.FlashEdge((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(arg.Trim()));
                 return "ok";

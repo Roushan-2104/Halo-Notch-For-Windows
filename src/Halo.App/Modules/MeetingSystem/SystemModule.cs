@@ -12,7 +12,14 @@ namespace Halo.Modules.MeetingSystem;
 /// </summary>
 internal sealed class SystemModule : IHaloModule
 {
-    const double CpuAlertPercent = 80, MemoryAlertPercent = 90, DrainAlertPerHour = 25;
+    const double MemoryAlertPercent = 90, DrainAlertPerHour = 25;
+
+    /// <summary>
+    /// An app keeping one and a half cores busy for 30 s is the runaway worth flagging (a single busy video
+    /// tab stays under it). As a share of the whole machine that's under 19% on 8 cores; the old "80% of the
+    /// machine" rule never fired there. Capped at 80% so small machines behave as before.
+    /// </summary>
+    static readonly double HogPercent = Math.Min(80, 150.0 / Environment.ProcessorCount);
     static readonly TimeSpan VisibleInterval = TimeSpan.FromSeconds(1);
     static readonly TimeSpan HiddenInterval = TimeSpan.FromSeconds(10);
     static readonly TimeSpan HistorySpan = TimeSpan.FromSeconds(60);
@@ -72,7 +79,7 @@ internal sealed class SystemModule : IHaloModule
         {
             var sampler = _sampler;
             bool visible = _panel.IsVisible;
-            var sample = await Task.Run(() => sampler.Sample(visible, CpuAlertPercent));
+            var sample = await Task.Run(() => sampler.Sample(visible, HogPercent));
             Apply(sample);
         }
         catch (Exception ex)
@@ -119,7 +126,7 @@ internal sealed class SystemModule : IHaloModule
     {
         if (_ctx is null) return;
         var now = s.At;
-        var hog = s.Top is { Percent: >= CpuAlertPercent } top ? top.Name : null;
+        var hog = s.Top is { } top && top.Percent >= HogPercent ? top.Name : null;
         if (_hog.Update(hog, now) && _cooldown.TryFire("cpu", now))
             _ctx.ShowMessage("", $"{AlertName(hog!)} is using a lot of CPU", seconds: 4);
 

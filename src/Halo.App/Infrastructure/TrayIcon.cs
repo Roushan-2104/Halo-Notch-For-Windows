@@ -74,7 +74,10 @@ internal sealed class TrayIcon : IDisposable
             onNotificationSettingsChanged();
         };
         // Only Windows can hide its own pop-ups; this opens the page with Do Not Disturb and per-app banners.
-        var windowsPopups = new ToolStripMenuItem("Turn off Windows pop-ups…") { ToolTipText = "Turn on Do Not Disturb; Halo keeps showing notifications" };
+        var windowsPopups = new ToolStripMenuItem("Turn off Windows pop-ups and sounds…")
+        {
+            ToolTipText = "Turn on Do Not Disturb, or turn off \"Allow notifications to play sounds\"; Halo keeps showing notifications with its own ping",
+        };
         windowsPopups.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true });
         var unmute = new ToolStripMenuItem("Unmute all apps") { Enabled = settings.MutedNotificationApps.Count > 0 };
         unmute.Click += (_, _) =>

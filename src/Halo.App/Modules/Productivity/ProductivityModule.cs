@@ -1,10 +1,10 @@
 using System.Globalization;
-using System.Media;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Halo.Core.Activities;
 using Halo.Core.Productivity;
+using Halo.Infrastructure;
 
 namespace Halo.Modules.Productivity;
 
@@ -405,14 +405,8 @@ internal sealed class ProductivityModule : IHaloModule, ITextCommand
 
     void Chime()
     {
-        try
-        {
-            SystemSounds.Asterisk.Play();
-        }
-        catch (Exception ex)
-        {
-            _ctx.Warn("Playing the alert sound failed", ex);
-        }
+        // Halo's two-note chime instead of Windows' asterisk sound.
+        NotchSound.Play(Halo.Core.Audio.PingKind.Alert);
     }
 
     // ---- Reminders -------------------------------------------------------------------------------

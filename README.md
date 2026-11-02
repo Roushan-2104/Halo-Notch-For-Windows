@@ -149,6 +149,9 @@ tests/           xUnit tests for Halo.Core
   for notification access; Halo says so in the bell tab if that's the case.
 - On layouts where Right Alt is AltGr (English India for ₹, German, French, Spanish, Polish...), Right Alt
   on its own is the talk key and AltGr + a key still types its character.
+- Halo plays its own soft ping for notifications and a two-note chime for timers and reminders (tray:
+  **Notch sounds**). To stop Windows' own notification sound as well, turn off **Allow notifications to
+  play sounds** in Settings › System › Notifications (tray: **Turn off Windows pop-ups and sounds…**).
 - The Copilot key replaces Windows' own Copilot/Search action while Halo runs. Right Ctrl only counts when
   held on its own, so Ctrl shortcuts (and Ctrl+click) are unaffected.
 - First launch shows the notch ~3 s after start (WPF's one-time theme load).
