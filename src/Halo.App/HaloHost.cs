@@ -35,6 +35,8 @@ internal sealed class HaloHost : IDisposable
     GlobalKeys _keys = null!;
     WhisperService _whisper = null!;
     UpdateService _updates = null!;
+    int _testActionClicks, _testBubbleClicks;
+    DispatcherTimer? _updateReminder;
     SearchCoordinator _search = null!;
     DownloadsService _downloads = null!;
     ShelfStore _shelf = null!;
@@ -128,6 +130,13 @@ internal sealed class HaloHost : IDisposable
                 if (_activities.Get("notification") is { } a) Post(a with { ExpiresAt = hovered ? null : In(3) });
             };
             _notch.NotificationView.Opened += OpenNotificationApp;
+            _notch.ActionClicked += id => _activities.Remove(id);
+            // Same for a clickable message: it waits while you move to click it.
+            _notch.ActionHovered += hovered =>
+            {
+                if (_activities.Current is { Click: not null } a && a.Kind is ActivityKind.Message or ActivityKind.DownloadComplete)
+                    Post(a with { ExpiresAt = hovered ? null : In(4) });
+            };
             _notch.NotificationView.Dismissed += () => _activities.Remove("notification");
             _notch.NotificationView.MuteRequested += n =>
             {
@@ -200,13 +209,10 @@ internal sealed class HaloHost : IDisposable
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
         _updates = Own(new UpdateService(_ui));
-        _updates.Ready += version =>
-            // Above routine messages, so a battery or clipboard toast can't bump it off the notch.
-            Post(new Activity("update-ready", ActivityKind.Message, PriorityDownloadDone,
-                new MessagePayload("", $"Halo {version} is ready · click to restart"), In(20))
-            {
-                Click = RestartForUpdate,
-            });
+        _updates.Ready += _ => AnnounceUpdate();
+        // A prompt that was missed (a call outranked it, the notch was busy) comes back later; the update
+        // is also applied whenever Halo quits, so nothing is lost if it's never clicked.
+        _updateReminder = new DispatcherTimer(TimeSpan.FromHours(2), DispatcherPriority.Background, (_, _) => AnnounceUpdate(), _ui);
         _updates.Start();
 
         Own(new TrayIcon(_settings, () => Application.Current.Shutdown(),
@@ -393,6 +399,24 @@ internal sealed class HaloHost : IDisposable
         switch (parts[0].ToLowerInvariant())
         {
             case "ping": return "pong";
+            case "test-action":
+                // A clickable message like "update ready", for testing hover and click behaviour.
+                Post(new Activity("test-action", ActivityKind.Message, PriorityDownloadDone,
+                    new MessagePayload("", arg.Length > 0 ? arg : "Test action · click me"), In(6))
+                {
+                    Click = () => _testActionClicks++,
+                });
+                return "ok";
+            case "hover-diag": return _notch.HoverDiag;
+            case "test-bubble":
+                // A clickable long-running activity, which shows in the side bubble when something outranks it.
+                Post(new Activity("test-bubble", ActivityKind.Progress, 30, new ProgressPayload("", "Test", 0.4), In(30))
+                {
+                    Click = () => _testBubbleClicks++,
+                });
+                return "ok";
+            case "test-action-state":
+                return $"clicks={_testActionClicks} bubbleClicks={_testBubbleClicks} shown={(_activities.Get("test-action") is { } t ? $"yes expires={(t.ExpiresAt is null ? "held" : "timed")}" : "no")}";
             case "edge-flash":
                 _notch.FlashEdge((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(arg.Trim()));
                 return "ok";
@@ -490,6 +514,18 @@ internal sealed class HaloHost : IDisposable
             default:
                 return _modules.PipeCommands.TryGetValue(parts[0], out var handler) ? handler(arg) : "error: unknown command";
         }
+    }
+
+    void AnnounceUpdate()
+    {
+        if (_updates.ReadyVersion is not { } version) return;
+        _updateReminder?.Start();
+        // Above routine messages, so a battery or clipboard toast can't bump it off the notch.
+        Post(new Activity("update-ready", ActivityKind.Message, PriorityDownloadDone,
+            new MessagePayload("", $"Halo {version} is ready · click to restart"), In(20))
+        {
+            Click = RestartForUpdate,
+        });
     }
 
     void RestartForUpdate()

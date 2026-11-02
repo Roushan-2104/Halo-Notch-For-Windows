@@ -45,6 +45,7 @@ public partial class NotchWindow : Window
 
     Activity? _activity, _secondary;
     NotchMode? _searchMode;
+    bool _holdingAction;
     bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
     (FrameworkElement Panel, bool Hold)? _pendingTab;
     Color? _moduleGlow;
@@ -95,6 +96,18 @@ public partial class NotchWindow : Window
         Root.DragLeave += (_, _) => _dragOut.Start();
         Root.Drop += OnDrop;
         Bubble.MouseLeftButtonUp += (_, _) => _secondary?.Click?.Invoke();
+        // Pressing on the notch means a click is coming; don't let a pending hover expand it away first.
+        Root.PreviewMouseLeftButtonDown += (_, _) => _hoverIn.Stop();
+        // The pill has already run its click (it handles the event first); a done action then goes away.
+        Root.MouseLeftButtonUp += (_, _) =>
+        {
+            if (_mode == NotchMode.Compact && IsAction(_activity)) ActionClicked?.Invoke(_activity!.Id);
+        };
+        // Moving from the side bubble onto the pill (both inside Root) raises no new MouseEnter.
+        Bubble.MouseLeave += (_, _) =>
+        {
+            if (Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
+        };
         Deactivated += (_, _) =>
         {
             if (_cardOpen && _cardInteractive && _searchMode is null) CloseCard();
@@ -219,11 +232,38 @@ public partial class NotchWindow : Window
 
     internal void SetActivities(Activity? current, Activity? secondary)
     {
+        bool wasAction = IsAction(_activity);
         _activity = current;
         _secondary = secondary;
         Recompute();
         UpdateBubble();
         FlashForActivity();
+
+        bool isAction = IsAction(current);
+        // An action that arrives under the pointer (e.g. while the notch is open) waits until it's seen.
+        if (isAction && Root.IsMouseOver && !_holdingAction) SetActionHold(true);
+        if (!isAction && _holdingAction) SetActionHold(false);
+        // The pointer stayed on the notch while an action pill was up; once it's gone, hovering works again.
+        if (wasAction && !isAction && Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
+    }
+
+    /// <summary>Raised while the pointer is on a one-shot action pill, so its countdown pauses.</summary>
+    public event Action<bool>? ActionHovered;
+
+    /// <summary>Raised after a one-shot action pill was clicked, with its activity id.</summary>
+    public event Action<string>? ActionClicked;
+
+    /// <summary>
+    /// One-shot messages you act on by clicking ("Update ready · click to restart", "Saved · click to
+    /// show"). Hovering must not expand the notch over them, or the thing to click disappears.
+    /// </summary>
+    static bool IsAction(Activity? a) =>
+        a is { Click: not null, Kind: ActivityKind.Message or ActivityKind.DownloadComplete };
+
+    void SetActionHold(bool on)
+    {
+        _holdingAction = on;
+        ActionHovered?.Invoke(on);
     }
 
     public void SetSearchMode(NotchMode? mode)
@@ -628,6 +668,10 @@ public partial class NotchWindow : Window
 
     // ---- Hover ---------------------------------------------------------------------------------
 
+    internal string HoverDiag =>
+        $"root={Root.IsMouseOver} bubble={Bubble.IsMouseOver} bubbleHit={Bubble.IsHitTestVisible} bubbleLeft={Canvas.GetLeft(Bubble):0} " +
+        $"bubbleOpacity={Bubble.Opacity:0.00} mode={_mode} hoverExpanded={_hoverExpanded} hoverInMs={_hoverIn.Interval.TotalMilliseconds} dpiX={System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX}";
+
     bool CanHover => _searchMode is null && !_fullscreen && !_dragging;
 
     void OnRootMouseEnter(object sender, MouseEventArgs e)
@@ -642,12 +686,30 @@ public partial class NotchWindow : Window
             NotificationHovered?.Invoke(true);
             return;
         }
-        if (!_hoverExpanded && CanHover) _hoverIn.Start();
+        if (IsAction(_activity))
+        {
+            SetActionHold(true);
+            if (_mode == NotchMode.Compact) return;
+        }
+        if (!_hoverExpanded) StartHoverIn();
+    }
+
+    /// <summary>
+    /// Hovering opens the notch quickly, except over a pill that does something when clicked (the meeting
+    /// mic, a running timer): there it waits long enough for a click to land first.
+    /// </summary>
+    void StartHoverIn()
+    {
+        if (!CanHover || Bubble.IsMouseOver) return;
+        bool clickable = _mode == NotchMode.Compact && _activity is { Click: not null, Kind: not ActivityKind.NowPlaying };
+        _hoverIn.Interval = TimeSpan.FromMilliseconds(clickable ? 700 : 110);
+        _hoverIn.Start();
     }
 
     void OnRootMouseLeave(object sender, MouseEventArgs e)
     {
         _hoverIn.Stop();
+        if (_holdingAction) SetActionHold(false);
         if (_hoveringNotification)
         {
             _hoveringNotification = false;
@@ -662,7 +724,8 @@ public partial class NotchWindow : Window
     {
         _hoverIn.Stop();
         // A pressed button means a drag is passing through; the drop zone handles that case.
-        if (Mouse.LeftButton == MouseButtonState.Pressed || !Root.IsMouseOver || !CanHover) return;
+        if (Mouse.LeftButton == MouseButtonState.Pressed || !Root.IsMouseOver || !CanHover || Bubble.IsMouseOver) return;
+        if (_mode == NotchMode.Compact && IsAction(_activity)) return;
         _hoverExpanded = true;
         Recompute();
         UpdateBubble();

@@ -130,7 +130,7 @@ internal sealed class MeetingModule : IHaloModule
         return $"mic=[{List(now.Microphone)}] camera=[{List(now.Camera)}] screen=[{List(now.Screen)}] " +
                $"presenting={Infrastructure.PrivacyState.Presenting} muted={_mic.Muted} " +
                $"device={_mic.DeviceName ?? "-"} notify={_watcher.UsingNotifications} " +
-               $"activity={(_ctx?.Get(ActivityId) is null ? "hidden" : "shown")} fake={_fakeApp ?? "-"}";
+               $"activity={(_ctx?.Get(ActivityId) is null ? "hidden" : "shown")} fake={_fakeApp ?? "-"} fakeMuted={_fakeMuted}";
     }
 
     public void Dispose()
