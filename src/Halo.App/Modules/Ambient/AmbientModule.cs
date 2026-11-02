@@ -1,0 +1,123 @@
+using System.Net.Http;
+using System.Net.NetworkInformation;
+using Halo.Core.Ambient;
+
+namespace Halo.Modules.Ambient;
+
+/// <summary>Everything the ambient features remember between runs (%LOCALAPPDATA%\Halo\modules\ambient.json).</summary>
+internal sealed class AmbientData
+{
+    public GeoLocation? Location { get; set; }
+    public DateTime? LastRainAlertUtc { get; set; }
+
+    public bool TickerEnabled { get; set; }
+    public List<TickerKind> TickerKinds { get; set; } = new();
+    public List<string> StockSymbols { get; set; } = new(StocksProvider.DefaultSymbols);
+    public string? CricketTeam { get; set; }
+
+    public bool PetEnabled { get; set; }
+}
+
+/// <summary>
+/// Weather, customizable tickers and a tiny pet: quiet things that live in the notch when nothing
+/// else is happening. Each feature owns its timers and only runs while it has something to do.
+/// </summary>
+internal sealed class AmbientModule : IHaloModule
+{
+    ModuleContext _ctx = null!;
+    AmbientData _data = new();
+    WeatherFeature? _weather;
+    TickerFeature? _ticker;
+    PetFeature? _pet;
+
+    public string Name => "ambient";
+
+    public void Start(ModuleContext ctx)
+    {
+        _ctx = ctx;
+        _data = ctx.Load<AmbientData>();
+        _data.TickerKinds = _data.TickerKinds.Distinct().ToList();
+        if (_data.StockSymbols.Count == 0) _data.StockSymbols = new(StocksProvider.DefaultSymbols);
+
+        _weather = new WeatherFeature(ctx, _data, Save);
+        _ticker = new TickerFeature(ctx, _data, Save);
+        _pet = new PetFeature(ctx, _data, Save);
+        _weather.Start();
+        _ticker.Start();
+        _pet.Start();
+
+        ctx.AddCommand(new AmbientCommand(_weather, _ticker, _pet));
+        ctx.AddTrayToggle("Ticker", () => _data.TickerEnabled, on => _ticker.SetEnabled(on));
+        ctx.AddTrayToggle("Pet", () => _data.PetEnabled, on => _pet.SetEnabled(on));
+
+        ctx.AddPipeCommand("ambient-weather", _ => _weather.RefreshNowBlocking());
+        ctx.AddPipeCommand("ambient-ticker-preview", arg => _ticker.PreviewBlocking(arg));
+        ctx.AddPipeCommand("ambient-pet", arg => _pet.Force(arg));
+        ctx.AddPipeCommand("ambient-state", _ =>
+            $"online={NetworkInterface.GetIsNetworkAvailable()}; weather: {_weather.State}; ticker: {_ticker.State}; pet: {_pet.State}");
+    }
+
+    void Save() => _ctx.Save(_data);
+
+    public void Dispose()
+    {
+        _weather?.Dispose();
+        _ticker?.Dispose();
+        _pet?.Dispose();
+    }
+}
+
+/// <summary>"weather", "ticker cricket", "pet on"... Parsing lives in Halo.Core so it is unit tested.</summary>
+internal sealed class AmbientCommand(WeatherFeature weather, TickerFeature ticker, PetFeature pet) : ITextCommand
+{
+    public bool CanHandle(string text) =>
+        AmbientCommands.ParseWeather(text) is not null || AmbientCommands.ParseTicker(text) is not null || AmbientCommands.ParsePet(text) is not null;
+
+    public async Task<CommandResult> RunAsync(string text)
+    {
+        if (AmbientCommands.ParseWeather(text) is { } query) return await weather.RunCommandAsync(query);
+        if (AmbientCommands.ParseTicker(text) is { } cmd) return ticker.Run(cmd);
+        if (AmbientCommands.ParsePet(text) is { } on)
+        {
+            pet.SetEnabled(on);
+            return new CommandResult(on ? "\uE76E" : "\uE711", on ? "Pet on" : "Pet off", on ? "It lives in the notch when nothing else is showing" : null);
+        }
+        return new CommandResult("\uE783", "Not an ambient command", IsError: true);
+    }
+}
+
+/// <summary>Small helpers shared by the ambient features.</summary>
+internal static class AmbientNet
+{
+    public const string BrowserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+
+    public static bool IsOnline => NetworkInterface.GetIsNetworkAvailable();
+
+    /// <summary>GET as text; throws on non-success so callers count it as a failure.</summary>
+    public static async Task<string> GetAsync(HttpClient http, string url, bool browserAgent = false, CancellationToken ct = default)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (browserAgent) request.Headers.TryAddWithoutValidation("User-Agent", BrowserAgent);
+        using var response = await http.SendAsync(request, timeout.Token).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode && !body.TrimStart().StartsWith('{'))
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode} from {new Uri(url).Host}");
+        return body;
+    }
+
+    /// <summary>Run network work off the UI thread and wait for it; only for the synchronous test pipe.</summary>
+    public static T Block<T>(Func<Task<T>> work, TimeSpan timeout, T onTimeout)
+    {
+        var task = Task.Run(work);
+        return task.Wait(timeout) ? task.Result : onTimeout;
+    }
+
+    public static string Ago(DateTime? utc)
+    {
+        if (utc is not { } at) return "never";
+        var span = DateTime.UtcNow - at;
+        return span.TotalSeconds < 60 ? $"{(int)span.TotalSeconds}s ago" : span.TotalMinutes < 60 ? $"{(int)span.TotalMinutes}m ago" : $"{(int)span.TotalHours}h ago";
+    }
+}
