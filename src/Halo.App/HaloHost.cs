@@ -180,7 +180,7 @@ internal sealed class HaloHost : IDisposable
         _keys.VolumeKey += dir => _volume?.Step(dir);
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
-        _modules.TrayItems.Add(new Modules.ModuleTrayItem("Halo glow", null, () => _settings.HaloGlow, on =>
+        _modules.TrayItems.Add(new Modules.ModuleTrayItem("Colour edge on events", null, () => _settings.HaloGlow, on =>
         {
             _settings.HaloGlow = on;
             _settings.Save();
@@ -393,6 +393,9 @@ internal sealed class HaloHost : IDisposable
         switch (parts[0].ToLowerInvariant())
         {
             case "ping": return "pong";
+            case "edge-flash":
+                _notch.FlashEdge((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(arg.Trim()));
+                return "ok";
             case "update-state":
                 return $"installed={_updates.IsInstalled} version={_updates.CurrentVersion} ready={_updates.ReadyVersion ?? "-"} last={_updates.LastResult}";
             case "update-check": return Task.Run(_updates.CheckAsync).GetAwaiter().GetResult();

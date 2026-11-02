@@ -35,6 +35,7 @@ internal sealed class MusicModule : IHaloModule
     string _trackKey = "";
     int _trackVersion;
     Color? _glow;
+    string? _glowTrack;
     YouTubeMusicSong? _lastPlayed;
 
     public string Name => "music";
@@ -51,7 +52,7 @@ internal sealed class MusicModule : IHaloModule
 
         ctx.AddCommand(new MusicTextCommand(this));
         ctx.AddTab("\uE8D6", "Lyrics", _panel);
-        ctx.AddTrayToggle("Album colour glow", () => _settings.AlbumGlow, on =>
+        ctx.AddTrayToggle("Flash album colour on new songs", () => _settings.AlbumGlow, on =>
         {
             _settings.AlbumGlow = on;
             ctx.Save(_settings);
@@ -221,13 +222,17 @@ internal sealed class MusicModule : IHaloModule
         }
     }
 
+    /// <summary>A new song (once its artwork colour is known) flashes the notch edge in that colour.</summary>
     void UpdateGlow()
     {
         var m = Media;
-        Color? want = _settings.AlbumGlow && m.HasSession && m.IsPlaying ? m.ArtColor : null;
-        if (want == _glow) return;
-        _glow = want;
-        _ctx.SetGlow(want);
+        if (!_settings.AlbumGlow || !m.HasSession || !m.IsPlaying) return;
+        var color = m.ArtColor;
+        var track = NowPlaying();
+        if (track == _glowTrack) return;
+        _glowTrack = track;
+        _glow = color;
+        _ctx.FlashEdge(color);
     }
 
     // ---- Gestures --------------------------------------------------------------------------------
@@ -351,7 +356,7 @@ internal sealed class MusicModule : IHaloModule
         string volume;
         try { volume = Device().AudioEndpointVolume.MasterVolumeLevelScalar.ToString("0.00", CultureInfo.InvariantCulture); }
         catch (Exception) { volume = "?"; }
-        var glow = _glow is { } c ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : "off";
+        var glow = _glow is { } c ? $"last #{c.R:X2}{c.G:X2}{c.B:X2}" : "none";
         return $"track={(m.HasSession ? NowPlaying() : "-")} playing={m.IsPlaying} glow={glow} glowSetting={_settings.AlbumGlow} " +
                $"lyrics={_panel.Kind} lines={_panel.LineCount} index={_panel.CurrentIndex} ticking={_panel.IsTicking} tabVisible={_panel.IsVisible} " +
                $"volume={volume} lastPlayed={_lastPlayed?.VideoId ?? "-"} ytmApp={_player.Describe()}";
@@ -363,7 +368,6 @@ internal sealed class MusicModule : IHaloModule
         Media.Changed -= OnMediaChanged;
         _ctx.NotchWheel -= OnWheel;
         _ctx.NotchHorizontalWheel -= OnSwipe;
-        if (_glow is not null) _ctx.SetGlow(null);
         _device?.Dispose();
         _enumerator?.Dispose();
     }

@@ -3,8 +3,14 @@
 A Dynamic Island–style notch for Windows: live activities, a media player, a file shelf, and
 Circle-to-Search that answers with Google (AI Mode, Web or Lens) right inside the notch. No paid LLM:
 Google does the answering, speech-to-text runs offline with Whisper, and OCR uses Windows' built-in engine.
-A slowly circling, multi-colour halo glows around the notch and reacts to what's happening: album colours
-while music plays, green while charging, red for errors.
+At rest the notch is plain black with a soft shadow. A thin colour edge lights up briefly when something
+happens:
+- a new song, in its album colour;
+- a notification or a finished timer, in your accent colour;
+- plugging in, in green;
+- low battery or an error, in red.
+
+It stays lit in your accent colour while Halo is listening.
 
 ## Install
 
@@ -142,8 +148,6 @@ tests/           xUnit tests for Halo.Core
   for notification access; Halo says so in the bell tab if that's the case.
 - Right Alt is reserved for search, so AltGr characters on non-US layouts won't type while Halo runs.
 - First launch shows the notch ~3 s after start (WPF's one-time theme load).
-- The halo costs roughly 2–5% of one CPU core while idle (the transparent notch window must be re-copied
-  on every frame). Turn it off from the tray (**Halo glow**) for near-zero idle CPU.
 
 ## Privacy and security
 

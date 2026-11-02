@@ -14,7 +14,7 @@
                 <DropShadowEffect BlurRadius="40" ShadowDepth="12" Direction="270" Opacity="0.6" Color="Black" />
             </shell:NotchShape.Effect>
         </shell:NotchShape>
-        <shell:HaloGlow x:Name="HaloRing" Width="760" Height="760" />
+        <shell:EdgeLight x:Name="Edge" Width="760" Height="760" />
         <!-- Nearly-invisible hit area: alpha 1/255 still receives the mouse, so hovering just below or beside the pill counts. -->
         <Rectangle x:Name="HitArea" Fill="#01000000" />
         <shell:NotchShape x:Name="Shape" Width="760" Height="760" />

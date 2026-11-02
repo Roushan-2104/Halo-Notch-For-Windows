@@ -48,6 +48,8 @@ public partial class NotchWindow : Window
     bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
     (FrameworkElement Panel, bool Hold)? _pendingTab;
     Color? _moduleGlow;
+    string? _flashedId;
+    object? _flashedPayload;
     readonly DispatcherTimer _holdTimeout;
     int _holdOpen;
 
@@ -55,8 +57,8 @@ public partial class NotchWindow : Window
     {
         _services = services;
         InitializeComponent();
-        Shape.CenterX = ShadowShape.CenterX = HaloRing.CenterX = Cx;
-        HaloRing.Enabled = services.Settings.HaloGlow;
+        Shape.CenterX = ShadowShape.CenterX = Edge.CenterX = Cx;
+        Edge.Enabled = services.Settings.HaloGlow;
 
         _compactA = AddLayer(CompactA);
         _compactB = AddLayer(CompactB);
@@ -221,7 +223,7 @@ public partial class NotchWindow : Window
         _secondary = secondary;
         Recompute();
         UpdateBubble();
-        UpdateHaloPalette();
+        FlashForActivity();
     }
 
     public void SetSearchMode(NotchMode? mode)
@@ -374,41 +376,46 @@ public partial class NotchWindow : Window
         Recompute();
     }
 
-    /// <summary>Tint the halo around one colour (album art, a finished timer); null goes back to the aurora.</summary>
+    static readonly Color Green = Color.FromRgb(0x30, 0xD1, 0x58), Red = Color.FromRgb(0xFF, 0x45, 0x3A);
+
+    /// <summary>Keep the edge lit in a module's colour (e.g. a finished timer); null releases it.</summary>
     internal void SetGlow(Color? color)
     {
         _moduleGlow = color;
-        UpdateHaloPalette();
+        UpdateEdgeHold();
     }
 
-    public void SetHaloEnabled(bool on) => HaloRing.Enabled = on;
+    /// <summary>A short flash of the edge (e.g. a new song in its album colour).</summary>
+    internal void FlashEdge(Color color) => Edge.Flash(color);
 
-    /// <summary>Status colours win over a module's tint, which wins over the default aurora.</summary>
-    void UpdateHaloPalette()
+    public void SetHaloEnabled(bool on) => Edge.Enabled = on;
+
+    /// <summary>
+    /// A newly arrived activity flashes the edge in its status colour. Re-posts of the same one (a new
+    /// expiry on hover) keep the same payload, so they don't flash again.
+    /// </summary>
+    void FlashForActivity()
     {
-        Color? status = _activity switch
+        var a = _activity;
+        if (a is null || (a.Id == _flashedId && ReferenceEquals(a.Payload, _flashedPayload))) return;
+        _flashedId = a.Id;
+        _flashedPayload = a.Payload;
+        Color? color = a switch
         {
-            { Kind: ActivityKind.Charging } => Color.FromRgb(0x30, 0xD1, 0x58),
-            { Kind: ActivityKind.LowBattery } => Color.FromRgb(0xFF, 0x45, 0x3A),
-            { Payload: MessagePayload { IsError: true } } => Color.FromRgb(0xFF, 0x45, 0x3A),
+            { Kind: ActivityKind.Notification } => Theme.Accent.Current,
+            { Kind: ActivityKind.Charging } => Green,
+            { Kind: ActivityKind.LowBattery } => Red,
+            { Payload: MessagePayload { IsError: true } } => Red,
             _ => null,
         };
-        var tint = status ?? _moduleGlow;
-        HaloRing.SetPalette(tint is { } c ? HaloGlow.Around(c) : HaloGlow.Aurora(Theme.Accent.Current));
+        if (color is { } c) Edge.Flash(c);
     }
 
-    /// <summary>Faint when idle, livelier while something is happening.</summary>
-    void UpdateHaloStrength()
+    /// <summary>A steady edge while listening or searching; otherwise only a module's held colour.</summary>
+    void UpdateEdgeHold()
     {
-        HaloRing.Shown = _mode != NotchMode.Hidden;
-        HaloRing.SetLively(_mode is not (NotchMode.Idle or NotchMode.Compact));
-        HaloRing.SetStrength(_mode switch
-        {
-            NotchMode.Idle => 0.7,
-            NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => 1.0,
-            NotchMode.Compact or NotchMode.Notification or NotchMode.Card => 0.85,
-            _ => 0.7,
-        });
+        Edge.Shown = _mode != NotchMode.Hidden;
+        Edge.Hold(_mode is NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking ? Theme.Accent.Current : _moduleGlow);
     }
 
     public void Collapse()
@@ -508,7 +515,7 @@ public partial class NotchWindow : Window
             // A soft shadow always grounds the notch; bigger cards cast a fuller one.
             _shadow.AnimateTo(mode == NotchMode.Hidden ? 0 : spec.H > 60 ? 1 : 0.5, 0.45, 1);
         }
-        UpdateHaloStrength();
+        UpdateEdgeHold();
 
         if (mode == NotchMode.Typing) SearchBar.Width = spec.W;
         else if (mode is NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking) SearchBar.Width = spec.W;
@@ -581,7 +588,7 @@ public partial class NotchWindow : Window
             _lastR = r;
             Shape.Update(w, h, r);
             ShadowShape.Update(w, h, r);
-            HaloRing.UpdateShape(w, h, r);
+            Edge.UpdateShape(w, h, r);
             ContentHost.Clip = Shape.Geometry;
 
             bool visible = h > 1;

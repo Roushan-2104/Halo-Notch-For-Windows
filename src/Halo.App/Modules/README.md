@@ -30,7 +30,8 @@ The whole API is in [`ModuleApi.cs`](ModuleApi.cs); read it first.
 | Right-click action on shelf files | `ctx.AddShelfAction(...)` |
 | Tray menu item or toggle | `ctx.AddTrayItem` / `ctx.AddTrayToggle` |
 | Mouse wheel / swipe over the notch | `ctx.NotchWheel`, `ctx.NotchHorizontalWheel` |
-| Tint the notch outline | `ctx.SetGlow(color)` |
+| Flash the notch edge for an event | `ctx.FlashEdge(color)` |
+| Keep the edge lit while a state lasts | `ctx.SetGlow(color)` / `ctx.SetGlow(null)` |
 | Save settings or data | `ctx.Load<T>()` / `ctx.Save(data)` (JSON per module) |
 | Test hooks | `ctx.AddPipeCommand("<module>-<verb>", arg => "...")`; tests send lines to the `Halo.Commands` named pipe |
 

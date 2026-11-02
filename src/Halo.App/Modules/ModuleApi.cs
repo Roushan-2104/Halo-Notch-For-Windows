@@ -165,8 +165,11 @@ internal sealed class ModuleContext
 
     public void CloseCard() => Notch.CloseCard();
 
-    /// <summary>Tint the notch's outline (e.g. album colour); null removes it.</summary>
+    /// <summary>Keep the notch's edge lit in a colour while a state lasts; null removes it.</summary>
     public void SetGlow(Color? color) => Notch.SetGlow(color);
+
+    /// <summary>Briefly light the notch's edge in a colour (an event, not a state).</summary>
+    public void FlashEdge(Color color) => Notch.FlashEdge(color);
 
     /// <summary>Vertical mouse wheel over the compact/idle notch (delta, 120 per notch).</summary>
     public event Action<int>? NotchWheel;

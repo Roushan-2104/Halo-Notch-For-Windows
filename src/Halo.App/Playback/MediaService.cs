@@ -112,9 +112,6 @@ internal sealed class MediaService : IDisposable
             var props = await session.TryGetMediaPropertiesAsync();
             if (version != _propertiesVersion || props is null) return;
 
-            Title = props.Title ?? "";
-            Artist = string.IsNullOrEmpty(props.Artist) ? props.AlbumArtist ?? "" : props.Artist;
-
             ImageSource? art = null;
             var color = Colors.White;
             if (props.Thumbnail is not null)
@@ -135,6 +132,9 @@ internal sealed class MediaService : IDisposable
                 color = ArtPalette.Vibrant(bmp);
             }
             if (version != _propertiesVersion) return;
+            // Title and artwork change together, so nothing sees a new song with the old song's colour.
+            Title = props.Title ?? "";
+            Artist = string.IsNullOrEmpty(props.Artist) ? props.AlbumArtist ?? "" : props.Artist;
             Art = art;
             ArtColor = color;
         }
