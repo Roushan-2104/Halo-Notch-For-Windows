@@ -15,6 +15,7 @@ internal sealed class NotchShape : FrameworkElement
 
     public double CenterX { get; set; }
     public Brush Fill { get; set; } = Brushes.Black;
+    public Pen? Stroke { get; set; }
     public Geometry Geometry => _geometry;
 
     public void Update(double width, double height, double radius)
@@ -23,7 +24,7 @@ internal sealed class NotchShape : FrameworkElement
         InvalidateVisual();
     }
 
-    protected override void OnRender(DrawingContext dc) => dc.DrawGeometry(Fill, null, _geometry);
+    protected override void OnRender(DrawingContext dc) => dc.DrawGeometry(Fill, Stroke, _geometry);
 
     public static Geometry Build(double cx, double w, double h, double r)
     {

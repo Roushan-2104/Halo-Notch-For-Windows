@@ -13,7 +13,8 @@ internal sealed class TrayIcon : IDisposable
     readonly Icon _image;
 
     public TrayIcon(AppSettings settings, Action onQuit, Action<bool> onReplaceVolumeChanged, Action<bool> onVisualizerChanged,
-        Action onPlacementChanged, Action onVoiceLanguageChanged, Action onNotificationSettingsChanged)
+        Action onPlacementChanged, Action onVoiceLanguageChanged, Action onNotificationSettingsChanged,
+        IReadOnlyList<Modules.ModuleTrayItem> moduleItems)
     {
         _image = DrawIcon();
         var menu = new ContextMenuStrip { ShowImageMargin = false };
@@ -92,6 +93,27 @@ internal sealed class TrayIcon : IDisposable
         menu.Items.Add(volume);
         menu.Items.Add(viz);
         menu.Items.Add(compact);
+        if (moduleItems.Count > 0)
+        {
+            menu.Items.Add(new ToolStripSeparator());
+            foreach (var item in moduleItems)
+            {
+                var mi = new ToolStripMenuItem(item.Text);
+                if (item.IsChecked is { } isChecked)
+                {
+                    mi.CheckOnClick = true;
+                    mi.Checked = isChecked();
+                    mi.CheckedChanged += (_, _) => item.SetChecked?.Invoke(mi.Checked);
+                    menu.Opening += (_, _) => mi.Checked = isChecked();
+                }
+                else
+                {
+                    mi.Click += (_, _) => item.OnClick?.Invoke();
+                }
+                menu.Items.Add(mi);
+            }
+        }
+
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open logs folder", null, (_, _) => Process.Start(new ProcessStartInfo(Paths.Logs) { UseShellExecute = true }));
         menu.Items.Add("Quit Halo", null, (_, _) => onQuit());

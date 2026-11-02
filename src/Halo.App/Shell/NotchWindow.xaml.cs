@@ -13,7 +13,7 @@ using Halo.Views;
 
 namespace Halo.Shell;
 
-public enum NotchMode { Hidden, Idle, Compact, Notification, Expanded, Drop, Listening, Circling, Thinking, Typing, Answer, Result }
+public enum NotchMode { Hidden, Idle, Compact, Notification, Card, Expanded, Drop, Listening, Circling, Thinking, Typing, Answer, Result }
 
 /// <summary>
 /// The notch. One fixed-width transparent window pinned to the top-centre of the primary monitor; the
@@ -31,7 +31,9 @@ public partial class NotchWindow : Window
     readonly SpringValue _w = new(186), _h = new(32), _r = new(11), _shadow = new(0, 0.002);
     readonly SpringValue _bubbleOpacity = new(0, 0.002), _bubbleScale = new(0.4, 0.001);
     readonly List<Layer> _layers = new();
-    readonly Layer _compactA, _compactB, _expanded, _drop, _searchBar, _answer, _result, _notification;
+    readonly Layer _compactA, _compactB, _expanded, _drop, _searchBar, _answer, _result, _notification, _card;
+    (double W, double H) _cardSize;
+    bool _cardOpen, _cardInteractive;
     readonly DispatcherTimer _hoverIn, _hoverOut, _dragOut;
     Layer _compactActive;
     IntPtr _hwnd;
@@ -60,6 +62,7 @@ public partial class NotchWindow : Window
         _answer = AddLayer(Answer);
         _result = AddLayer(Result);
         _notification = AddLayer(NotificationCard);
+        _card = AddLayer(CardHost);
         _compactActive = _compactA;
 
         _hoverIn = new DispatcherTimer(TimeSpan.FromMilliseconds(110), DispatcherPriority.Input, OnHoverIn, Dispatcher) { IsEnabled = false };
@@ -83,7 +86,16 @@ public partial class NotchWindow : Window
         Bubble.MouseLeftButtonUp += (_, _) => _secondary?.Click?.Invoke();
         Deactivated += (_, _) =>
         {
-            if (_interactive) InteractiveDeactivated?.Invoke();
+            if (_cardOpen && _cardInteractive && _searchMode is null) CloseCard();
+            else if (_interactive) InteractiveDeactivated?.Invoke();
+        };
+        Root.MouseWheel += (_, e) =>
+        {
+            if (_mode is NotchMode.Idle or NotchMode.Compact or NotchMode.Notification)
+            {
+                NotchWheel?.Invoke(e.Delta);
+                e.Handled = true;
+            }
         };
 
         SourceInitialized += OnSourceInitialized;
@@ -97,6 +109,12 @@ public partial class NotchWindow : Window
 
     /// <summary>The pointer entered/left a notification on display (so the host can pause its timer).</summary>
     public event Action<bool>? NotificationHovered;
+
+    /// <summary>Vertical wheel over the idle/compact notch.</summary>
+    public event Action<int>? NotchWheel;
+
+    /// <summary>Horizontal wheel or two-finger swipe over the notch (positive = right).</summary>
+    public event Action<int>? NotchHorizontalWheel;
 
     public NotchMode Mode => _mode;
     internal SearchBarView SearchBarView => SearchBar;
@@ -144,6 +162,13 @@ public partial class NotchWindow : Window
         {
             handled = true;
             return new IntPtr(Native.MA_NOACTIVATE);
+        }
+        const int WM_MOUSEHWHEEL = 0x020E;
+        if (msg == WM_MOUSEHWHEEL && Root.IsMouseOver)
+        {
+            NotchHorizontalWheel?.Invoke((short)((wParam.ToInt64() >> 16) & 0xFFFF));
+            handled = true;
+            return new IntPtr(1);
         }
         return IntPtr.Zero;
     }
@@ -278,6 +303,47 @@ public partial class NotchWindow : Window
         }
     }
 
+    /// <summary>Show module content in the notch at the given size (see ModuleContext.ShowCard).</summary>
+    internal void ShowCard(FrameworkElement content, double width, double height, bool interactive)
+    {
+        CardHost.Content = content;
+        CardHost.Width = width;
+        CardHost.Height = height;
+        _cardSize = (width, height);
+        _cardOpen = true;
+        _cardInteractive = interactive;
+        _hoverExpanded = false;
+        Recompute();
+        if (interactive && _searchMode is null) SetInteractive(true);
+    }
+
+    internal void CloseCard()
+    {
+        if (!_cardOpen) return;
+        _cardOpen = false;
+        if (_cardInteractive && _searchMode is null) SetInteractive(false);
+        _cardInteractive = false;
+        Recompute();
+    }
+
+    /// <summary>Outline the notch in a colour (album tint, alerts); null removes it.</summary>
+    internal void SetGlow(Color? color)
+    {
+        if (color is { } c)
+        {
+            var brush = new SolidColorBrush(Color.FromArgb(0xB0, c.R, c.G, c.B));
+            brush.Freeze();
+            var pen = new Pen(brush, 1.4);
+            pen.Freeze();
+            Shape.Stroke = pen;
+        }
+        else
+        {
+            Shape.Stroke = null;
+        }
+        Shape.InvalidateVisual();
+    }
+
     public void Collapse()
     {
         if (_held)
@@ -297,6 +363,7 @@ public partial class NotchWindow : Window
         if (_searchMode is { } s) mode = s;
         else if (_fullscreen && _activity?.Kind != ActivityKind.Hud) mode = NotchMode.Hidden;
         else if (_dragging) mode = NotchMode.Drop;
+        else if (_cardOpen) mode = NotchMode.Card;
         else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded) mode = NotchMode.Notification;
         else if (_hoverExpanded) mode = NotchMode.Expanded;
         else if (_activity is not null) mode = NotchMode.Compact;
@@ -304,7 +371,7 @@ public partial class NotchWindow : Window
 
         if (mode == NotchMode.Compact) PrepareCompact();
         if (mode == NotchMode.Notification && _activity?.Payload is NotificationPayload p) NotificationCard.Show(p.Notification, p.More);
-        if (mode != _mode || mode == NotchMode.Compact) Transition(mode);
+        if (mode != _mode || mode is NotchMode.Compact or NotchMode.Card) Transition(mode);
     }
 
     void PrepareCompact()
@@ -329,6 +396,7 @@ public partial class NotchWindow : Window
         NotchMode.Idle => (186, 32, 11),
         NotchMode.Compact => (_compactWidth, 32, 12),
         NotchMode.Notification => (460, 92, 30),
+        NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
         NotchMode.Expanded => (480, 204, 32),
         NotchMode.Drop => (480, 150, 32),
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => (420, 54, 27),
@@ -342,6 +410,7 @@ public partial class NotchWindow : Window
     {
         NotchMode.Compact => _compactActive,
         NotchMode.Notification => _notification,
+        NotchMode.Card => _card,
         NotchMode.Expanded => _expanded,
         NotchMode.Drop => _drop,
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking or NotchMode.Typing => _searchBar,
@@ -419,6 +488,7 @@ public partial class NotchWindow : Window
                 },
                 ActivityKind.NowPlaying => CompactView.Glyph("", 13, Brushes.White),
                 ActivityKind.Downloading => new Spinner { Width = 16, Height = 16, Stroke = (Brush)Application.Current.Resources["AccentBrush"] },
+                ActivityKind.Custom when _secondary.Payload is Modules.ICompactContent c && c.BuildBubble() is { } bubble => bubble,
                 _ => CompactView.Glyph("", 13, Brushes.White),
             };
         }
@@ -484,6 +554,7 @@ public partial class NotchWindow : Window
     void OnRootMouseEnter(object sender, MouseEventArgs e)
     {
         _hoverOut.Stop();
+        if (_mode == NotchMode.Card) return;
         // Hovering a notification holds it on screen (to read or click) instead of opening the card.
         if (_mode == NotchMode.Notification)
         {

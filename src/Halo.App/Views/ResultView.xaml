@@ -39,6 +39,7 @@
                 <ToggleButton x:Name="FilterRecent" Style="{StaticResource Chip}" Content="Past week" Click="OnFilterClick" />
                 <ToggleButton x:Name="FilterNoJunk" Style="{StaticResource Chip}" Content="No junk" Click="OnFilterClick" />
                 <ToggleButton x:Name="FilterDocs" Style="{StaticResource Chip}" Content="Docs" Click="OnFilterClick" />
+                <StackPanel x:Name="ExtraChips" Orientation="Horizontal" />
             </StackPanel>
         </ScrollViewer>
 

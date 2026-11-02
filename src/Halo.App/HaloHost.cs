@@ -24,6 +24,7 @@ internal sealed class HaloHost : IDisposable
     readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
     readonly ActivityManager _activities = new();
     readonly List<IDisposable> _disposables = new();
+    readonly Modules.ModuleRegistry _modules = new();
 
     NotchWindow _notch = null!;
     MediaService _media = null!;
@@ -160,7 +161,9 @@ internal sealed class HaloHost : IDisposable
             Post(new Activity("keys-failed", ActivityKind.Message, PriorityMessage, new MessagePayload("", "Hotkey unavailable", true), In(5)));
         _keys.InterceptVolume = _settings.ReplaceVolumeFlyout && _volume is not null;
         _keys.VolumeKey += dir => _volume?.Step(dir);
-        _search = new SearchCoordinator(_notch, _keys, _whisper, _settings);
+        _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
+        _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
+        StartModules(services);
 
         Safe("fullscreen", () =>
         {
@@ -186,13 +189,32 @@ internal sealed class HaloHost : IDisposable
             {
                 if (_settings.ShowNotifications) _ = StartNotificationsAsync();
                 else _activities.Remove("notification");
-            }));
+            },
+            _modules.TrayItems));
         Own(new CommandServer(_ui, HandleCommand));
 
         // Warm up the browser engine in the background so the first search opens instantly.
         _ = WarmUpBrowserAsync();
 
         Log.Info($"Halo ready in {clock.ElapsedMilliseconds} ms");
+    }
+
+    /// <summary>Find every IHaloModule in the app and start it; one broken module never stops the rest.</summary>
+    void StartModules(HaloServices services)
+    {
+        var types = typeof(HaloHost).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(Modules.IHaloModule).IsAssignableFrom(t))
+            .OrderBy(t => t.Name);
+        foreach (var type in types)
+        {
+            Safe($"module {type.Name}", () =>
+            {
+                var module = (Modules.IHaloModule)Activator.CreateInstance(type)!;
+                module.Start(new Modules.ModuleContext(module.Name, _ui, services, _notch, _activities, _modules));
+                Own(module);
+                Log.Info($"Module started: {module.Name}");
+            });
+        }
     }
 
     async Task StartNotificationsAsync()
@@ -375,7 +397,9 @@ internal sealed class HaloHost : IDisposable
                 else if (arg == "next") _media.Next();
                 return "ok";
             case "quit": Application.Current.Shutdown(); return "bye";
-            default: return "error: unknown command";
+            case "modules": return string.Join(", ", _disposables.OfType<Modules.IHaloModule>().Select(m => m.Name));
+            default:
+                return _modules.PipeCommands.TryGetValue(parts[0], out var handler) ? handler(arg) : "error: unknown command";
         }
     }
 

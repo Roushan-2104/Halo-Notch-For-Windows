@@ -16,8 +16,27 @@ public partial class AnswerView : UserControl
     {
         _query = query;
         Expression.Text = expression + " =";
+        Expression.Visibility = Visibility.Visible;
         Result.Text = result;
+        Result.FontSize = 34;
+        Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
         CopyButton.Content = "";
+        GlyphOrb.Visibility = Visibility.Collapsed;
+        Actions.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Confirmation for a module command ("Timer set", "Playing …").</summary>
+    internal void ShowCommand(Modules.CommandResult r)
+    {
+        Glyph.Text = r.Glyph;
+        Glyph.Foreground = (System.Windows.Media.Brush)Application.Current.Resources[r.IsError ? "Red" : "AccentBrush"];
+        GlyphOrb.Visibility = Visibility.Visible;
+        Result.Text = r.Title;
+        Result.FontSize = 19;
+        Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
+        Expression.Text = r.Detail ?? "";
+        Expression.Visibility = string.IsNullOrEmpty(r.Detail) ? Visibility.Collapsed : Visibility.Visible;
+        Actions.Visibility = Visibility.Collapsed;
     }
 
     void OnCopy(object sender, RoutedEventArgs e)

@@ -63,6 +63,7 @@ internal sealed class CompactView : Grid
             ActivityKind.Downloading => BuildDownloading((DownloadPayload)a.Payload!),
             ActivityKind.DownloadComplete => BuildDownloadDone((DownloadPayload)a.Payload!),
             ActivityKind.Progress => BuildProgress((ProgressPayload)a.Payload!),
+            ActivityKind.Custom when a.Payload is Modules.ICompactContent custom => custom.Build(_left, _right),
             _ => BuildMessage((MessagePayload)a.Payload!),
         };
         Width = CenterGap + 2 * (earWidth + EarPadding);
@@ -73,7 +74,10 @@ internal sealed class CompactView : Grid
     public double Update(Activity a, HaloServices s)
     {
         if (_shown is null || _shown.Kind != a.Kind) return Show(a, s);
+        // Module content updates its own elements; only a new payload instance needs a rebuild.
+        if (a.Kind == ActivityKind.Custom && !ReferenceEquals(a.Payload, _shown.Payload)) return Show(a, s);
         _shown = a;
+        if (a.Kind == ActivityKind.Custom) return Width;
         switch (a.Payload)
         {
             case HudPayload hud when _hud is not null:

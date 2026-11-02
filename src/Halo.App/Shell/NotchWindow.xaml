@@ -26,6 +26,7 @@
             <views:AnswerView x:Name="Answer" />
             <views:ResultView x:Name="Result" />
             <views:NotificationView x:Name="NotificationCard" />
+            <ContentControl x:Name="CardHost" Focusable="False" />
         </Canvas>
         <Border x:Name="Bubble" Width="32" Height="32" CornerRadius="16" Background="Black" Opacity="0"
                 RenderTransformOrigin="0.5,0.5" Cursor="Hand">

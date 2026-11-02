@@ -26,6 +26,7 @@ internal sealed class SearchCoordinator
     readonly GlobalKeys _keys;
     readonly WhisperService _whisper;
     readonly AppSettings _settings;
+    readonly Modules.ModuleRegistry _modules;
     readonly MicRecorder _mic = new();
     readonly DispatcherTimer _holdTimer;
 
@@ -38,14 +39,18 @@ internal sealed class SearchCoordinator
     Task<IReadOnlyList<OcrWord>>? _ocr;
     Context? _ctx;
 
-    sealed record Context(string Query, string DisplayQuery, SearchMode Mode, SearchFilter Filters, byte[]? Png, BitmapSource? Thumb);
+    sealed record Context(string Query, string DisplayQuery, SearchMode Mode, SearchFilter Filters, byte[]? Png, BitmapSource? Thumb)
+    {
+        public Modules.SelectionInfo? Selection { get; init; }
+    }
 
-    public SearchCoordinator(NotchWindow notch, GlobalKeys keys, WhisperService whisper, AppSettings settings)
+    public SearchCoordinator(NotchWindow notch, GlobalKeys keys, WhisperService whisper, AppSettings settings, Modules.ModuleRegistry modules)
     {
         _notch = notch;
         _keys = keys;
         _whisper = whisper;
         _settings = settings;
+        _modules = modules;
         _holdTimer = new DispatcherTimer(HoldThreshold, DispatcherPriority.Input, (_, _) => OnHoldElapsed(), notch.Dispatcher) { IsEnabled = false };
 
         keys.SearchPressed += OnKeyDown;
@@ -230,6 +235,27 @@ internal sealed class SearchCoordinator
             else _overlay?.ShowSelection(selection.Region);
         }
 
+        // Modules get first look at a circle (a QR code opens its link, an amount converts...).
+        Modules.SelectionInfo? info = null;
+        if (selection is not null)
+        {
+            info = new Modules.SelectionInfo(selection.Text, _shot!.EncodePng(selection.Region), _shot.Crop(selection.Region),
+                selection.Kind == SelectionKind.Image);
+            foreach (var handler in _modules.SelectionHandlers)
+            {
+                Modules.CommandResult? taken = null;
+                try { taken = await handler.TryTakeOverAsync(info); }
+                catch (Exception ex) { Log.Warn($"Selection handler {handler.GetType().Name} failed", ex); }
+                if (session != _session) return;
+                if (taken is null) continue;
+                ShowCommandResult(taken);
+                return;
+            }
+        }
+
+        // Spoken commands ("play …", "timer 10 minutes") run instead of a web search.
+        if (selection is null && spoken.Length > 0 && await TryRunCommandAsync(spoken)) return;
+
         if (selection is null && query.Length == 0)
         {
             await ShowMessageThenCancel(session, "", "Didn't catch that", "Try again, or tap Right Alt to type");
@@ -262,11 +288,61 @@ internal sealed class SearchCoordinator
         if (ctx.Mode == SearchMode.Lens && selection is not null && selection.Text.Length > 0)
             ctx = ctx with { Query = QueryBuilder.Combine(query, selection.Text) };
 
-        await ShowResultAsync(ctx);
+        await ShowResultAsync(ctx with { Selection = info });
+    }
+
+    /// <summary>Runs the first module command that recognises the text. Returns false if none did.</summary>
+    async Task<bool> TryRunCommandAsync(string text)
+    {
+        int session = _session;
+        var clean = text.Trim().TrimEnd('.', '!', '?').Trim();
+        var command = _modules.Commands.FirstOrDefault(c =>
+        {
+            try { return c.CanHandle(clean); }
+            catch (Exception ex)
+            {
+                Log.Warn($"Command {c.GetType().Name} threw in CanHandle", ex);
+                return false;
+            }
+        });
+        if (command is null) return false;
+
+        _phase = Phase.Processing;
+        _notch.SetSearchMode(NotchMode.Thinking);
+        _notch.SearchBarView.ShowThinking($"“{clean}”");
+        Modules.CommandResult result;
+        try
+        {
+            result = await command.RunAsync(clean);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Command {command.GetType().Name} failed", ex);
+            result = new Modules.CommandResult("", "That didn't work", ex.Message, IsError: true);
+        }
+        if (session == _session) ShowCommandResult(result);
+        return true;
+    }
+
+    /// <summary>A short confirmation card that closes by itself.</summary>
+    void ShowCommandResult(Modules.CommandResult result)
+    {
+        DismissOverlay();
+        _phase = Phase.Showing;
+        _notch.AnswerView.ShowCommand(result);
+        _notch.SetInteractive(false);
+        _notch.SetSearchMode(NotchMode.Answer);
+        Log.Info($"Command result: {result.Title}");
+        int session = _session;
+        _ = Task.Delay(result.IsError ? 4000 : 2600).ContinueWith(_ =>
+        {
+            if (session == _session) Cancel();
+        }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     async Task ProcessTextAsync(string text)
     {
+        if (await TryRunCommandAsync(text)) return;
         if (Calculator.TryEvaluate(text, out var value, out _))
         {
             ShowAnswer(text, Calculator.DisplayForm(text), Calculator.Format(value));
@@ -294,6 +370,15 @@ internal sealed class SearchCoordinator
         DismissOverlay();
         _keys.InterceptEscape = true;
         _notch.ResultView.SetContext(ctx.DisplayQuery, ctx.Thumb, ctx.Png is not null, ctx.Mode, ctx.Filters);
+        var selection = ctx.Selection;
+        _notch.ResultView.SetExtraChips(_modules.ResultChips
+            .Where(c =>
+            {
+                try { return c.IsVisible(selection); }
+                catch (Exception) { return false; }
+            })
+            .Select(c => (c.Label, (Action)(() => c.OnClick(selection, _notch.ResultView))))
+            .ToList());
         _notch.SetSearchMode(NotchMode.Result);
         _notch.SetInteractive(true);
         Log.Info($"Search [{ctx.Mode}] {ctx.Query}");

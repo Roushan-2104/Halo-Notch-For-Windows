@@ -49,6 +49,36 @@ public partial class ExpandedView : UserControl
     internal void ShowHome() => HomeTab.IsChecked = true;
     internal void ShowAlerts() => AlertsTab.IsChecked = true;
 
+    readonly List<(RadioButton Tab, FrameworkElement Panel)> _moduleTabs = new();
+
+    /// <summary>Extra actions on a shelf tile's right-click menu (registered by modules).</summary>
+    internal List<Modules.ShelfAction> ShelfActions { get; set; } = new();
+
+    /// <summary>Add a module's tab; its panel fills the card body (about 436×150).</summary>
+    internal void AddTab(string glyph, string tooltip, FrameworkElement panel)
+    {
+        var tab = new RadioButton
+        {
+            Style = (Style)FindResource("TabButton"),
+            GroupName = "NotchTabs",
+            Content = glyph,
+            ToolTip = tooltip,
+            Margin = new Thickness(4, 0, 0, 0),
+        };
+        tab.Checked += OnTabChanged;
+        TabStrip.Children.Add(tab);
+        Grid.SetRow(panel, 1);
+        panel.Visibility = Visibility.Collapsed;
+        CardGrid.Children.Add(panel);
+        _moduleTabs.Add((tab, panel));
+    }
+
+    internal void ShowTab(FrameworkElement panel)
+    {
+        foreach (var (tab, p) in _moduleTabs)
+            if (p == panel) tab.IsChecked = true;
+    }
+
     void OnTabChanged(object sender, RoutedEventArgs e) => Refresh();
 
     internal void Refresh()
@@ -56,7 +86,14 @@ public partial class ExpandedView : UserControl
         if (_s is null || !IsInitialized) return;
         bool shelf = ShelfTab.IsChecked == true;
         bool alerts = AlertsTab.IsChecked == true;
-        bool home = !shelf && !alerts;
+        bool moduleTab = false;
+        foreach (var (tab, panel) in _moduleTabs)
+        {
+            bool on = tab.IsChecked == true;
+            panel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            moduleTab |= on;
+        }
+        bool home = !shelf && !alerts && !moduleTab;
         var media = _s.Media;
         MediaPanel.Visibility = home && media.HasSession ? Visibility.Visible : Visibility.Collapsed;
         ClockPanel.Visibility = home && !media.HasSession ? Visibility.Visible : Visibility.Collapsed;
@@ -206,6 +243,28 @@ public partial class ExpandedView : UserControl
     }
 
     void OnTileUp(object sender, MouseButtonEventArgs e) => _pressed = null;
+
+    void OnTileRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ShelfItem item) return;
+        var menu = new ContextMenu();
+        void Add(string header, Action run)
+        {
+            var mi = new MenuItem { Header = header };
+            mi.Click += (_, _) => run();
+            menu.Items.Add(mi);
+        }
+        Add("Open", () => Open(item.Path));
+        Add("Show in folder", () => Process.Start("explorer.exe", $"/select,\"{item.Path}\""));
+        foreach (var action in ShelfActions) Add(action.Label, () => action.Run(item));
+        Add("Remove from shelf", () => _s?.Shelf.Remove(item));
+        menu.PlacementTarget = (UIElement)sender;
+        // Keep the card open while the menu is up (the pointer leaves the notch to reach it).
+        ShelfDragging?.Invoke(true);
+        menu.Closed += (_, _) => ShelfDragging?.Invoke(false);
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
 
     void OnRemoveDown(object sender, MouseButtonEventArgs e)
     {

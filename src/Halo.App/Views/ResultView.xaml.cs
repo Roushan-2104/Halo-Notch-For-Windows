@@ -271,6 +271,31 @@ public partial class ResultView : UserControl
         });
     }
 
+    /// <summary>Module chips after the filters (e.g. "Copy text", "Translate").</summary>
+    internal void SetExtraChips(IEnumerable<(string Label, Action OnClick)> chips)
+    {
+        ExtraChips.Children.Clear();
+        bool first = true;
+        foreach (var (label, onClick) in chips)
+        {
+            if (first)
+            {
+                ExtraChips.Children.Add(new System.Windows.Shapes.Rectangle
+                {
+                    Width = 1, Height = 16, Fill = (Brush)FindResource("Fill3"), Margin = new Thickness(2, 0, 8, 0),
+                });
+                first = false;
+            }
+            var chip = new ToggleButton { Content = label, Style = (Style)FindResource("Chip") };
+            chip.Click += (_, _) =>
+            {
+                chip.IsChecked = false;
+                onClick();
+            };
+            ExtraChips.Children.Add(chip);
+        }
+    }
+
     void OnFrameSizeChanged(object sender, SizeChangedEventArgs e) =>
         WebFrame.Clip = new RectangleGeometry(new Rect(e.NewSize), 18, 18);
 

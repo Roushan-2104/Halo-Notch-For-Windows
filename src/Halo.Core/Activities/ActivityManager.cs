@@ -12,6 +12,9 @@ public enum ActivityKind
     Progress,
     Message,
     Notification,
+
+    /// <summary>Drawn by a module (timers, tickers...); its payload renders itself.</summary>
+    Custom,
 }
 
 /// <summary>Something the notch can show in its compact state. Higher priority wins the pill.</summary>
@@ -79,5 +82,5 @@ public sealed class ActivityManager
     }
 
     static bool IsLongRunning(ActivityKind kind) =>
-        kind is ActivityKind.NowPlaying or ActivityKind.Downloading or ActivityKind.Progress;
+        kind is ActivityKind.NowPlaying or ActivityKind.Downloading or ActivityKind.Progress or ActivityKind.Custom;
 }

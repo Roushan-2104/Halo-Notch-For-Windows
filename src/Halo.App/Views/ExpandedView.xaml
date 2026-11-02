@@ -3,14 +3,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:Halo.Views"
              Width="480" Height="204">
-    <Grid Margin="22,8,22,16">
+    <Grid x:Name="CardGrid" Margin="22,8,22,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="30" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header: tabs on the left, battery on the right -->
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <!-- Header: tabs on the left (modules append theirs), battery on the right -->
+        <StackPanel x:Name="TabStrip" Orientation="Horizontal" VerticalAlignment="Center">
             <RadioButton x:Name="HomeTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xE80F;"
                          IsChecked="True" ToolTip="Home" Checked="OnTabChanged" />
             <RadioButton x:Name="ShelfTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xE7B8;"
@@ -160,7 +160,8 @@
                         <DataTemplate>
                             <Grid x:Name="Tile" Width="78" Height="112" Margin="0,0,6,0" Background="Transparent" Cursor="Hand"
                                   ToolTip="{Binding Path}"
-                                  MouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove" MouseLeftButtonUp="OnTileUp">
+                                  MouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove" MouseLeftButtonUp="OnTileUp"
+                                  MouseRightButtonUp="OnTileRightClick">
                                 <Border x:Name="TileBg" CornerRadius="14" Background="Transparent" />
                                 <StackPanel Margin="0,8,0,0">
                                     <Image Source="{Binding Icon}" Width="52" Height="52" RenderOptions.BitmapScalingMode="HighQuality" />
