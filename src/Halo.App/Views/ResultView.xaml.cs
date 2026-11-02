@@ -124,7 +124,8 @@ public partial class ResultView : UserControl
         catch (WebView2RuntimeNotFoundException)
         {
             _init = null;
-            ShowError("Search needs the Microsoft Edge WebView2 Runtime. Install it from microsoft.com and restart Halo.");
+            ShowError("Search needs the Microsoft Edge WebView2 Runtime. Install it, then search again.");
+            InstallWebView2.Visibility = Visibility.Visible;
             throw;
         }
         catch (Exception ex)
@@ -150,6 +151,7 @@ public partial class ResultView : UserControl
         FilterDocs.IsChecked = filters.HasFlag(SearchFilter.Docs);
         ErrorPanel.Visibility = Visibility.Collapsed;
         UploadBadge.Visibility = Visibility.Collapsed;
+        InstallWebView2.Visibility = Visibility.Collapsed;
     }
 
     void SetModeChips(SearchMode mode)
@@ -412,6 +414,12 @@ public partial class ResultView : UserControl
         await EnsureReadyAsync();
         Wake();
         Web.CoreWebView2.NavigateToString(html);
+    }
+
+    void OnInstallWebView2(object sender, RoutedEventArgs e)
+    {
+        InstallWebView2.IsChecked = false;
+        WebView2Check.OpenDownload();
     }
 
     internal static void OpenExternal(string url)

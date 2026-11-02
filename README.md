@@ -8,13 +8,15 @@ while music plays, green while charging, red for errors.
 
 ## Install
 
-1. Download `Halo-v0.2.1-win-x64.zip` from [Releases](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases).
+1. Download `Halo-v0.2.2-win-x64.zip` from [Releases](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases).
 2. Unzip it anywhere (for example `%LOCALAPPDATA%\Programs\Halo`) and run `Halo.exe`.
 3. Optional: tray icon › **Start with Windows**.
 
-Needs Windows 10 2004+ or Windows 11 with the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
-and the WebView2 runtime (both usually already installed on Windows 11). The build isn't code-signed yet,
-so SmartScreen may ask you to confirm the first run.
+Nothing else to install: .NET is included in the zip.
+
+- **Voice model:** on first launch Halo downloads the Whisper voice model (~148 MB, once) and says "Voice search ready" when done. Typing and circling work meanwhile. If you're offline then, it retries when you're back online or when you hold Right Alt.
+- **WebView2:** search results use the Microsoft Edge WebView2 Runtime, which comes with Windows 11 and current Edge. If it's missing, the notch offers a link to Microsoft's installer.
+- **SmartScreen:** needs Windows 10 2004+ or Windows 11. The build isn't code-signed yet, so SmartScreen may ask you to confirm the first run.
 
 ## Using it
 
@@ -78,7 +80,7 @@ dotnet run --project src/Halo.App
 Release build (what you'd install):
 
 ```bash
-dotnet publish src/Halo.App -c Release -r win-x64 --self-contained false -p:PublishReadyToRun=true -o artifacts/Halo
+dotnet publish src/Halo.App -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -o artifacts/Halo
 ```
 
 On first launch Halo downloads the Whisper `base` model (~148 MB) to `%LOCALAPPDATA%\Halo\models`.
@@ -110,8 +112,9 @@ tests/           xUnit tests for Halo.Core
   and could change.
 - **Brightness** pop-ups: Halo shows its HUD, but Windows' own brightness flyout can't be suppressed
   (brightness keys are handled by firmware, not the keyboard hook).
-- **Rare crash under investigation.** About once every 10–20 minutes of uptime Halo can exit with a native
-  heap-corruption error (0xc0000374). It doesn't lose data; just start it again. A fix needs a crash dump.
+- **Rare crash (likely fixed in 0.2.1).** Versions up to 0.2.0 could exit with a native heap-corruption
+  error (0xc0000374), usually soon after start. Crash dumps pointed at the WMI component, which 0.2.1 removed.
+  If it still happens, please open an issue.
 - **Notifications** come from Windows' notification listener, read when Windows' notification store
   changes (desktop apps don't get its live event). Clicking opens the app, not the exact chat or email: Windows doesn't let other
   apps trigger a toast's own action or reply buttons. Older Windows builds may require MSIX packaging

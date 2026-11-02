@@ -10,6 +10,7 @@ using Halo.Search;
 using Halo.Shelf;
 using Halo.Shell;
 using Halo.SystemInfo;
+using Halo.Views;
 using Microsoft.Win32;
 
 namespace Halo;
@@ -155,6 +156,21 @@ internal sealed class HaloHost : IDisposable
             Post(new Activity("voice-failed", ActivityKind.Message, PriorityMessage, new MessagePayload("", reason, true), In(4)));
         });
         _ = _whisper.InitAsync();
+        if (!WebView2Check.IsInstalled())
+        {
+            // Rare (it ships with Windows 11 and Edge), but without it search can't show results.
+            Log.Warn("WebView2 Runtime not found");
+            Post(new Activity("webview2-missing", ActivityKind.Message, PriorityMessage,
+                new MessagePayload("", "Search needs WebView2 · click to install", true), In(12))
+            {
+                Click = WebView2Check.OpenDownload,
+            });
+        }
+        // A first run without internet can't fetch the voice model; try again once a network comes up.
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, e) =>
+        {
+            if (e.IsAvailable && _whisper.Failure is not null) _ui.BeginInvoke(() => _ = _whisper.InitAsync());
+        };
 
         _keys = Own(new GlobalKeys(_ui));
         if (!_keys.IsInstalled)

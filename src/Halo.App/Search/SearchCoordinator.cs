@@ -224,6 +224,13 @@ internal sealed class SearchCoordinator
             }
             else if (stroke is null)
             {
+                // The model failed earlier (e.g. no internet on first run): asking for voice retries it.
+                if (_whisper.Failure is not null && !_whisper.IsDownloading)
+                {
+                    _ = _whisper.InitAsync();
+                    await ShowMessageThenCancel(session, "", "Getting the voice model", "Downloading now · tap Right Alt to type meanwhile");
+                    return;
+                }
                 await ShowMessageThenCancel(session, "",
                     _whisper.IsDownloading ? "Voice model is still downloading" : "Voice isn't available",
                     _whisper.IsDownloading ? $"{_whisper.DownloadProgress:P0} done · tap Right Alt to type instead" : _whisper.Failure ?? "Tap Right Alt to type instead");
