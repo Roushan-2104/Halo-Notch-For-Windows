@@ -103,6 +103,8 @@ internal sealed class WhisperService : IDisposable
     public async Task<string> TranscribeAsync(float[] samples, CancellationToken ct = default)
     {
         if (_processor is null) return "";
+        // The quiet tail while the key is still held is what Whisper loops on ("Play X. Play X.").
+        samples = Halo.Core.Search.AudioTrim.TrimSilence(samples, MicRecorder.SampleRate);
         // Whisper is unreliable on clips shorter than a second; pad with silence.
         if (samples.Length < MicRecorder.SampleRate)
             Array.Resize(ref samples, MicRecorder.SampleRate + MicRecorder.SampleRate / 4);
@@ -146,7 +148,8 @@ internal sealed class WhisperService : IDisposable
         .WithSingleSegment()
         .Build();
 
-    static string Clean(string text) => Regex.Replace(Noise.Replace(text, " "), @"\s+", " ").Trim();
+    static string Clean(string text) =>
+        Halo.Core.Search.TranscriptCleaner.RemoveRepeats(Regex.Replace(Noise.Replace(text, " "), @"\s+", " ").Trim());
 
     /// <summary>Drop cached processors so the next query uses current settings (e.g. language).</summary>
     public void ResetProcessors()

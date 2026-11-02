@@ -18,6 +18,9 @@ internal sealed class AppSettings
 
     public bool ShowVisualizer { get; set; } = true;
 
+    /// <summary>The animated multi-colour halo around the notch.</summary>
+    public bool HaloGlow { get; set; } = true;
+
     public SearchMode DefaultSearchMode { get; set; } = SearchMode.Ai;
 
     /// <summary>Render Google with a phone user agent so its compact layout fits the card.</summary>

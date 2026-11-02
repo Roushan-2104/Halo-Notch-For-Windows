@@ -1,7 +1,6 @@
-bin/
+﻿bin/
 obj/
 .vs/
 *.user
 TestResults/
 artifacts/
-.claude/

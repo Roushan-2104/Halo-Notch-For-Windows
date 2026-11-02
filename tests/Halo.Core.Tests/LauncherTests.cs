@@ -158,7 +158,7 @@ public class AppMatcherTests
 
     [Theory]
     [InlineData("open github.com", "https://github.com")]
-    [InlineData("Open GitHub.com/Anthropics", "https://github.com/Anthropics")]
+    [InlineData("Open GitHub.com/Microsoft", "https://github.com/Microsoft")]
     [InlineData("open news.ycombinator.com", "https://news.ycombinator.com")]
     [InlineData("open github dot com", "https://github.com")]
     [InlineData("open https://example.org/a?b=1", "https://example.org/a?b=1")]

@@ -24,7 +24,47 @@
             </Path>
             <Path x:Name="StrokeCore" StrokeThickness="4.5" Stroke="White" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
             <Border x:Name="Highlight" BorderThickness="2.5" CornerRadius="14" Visibility="Collapsed" />
+            <Rectangle x:Name="SnipRect" StrokeThickness="2" StrokeDashArray="4 3" Stroke="White" RadiusX="6" RadiusY="6"
+                       Fill="#22FFFFFF" Visibility="Collapsed" />
         </Canvas>
+
+        <!-- Capture tools: save what's frozen instead of searching it. -->
+        <StackPanel x:Name="Tools" Orientation="Horizontal" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                    Margin="0,0,0,108" Opacity="0">
+            <StackPanel.Resources>
+                <Style x:Key="ToolButton" TargetType="Button">
+                    <Setter Property="Cursor" Value="Hand" />
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Margin" Value="5,0" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" Background="#E6141416" BorderBrush="#26FFFFFF" BorderThickness="1" CornerRadius="18" Padding="14,8">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#F0303034" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </StackPanel.Resources>
+            <Button Style="{StaticResource ToolButton}" Click="OnFullScreenshot" ToolTip="Save the whole screen">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE722;" Foreground="White" Margin="0,0,8,0" />
+                    <TextBlock Text="Screenshot" Foreground="White" FontSize="12.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="SnipButton" Style="{StaticResource ToolButton}" Click="OnSnipMode" ToolTip="Drag a rectangle to save just that area">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE8C6;" Foreground="White" Margin="0,0,8,0" />
+                    <TextBlock x:Name="SnipLabel" Text="Snip" Foreground="White" FontSize="12.5" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
 
         <Border x:Name="Hint" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,56" CornerRadius="20"
                 Background="#E6141416" BorderBrush="#26FFFFFF" BorderThickness="1" Padding="16,9" Opacity="0" IsHitTestVisible="False">

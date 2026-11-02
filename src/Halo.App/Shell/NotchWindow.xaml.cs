@@ -47,6 +47,7 @@ public partial class NotchWindow : Window
     NotchMode? _searchMode;
     bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
     (FrameworkElement Panel, bool Hold)? _pendingTab;
+    Color? _moduleGlow;
     readonly DispatcherTimer _holdTimeout;
     int _holdOpen;
 
@@ -54,7 +55,8 @@ public partial class NotchWindow : Window
     {
         _services = services;
         InitializeComponent();
-        Shape.CenterX = ShadowShape.CenterX = Cx;
+        Shape.CenterX = ShadowShape.CenterX = HaloRing.CenterX = Cx;
+        HaloRing.Enabled = services.Settings.HaloGlow;
 
         _compactA = AddLayer(CompactA);
         _compactB = AddLayer(CompactB);
@@ -219,6 +221,7 @@ public partial class NotchWindow : Window
         _secondary = secondary;
         Recompute();
         UpdateBubble();
+        UpdateHaloPalette();
     }
 
     public void SetSearchMode(NotchMode? mode)
@@ -371,22 +374,41 @@ public partial class NotchWindow : Window
         Recompute();
     }
 
-    /// <summary>Outline the notch in a colour (album tint, alerts); null removes it.</summary>
+    /// <summary>Tint the halo around one colour (album art, a finished timer); null goes back to the aurora.</summary>
     internal void SetGlow(Color? color)
     {
-        if (color is { } c)
+        _moduleGlow = color;
+        UpdateHaloPalette();
+    }
+
+    public void SetHaloEnabled(bool on) => HaloRing.Enabled = on;
+
+    /// <summary>Status colours win over a module's tint, which wins over the default aurora.</summary>
+    void UpdateHaloPalette()
+    {
+        Color? status = _activity switch
         {
-            var brush = new SolidColorBrush(Color.FromArgb(0xB0, c.R, c.G, c.B));
-            brush.Freeze();
-            var pen = new Pen(brush, 1.4);
-            pen.Freeze();
-            Shape.Stroke = pen;
-        }
-        else
+            { Kind: ActivityKind.Charging } => Color.FromRgb(0x30, 0xD1, 0x58),
+            { Kind: ActivityKind.LowBattery } => Color.FromRgb(0xFF, 0x45, 0x3A),
+            { Payload: MessagePayload { IsError: true } } => Color.FromRgb(0xFF, 0x45, 0x3A),
+            _ => null,
+        };
+        var tint = status ?? _moduleGlow;
+        HaloRing.SetPalette(tint is { } c ? HaloGlow.Around(c) : HaloGlow.Aurora(Theme.Accent.Current));
+    }
+
+    /// <summary>Faint when idle, livelier while something is happening.</summary>
+    void UpdateHaloStrength()
+    {
+        HaloRing.Shown = _mode != NotchMode.Hidden;
+        HaloRing.SetLively(_mode is not (NotchMode.Idle or NotchMode.Compact));
+        HaloRing.SetStrength(_mode switch
         {
-            Shape.Stroke = null;
-        }
-        Shape.InvalidateVisual();
+            NotchMode.Idle => 0.7,
+            NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => 1.0,
+            NotchMode.Compact or NotchMode.Notification or NotchMode.Card => 0.85,
+            _ => 0.7,
+        });
     }
 
     public void Collapse()
@@ -483,8 +505,10 @@ public partial class NotchWindow : Window
             _w.AnimateTo(spec.W, response, damping);
             _h.AnimateTo(spec.H, response, damping);
             _r.AnimateTo(spec.R, response, Math.Min(1, damping + 0.08));
-            _shadow.AnimateTo(spec.H > 60 ? 1 : 0, 0.45, 1);
+            // A soft shadow always grounds the notch; bigger cards cast a fuller one.
+            _shadow.AnimateTo(mode == NotchMode.Hidden ? 0 : spec.H > 60 ? 1 : 0.5, 0.45, 1);
         }
+        UpdateHaloStrength();
 
         if (mode == NotchMode.Typing) SearchBar.Width = spec.W;
         else if (mode is NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking) SearchBar.Width = spec.W;
@@ -557,6 +581,7 @@ public partial class NotchWindow : Window
             _lastR = r;
             Shape.Update(w, h, r);
             ShadowShape.Update(w, h, r);
+            HaloRing.UpdateShape(w, h, r);
             ContentHost.Clip = Shape.Geometry;
 
             bool visible = h > 1;

@@ -3,6 +3,18 @@
 A Dynamic Island–style notch for Windows: live activities, a media player, a file shelf, and
 Circle-to-Search that answers with Google (AI Mode, Web or Lens) right inside the notch. No paid LLM:
 Google does the answering, speech-to-text runs offline with Whisper, and OCR uses Windows' built-in engine.
+A slowly circling, multi-colour halo glows around the notch and reacts to what's happening: album colours
+while music plays, green while charging, red for errors.
+
+## Install
+
+1. Download `Halo-v0.2.0-win-x64.zip` from [Releases](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases).
+2. Unzip it anywhere (for example `%LOCALAPPDATA%\Programs\Halo`) and run `Halo.exe`.
+3. Optional: tray icon › **Start with Windows**.
+
+Needs Windows 10 2004+ or Windows 11 with the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+and the WebView2 runtime (both usually already installed on Windows 11). The build isn't code-signed yet,
+so SmartScreen may ask you to confirm the first run.
 
 ## Using it
 
@@ -31,6 +43,10 @@ Google does the answering, speech-to-text runs offline with Whisper, and OCR use
 | `snippet ;sig Best, Roushan` · `snippets` | Text expansion in any app (`;date`, `;time`, `;shrug` built in) |
 | `weather` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `ticker off` · `pet on` | Weather tab · rotating ticker · a tiny notch pet |
 | `mute mic` · `cpu` · `clipboard` · `send to phone` | Mic toggle · System tab · Clipboard tab · QR transfer of the latest shelf file |
+| `take a screenshot` | Whole screen saved to Pictures › Screenshots and copied |
+
+Screenshots: besides the command, the frozen circle screen has **Screenshot** (everything) and **Snip**
+(drag an area) buttons, and the results card has a button that captures the whole scrolling page.
 
 Also automatic: a meeting pill with one-click mic mute while any app uses your microphone, a preview
 when you copy, a screenshot catcher (drag it into any app or onto the shelf), circling a QR code opens it,
@@ -94,9 +110,17 @@ tests/           xUnit tests for Halo.Core
   and could change.
 - **Brightness** pop-ups: Halo shows its HUD, but Windows' own brightness flyout can't be suppressed
   (brightness keys are handled by firmware, not the keyboard hook).
-- **Notifications** come from Windows' notification listener, checked every 0.7 s (desktop apps don't
-  get its live event). Clicking opens the app, not the exact chat or email: Windows doesn't let other
+- **Rare crash under investigation.** About once every 10–20 minutes of uptime Halo can exit with a native
+  heap-corruption error (0xc0000374). It doesn't lose data; just start it again. A fix needs a crash dump.
+- **Notifications** come from Windows' notification listener, read when Windows' notification store
+  changes (desktop apps don't get its live event). Clicking opens the app, not the exact chat or email: Windows doesn't let other
   apps trigger a toast's own action or reply buttons. Older Windows builds may require MSIX packaging
   for notification access; Halo says so in the bell tab if that's the case.
 - Right Alt is reserved for search, so AltGr characters on non-US layouts won't type while Halo runs.
 - First launch shows the notch ~3 s after start (WPF's one-time theme load).
+- The halo costs roughly 2–5% of one CPU core while idle (the transparent notch window must be re-copied
+  on every frame). Turn it off from the tray (**Halo glow**) for near-zero idle CPU.
+
+## License
+
+[MIT](LICENSE)

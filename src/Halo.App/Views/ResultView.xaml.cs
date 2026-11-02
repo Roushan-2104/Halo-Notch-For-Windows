@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Halo.Core.Search;
 using Halo.Infrastructure;
 using Halo.Motion;
@@ -317,6 +318,53 @@ public partial class ResultView : UserControl
     }
 
     void OnReload(object sender, RoutedEventArgs e) => Web.CoreWebView2?.Reload();
+
+    async void OnFullPageScreenshot(object sender, RoutedEventArgs e)
+    {
+        FullPageButton.IsEnabled = false;
+        try
+        {
+            var image = await CaptureFullPageAsync();
+            if (image is not null) Search.ScreenshotSaver.Save(image, "page");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Full-page screenshot failed", ex);
+        }
+        finally
+        {
+            FullPageButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// The whole page top to bottom, not just what's visible, via the browser's own DevTools capture.
+    /// Very long pages are capped so the PNG stays a sensible size.
+    /// </summary>
+    internal async Task<BitmapSource?> CaptureFullPageAsync()
+    {
+        var core = Web.CoreWebView2;
+        if (core is null) return null;
+        const int MaxHeight = 16000;
+
+        using var metrics = System.Text.Json.JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}"));
+        var size = metrics.RootElement.TryGetProperty("cssContentSize", out var css) ? css : metrics.RootElement.GetProperty("contentSize");
+        double width = Math.Ceiling(size.GetProperty("width").GetDouble());
+        double height = Math.Min(MaxHeight, Math.Ceiling(size.GetProperty("height").GetDouble()));
+
+        var args = System.FormattableString.Invariant(
+            $"{{\"format\":\"png\",\"captureBeyondViewport\":true,\"clip\":{{\"x\":0,\"y\":0,\"width\":{width},\"height\":{height},\"scale\":1}}}}");
+        using var shot = System.Text.Json.JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", args));
+        var bytes = Convert.FromBase64String(shot.RootElement.GetProperty("data").GetString() ?? "");
+
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.StreamSource = new MemoryStream(bytes);
+        image.EndInit();
+        image.Freeze();
+        return image;
+    }
 
     void OnOpenInBrowser(object sender, RoutedEventArgs e)
     {

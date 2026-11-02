@@ -163,6 +163,12 @@ internal sealed class HaloHost : IDisposable
         _keys.VolumeKey += dir => _volume?.Step(dir);
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
+        _modules.TrayItems.Add(new Modules.ModuleTrayItem("Halo glow", null, () => _settings.HaloGlow, on =>
+        {
+            _settings.HaloGlow = on;
+            _settings.Save();
+            _notch.SetHaloEnabled(on);
+        }));
         StartModules(services);
 
         Safe("fullscreen", () =>
@@ -262,6 +268,18 @@ internal sealed class HaloHost : IDisposable
         catch (Exception ex) { Log.Warn($"Opening {n.AppId} failed", ex); }
     }
 
+    async Task SaveFullPageAsync()
+    {
+        try
+        {
+            if (await _notch.ResultView.CaptureFullPageAsync() is { } image) ScreenshotSaver.Save(image, "page");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Full-page screenshot failed", ex);
+        }
+    }
+
     async Task WarmUpBrowserAsync()
     {
         await Task.Delay(2500);
@@ -356,6 +374,9 @@ internal sealed class HaloHost : IDisposable
             case "collapse": _notch.Collapse(); return "ok";
             case "type": _search.OpenTyping(); return "ok";
             case "search": _ = _search.SearchTextAsync(arg); return "ok";
+            case "fullpage":
+                _ = SaveFullPageAsync();
+                return "started";
             case "lens": _ = _search.SearchImageAsync(File.ReadAllBytes(arg)); return "ok";
             case "voice-language":
                 _whisper.Language = arg;

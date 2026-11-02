@@ -53,6 +53,25 @@ public partial class SearchOverlay : Window
     internal event Action<IReadOnlyList<Pt>>? SelectionMade;
     internal event Action? Cancelled;
 
+    /// <summary>The Screenshot button: save the whole frozen screen.</summary>
+    internal event Action? FullScreenshotRequested;
+
+    /// <summary>A snip rectangle was dragged (in screen-image pixels).</summary>
+    internal event Action<Box>? SnipMade;
+
+    bool _snipMode;
+    Point _snipStart;
+
+    void OnFullScreenshot(object sender, RoutedEventArgs e) => FullScreenshotRequested?.Invoke();
+
+    void OnSnipMode(object sender, RoutedEventArgs e)
+    {
+        _snipMode = !_snipMode;
+        SnipLabel.Text = _snipMode ? "Drag an area…" : "Snip";
+        SetHint(_snipMode ? "Drag a rectangle to save that area · Esc to cancel" : "Circle anything to search · Esc to cancel");
+        _hint.AnimateTo(1, 0.3, 1);
+    }
+
     public bool HasSelection { get; private set; }
 
     internal IReadOnlyList<Pt> SelectionPixels
@@ -103,12 +122,24 @@ public partial class SearchOverlay : Window
         GlowEdge.Opacity = _glow.Value;
         Hint.Opacity = _hint.Value;
         HintShift.Y = (1 - _hint.Value) * 24;
+        Tools.Opacity = _glow.Value;
         Outside.Opacity = _outside.Value;
         if (_closing && _dim.IsSettled && _glow.IsSettled) Close();
     }
 
     void OnDown(object sender, MouseButtonEventArgs e)
     {
+        if (_snipMode)
+        {
+            _drawing = true;
+            _snipStart = e.GetPosition(Root);
+            System.Windows.Controls.Canvas.SetLeft(SnipRect, _snipStart.X);
+            System.Windows.Controls.Canvas.SetTop(SnipRect, _snipStart.Y);
+            SnipRect.Width = SnipRect.Height = 0;
+            SnipRect.Visibility = Visibility.Visible;
+            CaptureMouse();
+            return;
+        }
         _drawing = true;
         _points.Clear();
         _points.Add(e.GetPosition(Root));
@@ -123,6 +154,15 @@ public partial class SearchOverlay : Window
     {
         if (!_drawing) return;
         var p = e.GetPosition(Root);
+        if (_snipMode)
+        {
+            var r = new Rect(_snipStart, p);
+            System.Windows.Controls.Canvas.SetLeft(SnipRect, r.X);
+            System.Windows.Controls.Canvas.SetTop(SnipRect, r.Y);
+            SnipRect.Width = r.Width;
+            SnipRect.Height = r.Height;
+            return;
+        }
         var last = _points[^1];
         if ((p - last).LengthSquared < 4) return;
         _points.Add(p);
@@ -134,6 +174,18 @@ public partial class SearchOverlay : Window
         if (!_drawing) return;
         _drawing = false;
         ReleaseMouseCapture();
+        if (_snipMode)
+        {
+            var r = new Rect(_snipStart, e.GetPosition(Root));
+            if (r.Width < 6 || r.Height < 6)
+            {
+                SnipRect.Visibility = Visibility.Collapsed;
+                return;
+            }
+            double sx = _shot.Width / Math.Max(1, Root.ActualWidth), sy = _shot.Height / Math.Max(1, Root.ActualHeight);
+            SnipMade?.Invoke(new Box(r.X * sx, r.Y * sy, r.Width * sx, r.Height * sy));
+            return;
+        }
         HasSelection = _points.Count > 0;
         bool tap = _points.Count < 3;
         if (!tap) Redraw(closed: true);
@@ -196,6 +248,7 @@ public partial class SearchOverlay : Window
         }
         StrokeCore.Data = StrokeGlow.Data = null;
         Highlight.Visibility = Visibility.Collapsed;
+        SnipRect.Visibility = Visibility.Collapsed;
         _dim.AnimateTo(0, 0.22, 1);
         _glow.AnimateTo(0, 0.22, 1);
         _hint.AnimateTo(0, 0.15, 1);

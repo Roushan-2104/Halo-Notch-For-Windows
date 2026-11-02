@@ -23,6 +23,7 @@
             <TextBlock x:Name="QueryText" Grid.Column="1" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" />
             <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="FullPageButton" Style="{StaticResource IconButton}" Content="&#xE722;" ToolTip="Screenshot the whole page" Click="OnFullPageScreenshot" />
                 <Button Style="{StaticResource IconButton}" Content="&#xE72C;" ToolTip="Reload" Click="OnReload" />
                 <Button Style="{StaticResource IconButton}" Content="&#xE8A7;" ToolTip="Open in browser" Click="OnOpenInBrowser" />
                 <Button Style="{StaticResource IconButton}" Content="&#xE711;" ToolTip="Close (Esc)" Click="OnClose" />

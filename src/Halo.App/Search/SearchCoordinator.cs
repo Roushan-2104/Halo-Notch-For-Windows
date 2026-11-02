@@ -175,6 +175,8 @@ internal sealed class SearchCoordinator
         _overlay.SetHint("Keep holding Right Alt · speak or circle · let go to search");
         _overlay.SelectionMade += OnSelectionMade;
         _overlay.Cancelled += Cancel;
+        _overlay.FullScreenshotRequested += () => SaveFromFreeze(null);
+        _overlay.SnipMade += region => SaveFromFreeze(region);
         var shownAt = Environment.TickCount64;
         _overlay.AppearedOnScreen += () =>
         {
@@ -182,6 +184,16 @@ internal sealed class SearchCoordinator
             Log.Info($"Freeze overlay on screen after {Environment.TickCount64 - shownAt} ms");
         };
         _overlay.Show();
+    }
+
+    /// <summary>The overlay's Screenshot / Snip tools: save what's frozen and end the search.</summary>
+    void SaveFromFreeze(Box? region)
+    {
+        var shot = _shot;
+        if (shot is null) return;
+        var image = region is { } r ? shot.Crop(r) : shot.Image;
+        Reset(keepNotch: false);
+        ScreenshotSaver.Save(image, region is null ? "screenshot" : "snip");
     }
 
     void OnSelectionMade(IReadOnlyList<Pt> stroke)
