@@ -485,8 +485,9 @@ internal sealed class HaloHost : IDisposable
                 return $"speech={MicRecorder.HasSpeech(arr)} ms={sw.ElapsedMilliseconds} text={text}";
             }
             case "cancel": _search.Cancel(); return "ok";
-            case "hold": _search.OnKeyDown(); return "ok";
-            case "release": _search.OnKeyUp(); return "ok";
+            // "hold" / "release" = the look key (freeze); "hold talk" / "release talk" = Right Alt.
+            case "hold": _search.OnKeyDown(arg.Trim() == "talk" ? HotKey.Talk : HotKey.Look); return "ok";
+            case "release": _search.OnKeyUp(arg.Trim() == "talk" ? HotKey.Talk : HotKey.Look); return "ok";
             case "hud":
             {
                 var a = arg.Split(' ');

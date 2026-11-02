@@ -38,9 +38,10 @@ Prefer no installer? `HaloNotch-win-Portable.zip` runs from any folder and updat
 | Do this | Get this |
 |---|---|
 | Hover the notch | Expands: now playing (art, progress, controls), clock, battery, shelf tab |
-| **Hold Right Alt** | Screen freezes; speak and/or circle anything; let go to search |
-| Hold Right Alt, let go without doing anything | Screen stays frozen so you can circle at leisure (Esc cancels) |
+| **Hold Right Alt** | Talk: say a command or question ("play kesariya", "5 ft in cm", "timer 10 minutes"); the screen stays live; let go to run it |
 | **Tap Right Alt** | Type-to-search box (sums like `18% of 2400` are answered instantly) |
+| **Copilot key**, or **hold Right Ctrl** on its own (~0.4 s) | Look: the screen freezes; speak and/or circle anything; let go to search |
+| Tap the Copilot key (or let go without doing anything) | The screen stays frozen so you can circle at leisure (Esc cancels) |
 | Drag files onto the notch | They're kept on the shelf; drag them back out any time |
 | Volume keys | Halo's volume HUD instead of Windows' popup |
 | A notification arrives | It drops out of the notch with app icon, title and text; hover to keep it, click to open the app, right-click to mute that app |
@@ -146,7 +147,10 @@ tests/           xUnit tests for Halo.Core
   changes (desktop apps don't get its live event). Clicking opens the app, not the exact chat or email: Windows doesn't let other
   apps trigger a toast's own action or reply buttons. Older Windows builds may require MSIX packaging
   for notification access; Halo says so in the bell tab if that's the case.
-- Right Alt is reserved for search, so AltGr characters on non-US layouts won't type while Halo runs.
+- On layouts where Right Alt is AltGr (English India for ₹, German, French, Spanish, Polish...), Right Alt
+  on its own is the talk key and AltGr + a key still types its character.
+- The Copilot key replaces Windows' own Copilot/Search action while Halo runs. Right Ctrl only counts when
+  held on its own, so Ctrl shortcuts (and Ctrl+click) are unaffected.
 - First launch shows the notch ~3 s after start (WPF's one-time theme load).
 
 ## Privacy and security

@@ -8,11 +8,12 @@ using Halo.Shell;
 namespace Halo.Search;
 
 /// <summary>
-/// The whole "hold Right Alt" flow:
+/// The hotkey flows:
 /// <list type="bullet">
-/// <item>tap (under 180 ms): a type-to-search box drops from the notch;</item>
-/// <item>hold: the screen freezes, the mic listens, and you can circle anything; release to search;</item>
-/// <item>hold and release without speaking or circling: the frozen screen stays so you can circle at leisure.</item>
+/// <item>Right Alt tap (under 180 ms): a type-to-search box drops from the notch;</item>
+/// <item>Right Alt hold: the mic listens (the screen stays live); release to run the command or search;</item>
+/// <item>Copilot key / lone Right Ctrl: the screen freezes, the mic listens, and you can circle anything;
+/// release to search, or release without speaking or circling to circle at leisure.</item>
 /// </list>
 /// Results come from Google AI Mode, the plain Web tab, or Lens for images, rendered in the notch.
 /// </summary>
@@ -39,6 +40,7 @@ internal sealed class SearchCoordinator
     Task<IReadOnlyList<OcrWord>>? _ocr;
     Context? _ctx;
     CancellationTokenSource? _transcribe;
+    HotKey _key;
 
     sealed record Context(string Query, string DisplayQuery, SearchMode Mode, SearchFilter Filters, byte[]? Png, BitmapSource? Thumb)
     {
@@ -54,8 +56,13 @@ internal sealed class SearchCoordinator
         _modules = modules;
         _holdTimer = new DispatcherTimer(HoldThreshold, DispatcherPriority.Input, (_, _) => OnHoldElapsed(), notch.Dispatcher) { IsEnabled = false };
 
-        keys.SearchPressed += OnKeyDown;
-        keys.SearchReleased += OnKeyUp;
+        keys.Pressed += OnKeyDown;
+        keys.Released += OnKeyUp;
+        keys.Aborted += key =>
+        {
+            // AltGr was used to type a character: quietly undo the listening it had started.
+            if (key == _key && _phase is Phase.Pending or Phase.Holding) Cancel();
+        };
         keys.EscapePressed += Cancel;
         notch.InteractiveDeactivated += () =>
         {
@@ -88,17 +95,24 @@ internal sealed class SearchCoordinator
 
     // ---- Hotkey ------------------------------------------------------------------------------
 
-    public void OnKeyDown()
+    /// <summary>
+    /// Talk (Right Alt): hold to speak, tap to type; the screen stays live, so commands like "play …" or
+    /// "5 ft in cm" don't freeze anything. Look (Copilot key / lone Right Ctrl): freeze straight away to
+    /// circle, and speak at the same time if you like; a quick tap leaves the screen frozen to circle.
+    /// </summary>
+    public void OnKeyDown(HotKey key)
     {
         if (_phase == Phase.Processing) return;
         // Start collapsing an open card right away so it's out of the way before the screen freezes.
         if (_phase != Phase.Idle) Reset(keepNotch: false);
 
         _session++;
+        _key = key;
         _phase = Phase.Pending;
         _keys.InterceptEscape = true;
         _micOk = _mic.Start(out _micError);
-        _holdTimer.Start();
+        if (key == HotKey.Look) OnHoldElapsed();
+        else _holdTimer.Start();
     }
 
     void OnHoldElapsed()
@@ -108,6 +122,22 @@ internal sealed class SearchCoordinator
         _phase = Phase.Holding;
 
         _notch.SetSearchMode(NotchMode.Listening);
+        if (_key == HotKey.Talk)
+        {
+            // Just talking: no freeze, nothing to circle.
+            if (_micOk)
+            {
+                var talkHint = _whisper.IsReady ? "Speak, then let go"
+                    : _whisper.IsDownloading ? $"Voice model downloading ({_whisper.DownloadProgress:P0}) · let go to type"
+                    : "Voice unavailable · let go to type";
+                _notch.SearchBarView.ShowListening(() => _mic.Level, "Listening…", talkHint);
+            }
+            else
+            {
+                _notch.SearchBarView.ShowMessage("", "Microphone unavailable", $"{_micError} · let go to type");
+            }
+            return;
+        }
         if (_micOk)
         {
             var hint = _whisper.IsReady ? "Speak, circle anything, then let go"
@@ -123,8 +153,10 @@ internal sealed class SearchCoordinator
         BeginFreeze();
     }
 
-    public void OnKeyUp()
+    public void OnKeyUp(HotKey key)
     {
+        // Letting go of the other hotkey (e.g. a Right Ctrl shortcut while talking) changes nothing.
+        if (key != _key) return;
         if (_phase == Phase.Pending)
         {
             _holdTimer.Stop();
@@ -179,7 +211,7 @@ internal sealed class SearchCoordinator
         }
         _ocr = OcrService.RecognizeAsync(_shot);
         _overlay = new SearchOverlay(_shot);
-        _overlay.SetHint("Keep holding Right Alt · speak or circle · let go to search");
+        _overlay.SetHint("Keep holding · speak or circle · let go to search");
         _overlay.SelectionMade += OnSelectionMade;
         _overlay.Cancelled += Cancel;
         _overlay.FullScreenshotRequested += () => SaveFromFreeze(null);

@@ -188,7 +188,19 @@ internal sealed class ClipboardModule : IHaloModule
 
         try
         {
-            var (hash, clip) = await Task.Run(() => ClipImages.Process(image));
+            // The clipboard's bitmap belongs to the UI thread; it must be frozen (or copied) before a
+            // background thread may read it, or every copied image fails to reach the history.
+            var shared = image;
+            if (!shared.IsFrozen)
+            {
+                if (shared.CanFreeze) shared.Freeze();
+                else
+                {
+                    shared = new WriteableBitmap(shared);
+                    shared.Freeze();
+                }
+            }
+            var (hash, clip) = await Task.Run(() => ClipImages.Process(shared));
             _history.Add(ClipEntry.FromImage(hash, image.PixelWidth, image.PixelHeight, now, clip));
             if (_capture is { } c && ReferenceEquals(c.Full, image)) c.Png ??= clip.Png;
         }

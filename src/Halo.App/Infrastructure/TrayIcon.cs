@@ -19,7 +19,8 @@ internal sealed class TrayIcon : IDisposable
         _image = DrawIcon();
         var menu = new ContextMenuStrip { ShowImageMargin = false };
         menu.Items.Add(new ToolStripLabel("Halo") { Font = new Font(SystemFonts.MenuFont ?? SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold) });
-        menu.Items.Add(new ToolStripLabel("Hold Right Alt to search · tap to type") { ForeColor = Color.Gray });
+        menu.Items.Add(new ToolStripLabel("Right Alt: hold to talk · tap to type") { ForeColor = Color.Gray });
+        menu.Items.Add(new ToolStripLabel("Copilot key or hold Right Ctrl: circle to search") { ForeColor = Color.Gray });
         menu.Items.Add(new ToolStripSeparator());
 
         var startup = new ToolStripMenuItem("Start with Windows") { Checked = settings.StartWithWindows, CheckOnClick = true };
