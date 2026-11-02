@@ -23,6 +23,15 @@
             <TextBlock x:Name="QueryText" Grid.Column="1" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" />
             <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <!-- Shown whenever a screen image has left the PC for Lens. -->
+                <Border x:Name="UploadBadge" CornerRadius="10" Padding="8,3" Margin="0,0,6,0" VerticalAlignment="Center"
+                        Background="{StaticResource Fill1}" Visibility="Collapsed"
+                        ToolTip="The circled image was uploaded to Google Lens">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE898;" FontSize="11" Foreground="{StaticResource Fg2}" Margin="0,0,5,0" />
+                        <TextBlock Text="Sent to Google" FontSize="11" Foreground="{StaticResource Fg2}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
                 <Button x:Name="FullPageButton" Style="{StaticResource IconButton}" Content="&#xE722;" ToolTip="Screenshot the whole page" Click="OnFullPageScreenshot" />
                 <Button Style="{StaticResource IconButton}" Content="&#xE72C;" ToolTip="Reload" Click="OnReload" />
                 <Button Style="{StaticResource IconButton}" Content="&#xE8A7;" ToolTip="Open in browser" Click="OnOpenInBrowser" />

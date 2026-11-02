@@ -219,7 +219,8 @@ internal sealed class SearchCoordinator
                 try { spoken = await _whisper.TranscribeAsync(speechSamples); }
                 catch (Exception ex) { Log.Error("Transcription failed", ex); }
                 if (session != _session) return;
-                Log.Info($"Heard: \"{spoken}\"");
+                // Never log what was said; the log isn't a transcript archive.
+                Log.Info($"Heard: {spoken.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length} words");
             }
             else if (stroke is null)
             {
@@ -240,9 +241,7 @@ internal sealed class SearchCoordinator
             if (session != _session) return;
             selection = SelectionAnalyzer.Analyze(words, stroke);
             selection = selection with { Region = selection.Region.Clamp(_shot.Width, _shot.Height) };
-            var b = SelectionAnalyzer.Bounds(stroke);
-            Log.Info($"Selection: {stroke.Count} pts, bounds {b.X:0},{b.Y:0} {b.W:0}x{b.H:0}, {words.Count} OCR words on screen -> " +
-                     $"{selection.Kind} \"{(selection.Text.Length > 80 ? selection.Text[..80] + "…" : selection.Text)}\"");
+            Log.Info($"Selection: {stroke.Count} pts, {words.Count} OCR words on screen -> {selection.Kind}, {selection.Text.Length} chars");
             if (selection.Region.W < 4 || selection.Region.H < 4) selection = null;
             else _overlay?.ShowSelection(selection.Region);
         }
@@ -344,7 +343,7 @@ internal sealed class SearchCoordinator
         _notch.AnswerView.ShowCommand(result);
         _notch.SetInteractive(false);
         _notch.SetSearchMode(NotchMode.Answer);
-        Log.Info($"Command result: {result.Title}");
+        Log.Info($"Command result ({(result.IsError ? "error" : "ok")})");
         int session = _session;
         _ = Task.Delay(result.IsError ? 4000 : 2600).ContinueWith(_ =>
         {
@@ -393,7 +392,7 @@ internal sealed class SearchCoordinator
             .ToList());
         _notch.SetSearchMode(NotchMode.Result);
         _notch.SetInteractive(true);
-        Log.Info($"Search [{ctx.Mode}] {ctx.Query}");
+        Log.Info($"Search [{ctx.Mode}] {ctx.Query.Length} chars");
         try
         {
             await NavigateAsync(ctx);
@@ -482,6 +481,16 @@ internal sealed class SearchCoordinator
         thumb.EndInit();
         thumb.Freeze();
         return ShowResultAsync(new Context("", "Image", SearchMode.Lens, SearchFilter.None, png, thumb));
+    }
+
+    /// <summary>Test hook: show the results card without a search (used by the browser-hardening test).</summary>
+    public void ShowCardForTest()
+    {
+        Reset(keepNotch: true);
+        _phase = Phase.Showing;
+        _keys.InterceptEscape = true;
+        _notch.ResultView.SetContext("Security test page", null, false, SearchMode.Ai, SearchFilter.None);
+        _notch.SetSearchMode(NotchMode.Result);
     }
 
     public void OpenTyping()

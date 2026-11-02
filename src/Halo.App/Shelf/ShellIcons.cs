@@ -36,21 +36,24 @@ internal static class ShellIcons
     public static ImageSource? Get(string path, int size)
     {
         IntPtr hbmp = IntPtr.Zero;
+        IShellItemImageFactory? factory = null;
         try
         {
-            SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItemImageFactory).GUID, out var factory);
+            SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItemImageFactory).GUID, out factory);
             if (factory.GetImage(new SIZE { cx = size, cy = size }, SIIGBF_RESIZETOFIT, out hbmp) != 0) return null;
             return FromHBitmap(hbmp);
         }
         catch (Exception ex)
         {
             // Missing items (deleted files, apps without a Start entry) are expected; don't spam the log.
-            if (ex is not (COMException or FileNotFoundException)) Log.Warn($"Icon for {path} failed", ex);
+            if (ex is not (COMException or FileNotFoundException)) Log.Warn("Reading a file icon failed", ex);
             return null;
         }
         finally
         {
             if (hbmp != IntPtr.Zero) Native.DeleteObject(hbmp);
+            // Release the shell item (and any thumbnail handler behind it) now, not at the next GC.
+            if (factory is not null) Marshal.ReleaseComObject(factory);
         }
     }
 

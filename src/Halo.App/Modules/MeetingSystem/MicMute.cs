@@ -48,7 +48,7 @@ internal sealed class MicMute : IMMNotificationClient, IDisposable
         if (_device is not null)
         {
             try { _device.AudioEndpointVolume.OnVolumeNotification -= OnNotify; } catch (Exception) { }
-            _device.Dispose();
+            Halo.SystemInfo.AudioDeviceRelease.Dispose(_device);
             _device = null;
             DeviceName = null;
         }
@@ -108,7 +108,7 @@ internal sealed class MicMute : IMMNotificationClient, IDisposable
         if (_device is not null)
         {
             try { _device.AudioEndpointVolume.OnVolumeNotification -= OnNotify; } catch (Exception) { }
-            _device.Dispose();
+            Halo.SystemInfo.AudioDeviceRelease.Dispose(_device);
         }
         _enumerator.Dispose();
     }

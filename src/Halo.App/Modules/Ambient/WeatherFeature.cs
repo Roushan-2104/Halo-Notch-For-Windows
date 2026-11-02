@@ -110,7 +110,7 @@ internal sealed class WeatherFeature : IDisposable
         foreach (var (url, parse) in new (string, Func<string, DateTime, GeoLocation?>)[]
                  {
                      (IpLocation.PrimaryUrl, IpLocation.ParseIpApiCo),
-                     (IpLocation.FallbackUrl, IpLocation.ParseIpApiCom),
+                     (IpLocation.FallbackUrl, IpLocation.ParseIpWhoIs),
                  })
         {
             try

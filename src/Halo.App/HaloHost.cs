@@ -111,7 +111,7 @@ internal sealed class HaloHost : IDisposable
             _downloads.Completed += (name, path) => Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone,
                 new DownloadPayload(name, path, 0, 1), In(4))
             {
-                Click = () => System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""),
+                Click = () => System.Diagnostics.Process.Start(Native.ExplorerPath, $"/select,\"{path}\""),
             });
             _downloads.AllFinished += () => _activities.Remove("download");
             _downloads.Start();
@@ -197,7 +197,11 @@ internal sealed class HaloHost : IDisposable
                 else _activities.Remove("notification");
             },
             _modules.TrayItems));
-        Own(new CommandServer(_ui, HandleCommand));
+        if (CommandServer.IsEnabled)
+        {
+            Own(new CommandServer(_ui, HandleCommand));
+            Log.Warn("Test command pipe is ON (HALO_TEST_PIPE=1)");
+        }
 
         // Warm up the browser engine in the background so the first search opens instantly.
         _ = WarmUpBrowserAsync();
@@ -250,6 +254,15 @@ internal sealed class HaloHost : IDisposable
     void OnNotification(HaloNotification n)
     {
         if (!_settings.ShowNotifications || _settings.MutedNotificationApps.Contains(n.AppId)) return;
+        // During a call or screen capture others may see the notch: show who it's from, not what it says.
+        if (PrivacyState.Presenting)
+        {
+            n = new HaloNotification
+            {
+                Id = n.Id, AppId = n.AppId, AppName = n.AppName, Icon = n.Icon, Time = n.Time,
+                Title = n.AppName, Body = "Hidden while you're in a call or sharing your screen",
+            };
+        }
 
         int more = _activities.Get("notification") is { Payload: NotificationPayload p } ? p.More + 1 : 0;
         Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(6))
@@ -262,10 +275,12 @@ internal sealed class HaloHost : IDisposable
     {
         _activities.Remove("notification");
         _notch.Collapse();
-        if (n.AppId.Length == 0) return;
+        // The app ID comes from another app's toast, so it must look like an app ID and nothing more
+        // (no spaces, quotes or paths that could smuggle extra arguments to explorer).
+        if (!System.Text.RegularExpressions.Regex.IsMatch(n.AppId, @"^[A-Za-z0-9._!{}\-]{1,256}$")) return;
         // Windows doesn't let other apps trigger a toast's own action, so open the app it came from.
-        try { System.Diagnostics.Process.Start("explorer.exe", $"shell:AppsFolder\\{n.AppId}"); }
-        catch (Exception ex) { Log.Warn($"Opening {n.AppId} failed", ex); }
+        try { System.Diagnostics.Process.Start(Native.ExplorerPath, $"shell:AppsFolder\\{n.AppId}"); }
+        catch (Exception ex) { Log.Warn("Opening a notification's app failed", ex); }
     }
 
     async Task SaveFullPageAsync()
@@ -358,7 +373,8 @@ internal sealed class HaloHost : IDisposable
                 return "ok";
             case "notifications":
                 return $"available={_notifications.IsAvailable} problem={_notifications.Problem ?? "-"} history={_notifications.History.Count} " +
-                       $"muted={_settings.MutedNotificationApps.Count}";
+                       $"muted={_settings.MutedNotificationApps.Count} presenting={PrivacyState.Presenting} " +
+                       $"shown={(_activities.Get("notification") is { Payload: NotificationPayload p } ? $"{p.Notification.Title} | {p.Notification.Body}" : "-")}";
             case "state":
                 return $"mode={_notch.Mode} activity={_activities.Current?.Id ?? "-"} secondary={_activities.Secondary?.Id ?? "-"} " +
                        $"whisper={(_whisper.IsReady ? "ready" : _whisper.IsDownloading ? $"downloading {_whisper.DownloadProgress:P0}" : _whisper.Failure ?? "loading")} " +
@@ -374,6 +390,11 @@ internal sealed class HaloHost : IDisposable
             case "collapse": _notch.Collapse(); return "ok";
             case "type": _search.OpenTyping(); return "ok";
             case "search": _ = _search.SearchTextAsync(arg); return "ok";
+            case "browser-html":
+                // Test-only (the pipe is off unless HALO_TEST_PIPE=1): load raw HTML into the results card.
+                _ = _notch.ResultView.LoadTestHtmlAsync(arg);
+                _search.ShowCardForTest();
+                return "ok";
             case "fullpage":
                 _ = SaveFullPageAsync();
                 return "started";

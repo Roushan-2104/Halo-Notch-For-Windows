@@ -20,10 +20,21 @@ public partial class App : Application
             return;
         }
 
+        // One stray exception shouldn't take the notch down, but a stream of them means the UI is in a
+        // broken state; then it's better to exit cleanly than to keep running half-working.
+        var recent = new Queue<DateTime>();
         DispatcherUnhandledException += (_, args) =>
         {
             Log.Error("Unhandled UI exception", args.Exception);
             args.Handled = true;
+            var now = DateTime.UtcNow;
+            recent.Enqueue(now);
+            while (recent.Count > 0 && now - recent.Peek() > TimeSpan.FromMinutes(1)) recent.Dequeue();
+            if (recent.Count >= 10)
+            {
+                Log.Error("Too many UI errors in a minute; exiting");
+                Shutdown(2);
+            }
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) => Log.Error("Fatal exception", args.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, args) =>

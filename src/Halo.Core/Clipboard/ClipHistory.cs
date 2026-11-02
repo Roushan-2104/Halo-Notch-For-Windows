@@ -127,6 +127,14 @@ public sealed class ClipHistory
         return removed;
     }
 
+    /// <summary>Removes unpinned entries last copied before <paramref name="cutoff"/>; returns how many went.</summary>
+    public int Expire(DateTime cutoff)
+    {
+        int removed = _items.RemoveAll(e => !e.Pinned && e.Time < cutoff);
+        if (removed > 0) Changed?.Invoke();
+        return removed;
+    }
+
     /// <summary>Replace the contents with saved entries (order is rebuilt from pin state and time).</summary>
     public void Load(IEnumerable<ClipEntry> entries)
     {

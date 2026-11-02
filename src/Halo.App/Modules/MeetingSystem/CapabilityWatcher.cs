@@ -10,12 +10,14 @@ namespace Halo.Modules.MeetingSystem;
 /// <param name="Source">"registry" (privacy usage record) or "audio" (live capture session).</param>
 internal sealed record CapabilityApp(string Key, string? Path, string Name, string Source);
 
-internal sealed record CapabilitySnapshot(IReadOnlyList<CapabilityApp> Microphone, IReadOnlyList<CapabilityApp> Camera)
+/// <param name="Screen">Apps capturing the screen through Windows' capture API (Teams, Snipping Tool, OBS...).</param>
+internal sealed record CapabilitySnapshot(IReadOnlyList<CapabilityApp> Microphone, IReadOnlyList<CapabilityApp> Camera, IReadOnlyList<CapabilityApp> Screen)
 {
-    public static readonly CapabilitySnapshot Empty = new(Array.Empty<CapabilityApp>(), Array.Empty<CapabilityApp>());
+    public static readonly CapabilitySnapshot Empty = new(Array.Empty<CapabilityApp>(), Array.Empty<CapabilityApp>(), Array.Empty<CapabilityApp>());
 
     public string Signature =>
-        string.Join("|", Microphone.Select(a => $"{a.Key}={a.Name}")) + "#" + string.Join("|", Camera.Select(a => a.Key));
+        string.Join("|", Microphone.Select(a => $"{a.Key}={a.Name}")) + "#" + string.Join("|", Camera.Select(a => a.Key)) +
+        "#" + string.Join("|", Screen.Select(a => a.Key));
 }
 
 /// <summary>
@@ -148,7 +150,11 @@ internal sealed class CapabilityWatcher : IDisposable
             var mic = Registered("microphone", titles);
             foreach (var app in Capturing(titles))
                 if (!mic.Any(m => CapabilityUsage.SamePath(m.Path, app.Path))) mic.Add(app);
-            return new CapabilitySnapshot(mic, Registered("webcam", titles));
+            // Screen capture has no change notification here; the 2 s poll picks it up.
+            var screen = Registered("graphicsCaptureProgrammatic", titles);
+            foreach (var app in Registered("graphicsCaptureWithoutBorder", titles))
+                if (!screen.Any(s => s.Key == app.Key)) screen.Add(app);
+            return new CapabilitySnapshot(mic, Registered("webcam", titles), screen);
         }
         catch (Exception ex)
         {

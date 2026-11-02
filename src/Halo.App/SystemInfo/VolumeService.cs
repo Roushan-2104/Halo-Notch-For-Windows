@@ -33,8 +33,8 @@ internal sealed class VolumeService : IMMNotificationClient, IDisposable
     {
         if (_device is not null)
         {
-            _device.AudioEndpointVolume.OnVolumeNotification -= OnNotify;
-            _device.Dispose();
+            try { _device.AudioEndpointVolume.OnVolumeNotification -= OnNotify; } catch (Exception) { }
+            AudioDeviceRelease.Dispose(_device);
             _device = null;
         }
         try
@@ -96,8 +96,8 @@ internal sealed class VolumeService : IMMNotificationClient, IDisposable
     public void Dispose()
     {
         try { _enumerator.UnregisterEndpointNotificationCallback(this); } catch (Exception) { }
-        if (_device is not null) _device.AudioEndpointVolume.OnVolumeNotification -= OnNotify;
-        _device?.Dispose();
+        if (_device is not null) try { _device.AudioEndpointVolume.OnVolumeNotification -= OnNotify; } catch (Exception) { }
+        AudioDeviceRelease.Dispose(_device);
         _enumerator.Dispose();
     }
 }

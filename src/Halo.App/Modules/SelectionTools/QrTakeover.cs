@@ -55,10 +55,10 @@ internal sealed class QrTakeover : ISelectionHandler
         }
         else
         {
-            // Never put a Wi-Fi password in the log.
+            // QR codes carry Wi-Fi passwords, 2FA secrets (otpauth:), payment strings and token links,
+            // so the log only records what kind it was, never its content.
             var payload = QrPayload.Parse(code.Value.Text);
-            var shown = payload.Kind == QrKind.Wifi ? $"network {payload.Ssid}" : Preview(payload.Text);
-            Last = $"{payload.Kind} in {ms} ms ({note}): {shown}";
+            Last = $"{payload.Kind} in {ms} ms ({note}), {payload.Text.Length} chars";
         }
         _ctx.Info($"QR check: {Last}");
     }
@@ -74,11 +74,12 @@ internal sealed class QrTakeover : ISelectionHandler
             case QrKind.Wifi when payload.Password is null:
                 return new CommandResult(Glyphs.Wifi, payload.Ssid!, "Open network, no password");
             case QrKind.Wifi:
-                return ClipboardText.TrySet(payload.Password)
+                return ClipboardText.TrySet(payload.Password, secret: true)
                     ? new CommandResult(Glyphs.Wifi, "Wi-Fi password copied", payload.Ssid)
                     : ClipboardText.Busy;
             default:
-                return ClipboardText.TrySet(payload.Text)
+                // QR text is often a secret (otpauth: 2FA keys, payment strings), so keep it out of history too.
+                return ClipboardText.TrySet(payload.Text, secret: true)
                     ? new CommandResult(Glyphs.Qr, isQr ? "Copied from QR" : "Copied from barcode", Preview(payload.Text))
                     : ClipboardText.Busy;
         }

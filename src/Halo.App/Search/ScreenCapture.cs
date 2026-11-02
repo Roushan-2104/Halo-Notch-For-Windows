@@ -55,12 +55,14 @@ internal static class ScreenCapture
         var screenDc = Native.GetDC(IntPtr.Zero);
         var memDc = Native.CreateCompatibleDC(screenDc);
         var bmp = Native.CreateCompatibleBitmap(screenDc, w, h);
-        var old = Native.SelectObject(memDc, bmp);
+        var old = bmp == IntPtr.Zero ? IntPtr.Zero : Native.SelectObject(memDc, bmp);
         try
         {
+            if (bmp == IntPtr.Zero) throw new InvalidOperationException("CreateCompatibleBitmap failed");
             if (!Native.BitBlt(memDc, 0, 0, w, h, screenDc, bounds.Left, bounds.Top, Native.SRCCOPY | Native.CAPTUREBLT))
                 throw new InvalidOperationException($"BitBlt failed ({Marshal.GetLastWin32Error()})");
             Native.SelectObject(memDc, old);
+            old = IntPtr.Zero;
 
             var pixels = new byte[w * h * 4];
             var bmi = new Native.BITMAPINFOHEADER
@@ -71,7 +73,8 @@ internal static class ScreenCapture
                 biPlanes = 1,
                 biBitCount = 32,
             };
-            Native.GetDIBits(memDc, bmp, 0, (uint)h, pixels, ref bmi, 0);
+            if (Native.GetDIBits(memDc, bmp, 0, (uint)h, pixels, ref bmi, 0) == 0)
+                throw new InvalidOperationException("GetDIBits failed");
             for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255; // GDI leaves alpha at 0
 
             var image = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, w * 4);
@@ -80,7 +83,9 @@ internal static class ScreenCapture
         }
         finally
         {
-            Native.DeleteObject(bmp);
+            // A selected bitmap can't be deleted; put the original back first on the failure paths.
+            if (old != IntPtr.Zero) Native.SelectObject(memDc, old);
+            if (bmp != IntPtr.Zero) Native.DeleteObject(bmp);
             Native.DeleteDC(memDc);
             Native.ReleaseDC(IntPtr.Zero, screenDc);
         }

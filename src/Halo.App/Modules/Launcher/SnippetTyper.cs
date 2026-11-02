@@ -13,7 +13,7 @@ internal sealed class SnippetTyper : IDisposable
 {
     const int ChunkInputs = 64;
 
-    sealed record Job(int Erase, string Template);
+    sealed record Job(int Erase, string Template, IntPtr Target);
 
     readonly BlockingCollection<Job> _jobs = new();
     readonly Func<string?> _clipboard;
@@ -28,7 +28,8 @@ internal sealed class SnippetTyper : IDisposable
 
     public void Enqueue(int erase, string template)
     {
-        try { _jobs.TryAdd(new Job(erase, template)); }
+        // Remember which window the trigger was typed into; the expansion goes there or nowhere.
+        try { _jobs.TryAdd(new Job(erase, template, Halo.Interop.Native.GetForegroundWindow())); }
         catch (ObjectDisposedException) { }
         catch (InvalidOperationException) { }
     }
@@ -55,6 +56,7 @@ internal sealed class SnippetTyper : IDisposable
         for (int i = 0; i < 50 && (IsDown(VK_CONTROL) || IsDown(VK_MENU) || IsDown(VK_LWIN) || IsDown(VK_RWIN)); i++)
             Thread.Sleep(10);
 
+        if (Halo.Interop.Native.GetForegroundWindow() != job.Target) return; // focus moved: don't type into someone else
         var text = SnippetText.Expand(job.Template, DateTime.Now, _clipboard);
         var inputs = new List<INPUT>(job.Erase * 2 + text.Length * 2);
         for (int i = 0; i < job.Erase; i++)
@@ -83,15 +85,16 @@ internal sealed class SnippetTyper : IDisposable
                     break;
             }
         }
-        Send(inputs);
+        Send(inputs, job.Target);
     }
 
     /// <summary>Small batches with a breath between them; some apps (Electron, terminals) drop a huge burst.</summary>
-    void Send(List<INPUT> inputs)
+    void Send(List<INPUT> inputs, IntPtr target)
     {
         int size = Marshal.SizeOf<INPUT>();
         for (int i = 0; i < inputs.Count; i += ChunkInputs)
         {
+            if (Halo.Interop.Native.GetForegroundWindow() != target) return;
             var chunk = inputs.GetRange(i, Math.Min(ChunkInputs, inputs.Count - i)).ToArray();
             if (SendInput((uint)chunk.Length, chunk, size) != chunk.Length)
             {

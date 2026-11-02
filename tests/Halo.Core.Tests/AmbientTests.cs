@@ -124,11 +124,12 @@ public class WeatherParsingTests
         var a = IpLocation.ParseIpApiCo("""{"ip":"x","city":"Paris","latitude":48.85661,"longitude":2.35222}""", now)!;
         Assert.Equal("Paris", a.City);
         Assert.Equal(2.35222, a.Longitude);
-        var b = IpLocation.ParseIpApiCom("""{"status":"success","city":"London","lat":51.5074,"lon":-0.1278}""", now)!;
+        var b = IpLocation.ParseIpWhoIs("""{"success":true,"city":"London","latitude":51.5074,"longitude":-0.1278}""", now)!;
         Assert.Equal("London", b.City);
         Assert.Null(IpLocation.ParseIpApiCo("""{"error":true,"reason":"RateLimited"}""", now));
-        Assert.Null(IpLocation.ParseIpApiCom("""{"status":"fail","message":"reserved range"}""", now));
-        Assert.Null(IpLocation.ParseIpApiCom("<html>", now));
+        Assert.Null(IpLocation.ParseIpWhoIs("""{"success":false,"message":"Reserved range"}""", now));
+        Assert.Null(IpLocation.ParseIpWhoIs("<html>", now));
+        Assert.StartsWith("https://", IpLocation.FallbackUrl);
         Assert.Equal("Your area", IpLocation.ParseIpApiCo("""{"latitude":1,"longitude":2}""", now)!.City);
     }
 

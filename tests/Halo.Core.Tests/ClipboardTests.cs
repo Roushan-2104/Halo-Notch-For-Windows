@@ -56,6 +56,19 @@ public class ClipHistoryTests
     }
 
     [Fact]
+    public void Expire_drops_old_unpinned_entries_only()
+    {
+        var h = new ClipHistory();
+        var a = h.Add(Text("old pinned", 1));
+        h.SetPinned(a, true);
+        h.Add(Text("old", 2));
+        h.Add(Text("new", 10));
+
+        Assert.Equal(1, h.Expire(T0.AddSeconds(5)));
+        Assert.Equal(new[] { "old pinned", "new" }, h.Items.Select(e => e.Text));
+    }
+
+    [Fact]
     public void Unpinning_returns_to_the_unpinned_section()
     {
         var h = new ClipHistory();

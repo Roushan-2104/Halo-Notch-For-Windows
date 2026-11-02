@@ -17,11 +17,14 @@ public sealed record LrclibRecord(string Track, string Artist, double Duration, 
 public static class Lrclib
 {
     const RegexOptions Opts = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+    // Titles come from whatever app or web page is playing; a crafted one must not burn CPU.
+    const int MaxTitle = 300;
+    static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
 
     // Video-style decorations that never appear in a lyrics database title.
     static readonly Regex Decoration = new(
-        @"\s*[\(\[][^\)\]]*\b(?:official|lyrics?|audio|video|visuali[sz]er|remaster(?:ed)?|hd|4k|mv|m/v|live)\b[^\)\]]*[\)\]]", Opts);
-    static readonly Regex Feat = new(@"\s*[\(\[]?\s*\b(?:feat\.?|ft\.?|featuring)\s.*$", Opts);
+        @"\s*[\(\[][^\)\]]*\b(?:official|lyrics?|audio|video|visuali[sz]er|remaster(?:ed)?|hd|4k|mv|m/v|live)\b[^\)\]]*[\)\]]", Opts, MatchTimeout);
+    static readonly Regex Feat = new(@"\s*[\(\[]?\s*\b(?:feat\.?|ft\.?|featuring)\s.*$", Opts, MatchTimeout);
 
     public static string GetUrl(string track, string artist, TimeSpan duration)
     {
@@ -38,8 +41,18 @@ public static class Lrclib
     /// </summary>
     public static (string Track, string Artist) Clean(string title, string artist)
     {
-        var t = Decoration.Replace(title, "");
-        t = Feat.Replace(t, "").Trim();
+        if (title.Length > MaxTitle) title = title[..MaxTitle];
+        if (artist.Length > MaxTitle) artist = artist[..MaxTitle];
+        string t;
+        try
+        {
+            t = Decoration.Replace(title, "");
+            t = Feat.Replace(t, "").Trim();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            t = title.Trim();
+        }
         var a = artist.Trim();
         if (a.EndsWith(" - Topic", StringComparison.OrdinalIgnoreCase)) a = a[..^8].Trim();
         if (a.EndsWith("VEVO", StringComparison.Ordinal) && a.Length > 4) a = a[..^4].Trim();

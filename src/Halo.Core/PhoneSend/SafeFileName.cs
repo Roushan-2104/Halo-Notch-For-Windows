@@ -103,6 +103,22 @@ public static class SafeFileName
         return Path.Combine(directory, $"{stem} ({Guid.NewGuid():N}){ext}");
     }
 
+    static readonly HashSet<string> Executable = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".com", ".scr", ".pif", ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+        ".hta", ".msi", ".msp", ".msix", ".appx", ".appinstaller", ".cpl", ".dll", ".jar", ".lnk", ".url", ".reg",
+        ".inf", ".scf", ".library-ms", ".searchconnector-ms", ".settingcontent-ms", ".application", ".gadget",
+        ".msc", ".diagcab", ".chm", ".iso", ".img", ".vhd", ".vhdx",
+    };
+
+    /// <summary>
+    /// Files that run code (or mount / point somewhere) when double-clicked get ".blocked" appended, so
+    /// something dropped by anyone who saw the transfer link can't run by accident. Renaming is a
+    /// deliberate act.
+    /// </summary>
+    public static string NeutralizeExecutable(string fileName) =>
+        Executable.Contains(Path.GetExtension(fileName)) ? fileName + ".blocked" : fileName;
+
     /// <summary>True when <paramref name="path"/> resolves to a file directly inside <paramref name="directory"/>.</summary>
     public static bool IsDirectlyInside(string directory, string path)
     {

@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -84,7 +85,8 @@ internal sealed class ModuleContext
 {
     static readonly Lazy<HttpClient> SharedHttp = new(() =>
     {
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        // Every module only fetches small JSON/RSS; cap responses so a hostile server can't balloon memory.
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15), MaxResponseContentBufferSize = 4 * 1024 * 1024 };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Halo/0.1");
         return http;
     });
@@ -174,15 +176,23 @@ internal sealed class ModuleContext
 
     // ---- Storage and helpers ---------------------------------------------------------------------
 
-    /// <summary>Load this module's JSON data (%LOCALAPPDATA%\Halo\modules\&lt;name&gt;.json).</summary>
+    /// <summary>
+    /// Load this module's data (%LOCALAPPDATA%\Halo\modules\&lt;name&gt;.dat): JSON encrypted with Windows
+    /// DPAPI, so only this Windows account can read it. A plain &lt;name&gt;.json from older versions is
+    /// still read, and replaced by the encrypted file on the next save.
+    /// </summary>
     public T Load<T>() where T : new()
     {
         try
         {
-            var path = StorePath;
-            if (File.Exists(path)) return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T();
+            if (File.Exists(StorePath))
+            {
+                var json = ProtectedData.Unprotect(File.ReadAllBytes(StorePath), Entropy, DataProtectionScope.CurrentUser);
+                return JsonSerializer.Deserialize<T>(json) ?? new T();
+            }
+            if (File.Exists(LegacyPath)) return JsonSerializer.Deserialize<T>(File.ReadAllText(LegacyPath)) ?? new T();
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (Exception ex) when (ex is IOException or JsonException or CryptographicException)
         {
             Log.Warn($"{Name}: data unreadable, starting fresh", ex);
         }
@@ -194,22 +204,29 @@ internal sealed class ModuleContext
         try
         {
             var tmp = StorePath + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
+            var json = JsonSerializer.SerializeToUtf8Bytes(data);
+            File.WriteAllBytes(tmp, ProtectedData.Protect(json, Entropy, DataProtectionScope.CurrentUser));
             File.Move(tmp, StorePath, true);
+            if (File.Exists(LegacyPath)) File.Delete(LegacyPath);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or CryptographicException)
         {
             Log.Warn($"{Name}: saving data failed", ex);
         }
     }
 
-    string StorePath
+    static readonly byte[] Entropy = "Halo module store v1"u8.ToArray();
+
+    string StorePath => Path.Combine(StoreDir, $"{Name}.dat");
+    string LegacyPath => Path.Combine(StoreDir, $"{Name}.json");
+
+    static string StoreDir
     {
         get
         {
             var dir = Path.Combine(Paths.Root, "modules");
             Directory.CreateDirectory(dir);
-            return Path.Combine(dir, $"{Name}.json");
+            return dir;
         }
     }
 

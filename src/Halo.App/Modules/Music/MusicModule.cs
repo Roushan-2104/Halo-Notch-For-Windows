@@ -139,7 +139,7 @@ internal sealed class MusicModule : IHaloModule
 
         _lastPlayed = song;
         var how = _player.Open(YouTubeMusic.WatchUrl(song.VideoId));
-        _ctx.Info($"Playing {song.VideoId} ({song.Title} / {song.Artist}) via {how}");
+        _ctx.Info($"Playing a song via {how}");
         var detail = song.Title.Length == 0 ? query : song.Artist.Length == 0 ? song.Title : $"{song.Title} \u00B7 {song.Artist}";
         return new CommandResult("\uE768", "Playing", detail);
     }
@@ -211,7 +211,7 @@ internal sealed class MusicModule : IHaloModule
             }
             catch (Exception ex)
             {
-                _ctx.Warn($"Lyrics lookup failed for {title} / {artist}", ex);
+                _ctx.Warn("Lyrics lookup failed", ex);
                 if (version == _trackVersion) _panel.ShowStatus("\uE8D6", "Couldn\u2019t reach the lyrics service", track);
                 return;
             }

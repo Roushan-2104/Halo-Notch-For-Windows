@@ -31,6 +31,8 @@ internal sealed class ClipboardModule : IHaloModule
     const int PreviewPriority = 35, ScreenshotPriority = 55;
     const string PreviewId = "clipboard.preview", ScreenshotId = "clipboard.screenshot";
     const int MaxSavedText = 20_000;
+    // Unpinned history is forgotten after a day so old passwords and tokens don't pile up.
+    static readonly TimeSpan KeepFor = TimeSpan.FromHours(24);
 
     readonly ClipHistory _history = new();
     readonly CopyCoalescer _coalescer = new(TimeSpan.FromMilliseconds(300));
@@ -38,7 +40,7 @@ internal sealed class ClipboardModule : IHaloModule
     ClipboardPanel _panel = null!;
     ClipboardListener? _listener;
     ScreenshotWatcher? _screens;
-    DispatcherTimer? _readDelay, _saveDelay;
+    DispatcherTimer? _readDelay, _saveDelay, _expiry;
     CopyPreview? _preview;
     Capture? _capture;
     ScreenshotCard? _card;
@@ -55,6 +57,9 @@ internal sealed class ClipboardModule : IHaloModule
 
         _history.Load(ctx.Load<ClipStore>().Items.Where(e => e is { Kind: not ClipKind.Image, Text: not null, Files: not null }));
         _history.Changed += () => Restart(_saveDelay);
+        if (_history.Expire(DateTime.Now - KeepFor) > 0) Persist();
+        _expiry = new DispatcherTimer(TimeSpan.FromMinutes(10), DispatcherPriority.Background,
+            (_, _) => _history.Expire(DateTime.Now - KeepFor), ctx.Ui);
 
         _panel = new ClipboardPanel(_history, CopyBack);
         ctx.AddTab("", "Clipboard", _panel);
@@ -397,7 +402,7 @@ internal sealed class ClipboardModule : IHaloModule
     {
         if (!c.HasFile) return false;
         CloseCard();
-        _ctx.Open("explorer.exe", $"/select,\"{c.Path}\"");
+        _ctx.Open(Halo.Interop.Native.ExplorerPath, $"/select,\"{c.Path}\"");
         return true;
     }
 
@@ -515,6 +520,7 @@ internal sealed class ClipboardModule : IHaloModule
         _listener?.Dispose();
         _screens?.Dispose();
         _readDelay?.Stop();
+        _expiry?.Stop();
         if (_saveDelay?.IsEnabled == true)
         {
             _saveDelay.Stop();

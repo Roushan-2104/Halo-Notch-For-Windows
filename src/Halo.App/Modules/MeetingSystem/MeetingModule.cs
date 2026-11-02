@@ -55,6 +55,7 @@ internal sealed class MeetingModule : IHaloModule
     {
         if (_ctx is null || _mic is null) return;
         bool fake = _fakeApp is not null;
+        Infrastructure.PrivacyState.Set(fake || _snapshot.Microphone.Count > 0 || _snapshot.Camera.Count > 0 || _snapshot.Screen.Count > 0);
         var name = _fakeApp ?? Describe(_snapshot.Microphone);
         if (name is null)
         {
@@ -126,7 +127,8 @@ internal sealed class MeetingModule : IHaloModule
         var now = _watcher.Scan();
         static string List(IReadOnlyList<CapabilityApp> apps) =>
             string.Join(", ", apps.Select(a => $"{a.Name} ({a.Source}: {a.Path ?? a.Key})"));
-        return $"mic=[{List(now.Microphone)}] camera=[{List(now.Camera)}] muted={_mic.Muted} " +
+        return $"mic=[{List(now.Microphone)}] camera=[{List(now.Camera)}] screen=[{List(now.Screen)}] " +
+               $"presenting={Infrastructure.PrivacyState.Presenting} muted={_mic.Muted} " +
                $"device={_mic.DeviceName ?? "-"} notify={_watcher.UsingNotifications} " +
                $"activity={(_ctx?.Get(ActivityId) is null ? "hidden" : "shown")} fake={_fakeApp ?? "-"}";
     }

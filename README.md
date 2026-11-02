@@ -8,7 +8,7 @@ while music plays, green while charging, red for errors.
 
 ## Install
 
-1. Download `Halo-v0.2.0-win-x64.zip` from [Releases](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases).
+1. Download `Halo-v0.2.1-win-x64.zip` from [Releases](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases).
 2. Unzip it anywhere (for example `%LOCALAPPDATA%\Programs\Halo`) and run `Halo.exe`.
 3. Optional: tray icon › **Start with Windows**.
 
@@ -120,6 +120,20 @@ tests/           xUnit tests for Halo.Core
 - First launch shows the notch ~3 s after start (WPF's one-time theme load).
 - The halo costs roughly 2–5% of one CPU core while idle (the transparent notch window must be re-copied
   on every frame). Turn it off from the tray (**Halo glow**) for near-zero idle CPU.
+
+## Privacy and security
+
+- Voice is transcribed offline with Whisper. The model download is pinned to a fixed revision and checked against its SHA-256.
+- Searches go to Google, and only when you ask. When a circled image is uploaded to Lens, the card shows "Sent to Google".
+- The results card can only open http/https pages. Pages can't launch apps or protocol handlers.
+- Notification text is hidden while an app has your microphone or camera open, or is capturing the screen.
+- Clipboard history, notes, snippets and other module data are encrypted with Windows DPAPI under your account. Unpinned clipboard items are forgotten after 24 hours.
+- Clipboard secrets from QR codes (e.g. Wi-Fi passwords) are kept out of Windows clipboard history and cloud sync.
+- Logs never contain what you said, searched or copied. They are kept for 3 days.
+- Phone transfers:
+  - work only on your local network, behind a random link token;
+  - received executables are renamed to `.blocked`;
+  - every received file is marked as downloaded from the internet.
 
 ## License
 

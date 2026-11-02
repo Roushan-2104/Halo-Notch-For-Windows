@@ -29,6 +29,20 @@ public class TranscriptCleanerTests
     public void Empty_input_is_empty() => Assert.Equal("", TranscriptCleaner.RemoveRepeats("   "));
 }
 
+public class UploadNameTests
+{
+    [Theory]
+    [InlineData("invoice.pdf.exe", "invoice.pdf.exe.blocked")]
+    [InlineData("setup.MSI", "setup.MSI.blocked")]
+    [InlineData("shortcut.lnk", "shortcut.lnk.blocked")]
+    [InlineData("x.searchConnector-ms", "x.searchConnector-ms.blocked")]
+    [InlineData("photo.jpg", "photo.jpg")]
+    [InlineData("notes.pdf", "notes.pdf")]
+    [InlineData("README", "README")]
+    public void Executables_are_neutralized(string input, string expected) =>
+        Assert.Equal(expected, Halo.Core.PhoneSend.SafeFileName.NeutralizeExecutable(input));
+}
+
 public class AudioTrimTests
 {
     const int Rate = 16000;

@@ -32,7 +32,10 @@ internal sealed class PhoneTransfer : IDisposable
         {
             FilePath = path,
             UploadDirectory = DownloadsFolder(),
-            BindAddress = IPAddress.Any,
+            // Only the Wi-Fi/LAN adapter the QR advertises, not VPNs, Hyper-V or any public interface.
+            BindAddress = address,
+            // Unauthenticated clients that never finish a request line shouldn't hold slots for long.
+            HeaderTimeout = TimeSpan.FromSeconds(5),
         });
         _server.FileReceived += p => ctx.Ui.BeginInvoke(() => OnReceived(p));
         _server.Warning += (message, ex) => ctx.Warn(message, ex);
@@ -139,9 +142,9 @@ internal sealed class PhoneTransfer : IDisposable
         _ctx.Post(new Activity($"{_ctx.Name}.received", ActivityKind.Message, 45,
             new MessagePayload("", text), DateTime.UtcNow.AddSeconds(6))
         {
-            Click = () => _ctx.Open("explorer.exe", $"/select,\"{path}\""),
+            Click = () => _ctx.Open(Halo.Interop.Native.ExplorerPath, $"/select,\"{path}\""),
         });
-        _ctx.Info($"Received {name}");
+        _ctx.Info("Received a file from the phone");
     }
 
     public void Stop(bool closeCard = true)

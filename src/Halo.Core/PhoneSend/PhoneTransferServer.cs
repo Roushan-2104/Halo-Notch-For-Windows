@@ -402,6 +402,11 @@ public sealed class PhoneTransferServer : IDisposable
                     Touch();
                 }, ct);
             }
+            // Mark-of-the-Web: whatever arrives over the network gets SmartScreen / Protected View checks
+            // when opened, exactly like a browser download. The stream moves with the file on rename.
+            try { File.WriteAllText(temp + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) { }
+            name = SafeFileName.NeutralizeExecutable(name);
             // Pick the final name only now, and retry if another upload took it in the meantime.
             for (int attempt = 0; ; attempt++)
             {

@@ -156,14 +156,25 @@ internal static class ClipboardText
 {
     public static readonly CommandResult Busy = new(Glyphs.Error, "Clipboard is busy", "Try again in a moment", IsError: true);
 
-    /// <summary>Sets clipboard text on the UI thread, retrying briefly while another app holds the clipboard.</summary>
-    public static bool TrySet(string text)
+    /// <summary>
+    /// Sets clipboard text on the UI thread, retrying briefly while another app holds the clipboard.
+    /// With <paramref name="secret"/> (Wi-Fi passwords, QR secrets) it carries the same flags password
+    /// managers use, so Windows clipboard history, cloud clipboard and other monitors skip it.
+    /// </summary>
+    public static bool TrySet(string text, bool secret = false)
     {
         for (int i = 0; i < 3; i++)
         {
             try
             {
-                System.Windows.Clipboard.SetDataObject(text, true);
+                var data = new System.Windows.DataObject(System.Windows.DataFormats.UnicodeText, text);
+                if (secret)
+                {
+                    data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
+                    data.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
+                    data.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
+                }
+                System.Windows.Clipboard.SetDataObject(data, true);
                 return true;
             }
             catch (ExternalException)

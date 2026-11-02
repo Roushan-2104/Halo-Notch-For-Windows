@@ -63,12 +63,22 @@ public partial class ResultView : UserControl
 
             core.NewWindowRequested += (_, e) =>
             {
-                // Links that want a new tab go to the user's real browser.
+                // Links that want a new tab go to the user's real browser, but only real web links the
+                // user clicked: a page must never get Halo to shell-execute search-ms:, ms-settings:,
+                // file:, or any other protocol handler, or to open windows on its own.
                 e.Handled = true;
-                OpenExternal(e.Uri);
+                if (e.IsUserInitiated) OpenExternal(e.Uri);
             };
+            // Same rule for links a page tries to hand to installed apps directly.
+            core.LaunchingExternalUriScheme += (_, e) => e.Cancel = true;
             core.NavigationStarting += (_, e) =>
             {
+                if (!IsAllowedNavigation(e.Uri))
+                {
+                    e.Cancel = true;
+                    Log.Warn("Blocked a non-web navigation in the results view");
+                    return;
+                }
                 _latestNavigation = e.NavigationId;
                 ErrorPanel.Visibility = Visibility.Collapsed;
                 Notice.Visibility = Visibility.Collapsed;
@@ -79,7 +89,7 @@ public partial class ResultView : UserControl
                 // A navigation that was superseded (redirects, a new search) reports as aborted; only the
                 // latest one decides what the card shows.
                 Log.Info($"Navigation {e.NavigationId} done: ok={e.IsSuccess} http={e.HttpStatusCode} " +
-                         $"latest={e.NavigationId == _latestNavigation} {Truncate(core.Source)}");
+                         $"latest={e.NavigationId == _latestNavigation} {HostAndPath(core.Source)}");
                 if (e.NavigationId != _latestNavigation) return;
                 SetLoading(false);
                 if (_releasing)
@@ -139,6 +149,7 @@ public partial class ResultView : UserControl
         FilterNoJunk.IsChecked = filters.HasFlag(SearchFilter.NoJunk);
         FilterDocs.IsChecked = filters.HasFlag(SearchFilter.Docs);
         ErrorPanel.Visibility = Visibility.Collapsed;
+        UploadBadge.Visibility = Visibility.Collapsed;
     }
 
     void SetModeChips(SearchMode mode)
@@ -170,6 +181,20 @@ public partial class ResultView : UserControl
         if (core is null) return;
         _releasing = true;
         core.NavigateToString("<html><body style='background:#101012'></body></html>");
+        // No search history left behind on disk. Cookies stay: they hold Google's robot-check exemption.
+        _ = ClearHistoryAsync(core);
+    }
+
+    static async Task ClearHistoryAsync(CoreWebView2 core)
+    {
+        try
+        {
+            await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.BrowsingHistory | CoreWebView2BrowsingDataKinds.DownloadHistory);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Clearing results history failed", ex);
+        }
     }
 
     bool _releasing;
@@ -218,6 +243,7 @@ public partial class ResultView : UserControl
         await EnsureReadyAsync();
         Wake();
         ErrorPanel.Visibility = Visibility.Collapsed;
+        UploadBadge.Visibility = Visibility.Visible;
         UseUserAgent(mobile: false);
         var core = Web.CoreWebView2;
         string boundary = "----HaloLens" + Guid.NewGuid().ToString("N");
@@ -376,11 +402,41 @@ public partial class ResultView : UserControl
 
     void OnDismissNotice(object sender, RoutedEventArgs e) => Notice.Visibility = Visibility.Collapsed;
 
-    static string Truncate(string? s) => s is null ? "" : s.Length > 90 ? s[..90] + "…" : s;
+    /// <summary>For the log: host and path only, never the query string (it holds what you searched).</summary>
+    static string HostAndPath(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme is "http" or "https" ? u.Host + u.AbsolutePath : u?.Scheme ?? "";
+
+    /// <summary>Opens a web link in the default browser. Anything that isn't plain http(s) is refused.</summary>
+    internal async Task LoadTestHtmlAsync(string html)
+    {
+        await EnsureReadyAsync();
+        Wake();
+        Web.CoreWebView2.NavigateToString(html);
+    }
 
     internal static void OpenExternal(string url)
     {
-        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-        catch (Exception ex) { Log.Warn($"Opening {url} failed", ex); }
+        if (!IsWebUrl(url, out var uri))
+        {
+            Log.Warn("Refused to open a non-web link from the results view");
+            return;
+        }
+        try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception ex) { Log.Warn("Opening a link failed", ex); }
     }
+
+    /// <summary>http/https to a named host only (no UNC, no file:, no protocol handlers).</summary>
+    static bool IsWebUrl(string? url, out Uri uri)
+    {
+        uri = null!;
+        return Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+               && parsed.Scheme is "http" or "https" && !parsed.IsUnc && parsed.Host.Length > 0
+               && (uri = parsed) is not null;
+    }
+
+    /// <summary>What the card itself may load: the web, plus the blank page Halo shows between searches.</summary>
+    static bool IsAllowedNavigation(string? url) =>
+        IsWebUrl(url, out _)
+        || string.Equals(url, "about:blank", StringComparison.OrdinalIgnoreCase)
+        || (url?.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ?? false);
 }

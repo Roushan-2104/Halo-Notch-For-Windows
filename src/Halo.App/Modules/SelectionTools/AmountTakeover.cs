@@ -41,7 +41,7 @@ internal sealed class AmountTakeover : ISelectionHandler
                 var pending = _rates.GetAsync();
                 if (!waitForRates && await Task.WhenAny(pending, Task.Delay(RatesWait)) != pending)
                 {
-                    _ctx.Warn($"Exchange rates too slow, searching \"{text}\" instead");
+                    _ctx.Warn("Exchange rates too slow, searching instead");
                     return null;
                 }
                 var table = await pending;
@@ -53,7 +53,7 @@ internal sealed class AmountTakeover : ISelectionHandler
         }
         catch (Exception ex)
         {
-            _ctx.Warn($"Converting \"{text}\" failed", ex);
+            _ctx.Warn("Converting a circled amount failed", ex);
         }
         return null;
     }

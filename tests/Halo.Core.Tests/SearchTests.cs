@@ -101,6 +101,15 @@ public class CalculatorTests
     [InlineData(0.5, "0.5")]
     [InlineData(1.0 / 3, "0.3333333333")]
     public void Formats(double value, string expected) => Assert.Equal(expected, Calculator.Format(value));
+
+    [Fact]
+    public void Deeply_nested_input_is_refused_instead_of_overflowing_the_stack()
+    {
+        var hostile = new string('(', 3000) + "1+1" + new string(')', 3000);
+        Assert.False(Calculator.TryEvaluate(hostile, out _, out _));
+        Assert.True(Calculator.TryEvaluate("((((1+1))))*2", out var v, out _));
+        Assert.Equal(4, v);
+    }
 }
 
 public class SelectionAnalyzerTests

@@ -15,15 +15,17 @@ public sealed record GeoLocation(string City, double Latitude, double Longitude,
 public static class IpLocation
 {
     public const string PrimaryUrl = "https://ipapi.co/json/";
-    public const string FallbackUrl = "http://ip-api.com/json/?fields=status,city,lat,lon";
+    // HTTPS only: a plain-HTTP lookup would broadcast (and let anyone on the network rewrite) your location.
+    public const string FallbackUrl = "https://ipwho.is/?fields=success,city,latitude,longitude";
+
+    /// <summary>ipwho.is: {"success":true,"city":..,"latitude":..,"longitude":..}.</summary>
+    public static GeoLocation? ParseIpWhoIs(string json, DateTime nowUtc) =>
+        Parse(json, nowUtc, "latitude", "longitude", root => root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True);
 
     /// <summary>ipapi.co: {"city":..,"latitude":..,"longitude":..} or {"error":true,"reason":..}.</summary>
     public static GeoLocation? ParseIpApiCo(string json, DateTime nowUtc) =>
         Parse(json, nowUtc, "latitude", "longitude", root => !(root.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.True));
 
-    /// <summary>ip-api.com: {"status":"success","city":..,"lat":..,"lon":..}.</summary>
-    public static GeoLocation? ParseIpApiCom(string json, DateTime nowUtc) =>
-        Parse(json, nowUtc, "lat", "lon", root => AmbientJson.Str(root, "status") == "success");
 
     static GeoLocation? Parse(string json, DateTime nowUtc, string latKey, string lonKey, Func<JsonElement, bool> ok)
     {

@@ -229,6 +229,15 @@ public class LrclibTests
     }
 
     [Fact]
+    public void Hostile_long_titles_are_cleaned_quickly()
+    {
+        var title = "(" + string.Concat(Enumerable.Repeat("a official ", 3000));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Lrclib.Clean(title, new string('x', 30000));
+        Assert.True(sw.ElapsedMilliseconds < 1000, $"took {sw.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
     public void Parses_get_objects_and_search_arrays()
     {
         const string get = """{"id":1,"trackName":"A","artistName":"B","duration":219.0,"instrumental":false,"plainLyrics":"x","syncedLyrics":"[00:01.00]x"}""";

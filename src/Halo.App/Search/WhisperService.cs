@@ -12,7 +12,10 @@ namespace Halo.Search;
 /// </summary>
 internal sealed class WhisperService : IDisposable
 {
-    const string ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
+    // Pinned to one published revision and its SHA-256: the file is parsed by native code, so a swapped
+    // or tampered model must never load. (Hash = the repository's own LFS SHA-256 for this file.)
+    const string ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin";
+    const string ModelSha256 = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe";
     const long MinModelBytes = 140_000_000;
 
     static readonly Regex Noise = new(@"\[[^\]]*\]|\([^)]*\)|♪", RegexOptions.Compiled);
@@ -40,12 +43,20 @@ internal sealed class WhisperService : IDisposable
     {
         try
         {
-            if (!File.Exists(ModelPath) || new FileInfo(ModelPath).Length < MinModelBytes) await DownloadAsync();
+            if (!File.Exists(ModelPath) || !await Task.Run(() => HasExpectedHash(ModelPath)))
+            {
+                if (File.Exists(ModelPath)) Log.Warn("Voice model didn't match its expected hash; downloading it again");
+                await DownloadAsync();
+            }
             await Task.Run(() =>
             {
                 _factory = WhisperFactory.FromPath(ModelPath);
                 _processor = Build(1500);
-                Processor(512); // warm the most common size so the first query isn't slower
+                // Warm the most common size so the first query isn't slower. Under the gate: a tray
+                // language change can reset the processors at the same time.
+                _gate.Wait();
+                try { Processor(512); }
+                finally { _gate.Release(); }
             });
             Failure = null;
             Log.Info("Whisper model loaded");
@@ -91,6 +102,7 @@ internal sealed class WhisperService : IDisposable
                 }
             }
             if (new FileInfo(part).Length < MinModelBytes) throw new HttpRequestException("Model download was truncated");
+            if (!await Task.Run(() => HasExpectedHash(part))) throw new HttpRequestException("Model download failed its integrity check");
             File.Move(part, ModelPath, true);
         }
         finally
@@ -98,6 +110,14 @@ internal sealed class WhisperService : IDisposable
             IsDownloading = false;
             if (File.Exists(part)) File.Delete(part);
         }
+    }
+
+    static bool HasExpectedHash(string path)
+    {
+        using var fs = File.OpenRead(path);
+        if (fs.Length < MinModelBytes) return false;
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(fs));
+        return string.Equals(hash, ModelSha256, StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<string> TranscribeAsync(float[] samples, CancellationToken ct = default)

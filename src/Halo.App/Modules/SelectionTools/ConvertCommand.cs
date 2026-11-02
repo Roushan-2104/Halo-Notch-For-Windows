@@ -55,7 +55,7 @@ internal sealed class ConvertCommand : ITextCommand
                 }
                 catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
                 {
-                    _ctx.Warn($"Time zone lookup failed for \"{text}\"", ex);
+                    _ctx.Warn("Time zone lookup failed", ex);
                     return new ConvertOutcome(new CommandResult(Glyphs.Error, "Couldn't find that time zone", ex.Message, IsError: true));
                 }
             case CurrencyQuery money:

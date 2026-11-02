@@ -13,6 +13,8 @@ public static class Calculator
     static readonly HashSet<string> Functions = new(StringComparer.OrdinalIgnoreCase)
         { "sqrt", "sin", "cos", "tan", "log", "ln", "abs", "round", "floor", "ceil" };
 
+    const int MaxLength = 256;
+
     public static bool TryEvaluate(string input, out double result, out string expression)
     {
         result = 0;
@@ -29,6 +31,9 @@ public static class Calculator
         text = Regex.Replace(text, @"\bof\b", "*", RegexOptions.IgnoreCase);
         text = Regex.Replace(text, @"(?<=\d),(?=\d{3}\b)", "");
 
+        // The parser recurses per bracket/sign; a long hostile input ("((((…") would overflow the stack,
+        // which kills the process. Real sums are far shorter than this.
+        if (text.Length > MaxLength) return false;
         if (!Regex.IsMatch(text, @"\d")) return false;
         if (!Regex.IsMatch(text, @"[+\-*/^%]|\b(?:sqrt|sin|cos|tan|log|ln|abs|round|floor|ceil)\b", RegexOptions.IgnoreCase)) return false;
 

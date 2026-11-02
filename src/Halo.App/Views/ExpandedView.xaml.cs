@@ -255,7 +255,7 @@ public partial class ExpandedView : UserControl
             menu.Items.Add(mi);
         }
         Add("Open", () => Open(item.Path));
-        Add("Show in folder", () => Process.Start("explorer.exe", $"/select,\"{item.Path}\""));
+        Add("Show in folder", () => Process.Start(Interop.Native.ExplorerPath, $"/select,\"{item.Path}\""));
         foreach (var action in ShelfActions) Add(action.Label, () => action.Run(item));
         Add("Remove from shelf", () => _s?.Shelf.Remove(item));
         menu.PlacementTarget = (UIElement)sender;
@@ -275,6 +275,6 @@ public partial class ExpandedView : UserControl
     static void Open(string path)
     {
         try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-        catch (Exception ex) { Log.Warn($"Opening {path} failed", ex); }
+        catch (Exception ex) { Log.Warn("Opening a shelf item failed", ex); }
     }
 }

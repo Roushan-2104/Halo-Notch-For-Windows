@@ -34,7 +34,7 @@ internal static class ScreenshotSaver
             try { Clipboard.SetImage(image); }
             catch (System.Runtime.InteropServices.ExternalException) { /* clipboard busy; the file is what matters */ }
 
-            Log.Info($"Saved {kind}: {path}");
+            Log.Info($"Saved {kind}");
             return path;
         }
         catch (Exception ex)

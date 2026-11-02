@@ -55,6 +55,10 @@ internal sealed class KeyboardHook : IDisposable
             if (down || up)
             {
                 var k = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
+                // Keys injected by a lower-integrity (sandboxed) process must never drive Halo's hotkeys:
+                // otherwise a sandbox could "hold Right Alt", play speech, and run voice commands here.
+                const uint LLKHF_LOWER_IL_INJECTED = 0x02;
+                if ((k.flags & LLKHF_LOWER_IL_INJECTED) != 0) return Native.CallNextHookEx(_hook, nCode, wParam, lParam);
                 try
                 {
                     if (_filter((int)k.vkCode, down)) return new IntPtr(1);

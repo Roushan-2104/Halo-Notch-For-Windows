@@ -188,10 +188,15 @@ internal static class Native
 
     public static string? KnownFolder(Guid id)
     {
-        if (SHGetKnownFolderPath(id, 0, IntPtr.Zero, out var p) != 0) return null;
-        try { return Marshal.PtrToStringUni(p); }
-        finally { Marshal.FreeCoTaskMem(p); }
+        // The buffer must be freed even when the call fails.
+        IntPtr p = IntPtr.Zero;
+        try { return SHGetKnownFolderPath(id, 0, IntPtr.Zero, out p) == 0 ? Marshal.PtrToStringUni(p) : null; }
+        finally { if (p != IntPtr.Zero) Marshal.FreeCoTaskMem(p); }
     }
 
     public static readonly Guid DownloadsFolder = new("374DE290-123F-4565-9164-39C4925E467B");
+
+    /// <summary>Full path, so a stray explorer.exe in the app or current directory is never picked up.</summary>
+    public static string ExplorerPath { get; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
 }

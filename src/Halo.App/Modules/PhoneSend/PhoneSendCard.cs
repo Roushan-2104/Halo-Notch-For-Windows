@@ -86,8 +86,9 @@ internal sealed class PhoneSendCard : Grid
 
         _hint = Text("Scan with your phone on the same Wi-Fi", 12, Res("Fg2"));
         _hint.TextWrapping = TextWrapping.Wrap;
-        _url = Text(url, 10.5, Res("Fg3"), margin: new Thickness(0, 4, 0, 0));
-        _url.ToolTip = url;
+        // The token is the only thing that lets someone in, so the card shows just the address;
+        // the QR code carries the full link.
+        _url = Text(MaskToken(url), 10.5, Res("Fg3"), margin: new Thickness(0, 4, 0, 0));
         _waiting = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
         _waiting.Children.Add(_hint);
         _waiting.Children.Add(_url);
@@ -161,6 +162,9 @@ internal sealed class PhoneSendCard : Grid
         _frames?.Dispose();
         _frames = null;
     }
+
+    internal static string MaskToken(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? $"{uri.Scheme}://{uri.Authority}/••••" : "";
 
     static UIElement BuildTile(string url)
     {

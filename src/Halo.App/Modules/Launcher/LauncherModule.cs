@@ -69,7 +69,7 @@ internal sealed class LauncherModule : IHaloModule, ITextCommand
                 var app = plan.Match!.Value.App;
                 if (!plan.CanLaunch)
                     return new CommandResult("", $"No app called “{request.Target}”", $"Did you mean {app.Name}?", IsError: true);
-                _ctx.Info($"Launching {app.Name} ({app.Target})");
+                _ctx.Info("Launching an app");
                 _ctx.Open(app.Target);
                 return new CommandResult("", "Opening", app.Name);
             }
