@@ -41,7 +41,7 @@ internal sealed class CapabilityWatcher : IDisposable
     readonly Dictionary<string, string> _webAppNames = new(StringComparer.OrdinalIgnoreCase);
     Thread? _thread;
     string? _lastSignature;
-    bool _sessionsFailed;
+    DateTime _sessionsRetryAt;
 
     public CapabilityWatcher(Dispatcher ui, Action<string, Exception?> warn)
     {
@@ -169,6 +169,7 @@ internal sealed class CapabilityWatcher : IDisposable
         using var root = Registry.CurrentUser.OpenSubKey(Root + capability);
         if (root is null) return apps;
         var own = Environment.ProcessPath;
+        HashSet<string>? packaged = null;
         foreach (var name in root.GetSubKeyNames())
         {
             if (name == CapabilityUsage.NonPackagedKey)
@@ -189,7 +190,11 @@ internal sealed class CapabilityWatcher : IDisposable
             else
             {
                 using var k = root.OpenSubKey(name);
-                if (IsInUse(k)) apps.Add(new CapabilityApp(name, null, AppNames.Friendly(name), "registry"));
+                if (!IsInUse(k)) continue;
+                // Same rule as desktop apps: a crash leaves the record "in use" forever, so only trust it
+                // while the app is running (otherwise the mic pill and hidden notifications never go away).
+                packaged ??= MeetingSystemNative.RunningPackageFamilies();
+                if (packaged.Contains(name)) apps.Add(new CapabilityApp(name, null, AppNames.Friendly(name), "registry"));
             }
         }
         return apps;
@@ -202,7 +207,9 @@ internal sealed class CapabilityWatcher : IDisposable
     List<CapabilityApp> Capturing(Lazy<List<(uint Pid, string Title)>> titles)
     {
         var apps = new List<CapabilityApp>();
-        if (_sessionsFailed) return apps;
+        // After a failure (the audio service restarting during a driver update) try again a minute later
+        // rather than giving up on mic detection for the rest of the session.
+        if (DateTime.UtcNow < _sessionsRetryAt) return apps;
         var pids = new HashSet<uint>();
         try
         {
@@ -231,7 +238,7 @@ internal sealed class CapabilityWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            _sessionsFailed = true;
+            _sessionsRetryAt = DateTime.UtcNow.AddMinutes(1);
             _warn("Audio capture sessions unavailable", ex);
             return apps;
         }

@@ -83,9 +83,16 @@ internal sealed class AppSettings
         try
         {
             if (File.Exists(Paths.SettingsFile))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Paths.SettingsFile), Json) ?? new AppSettings();
+            {
+                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Paths.SettingsFile), Json) ?? new AppSettings();
+                // A hand-edited or half-written file can say null; every list must exist for the rest of Halo.
+                s.Shelf ??= new();
+                s.MutedNotificationApps ??= new();
+                if (string.IsNullOrWhiteSpace(s.VoiceLanguage)) s.VoiceLanguage = "en";
+                return s;
+            }
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
             Log.Warn("Settings unreadable, using defaults", ex);
         }
@@ -100,8 +107,9 @@ internal sealed class AppSettings
             File.WriteAllText(tmp, JsonSerializer.Serialize(this, Json));
             File.Move(tmp, Paths.SettingsFile, true);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // e.g. settings.json marked read-only: keep running with the in-memory settings.
             Log.Warn("Settings save failed", ex);
         }
     }

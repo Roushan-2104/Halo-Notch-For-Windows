@@ -85,12 +85,19 @@ public static class ProductivityParser
 
     static readonly HashSet<string> ReminderLead = new(StringComparer.OrdinalIgnoreCase) { "to", "that", "about", "of" };
 
+    const int MaxCommand = 300, MaxNote = 4000;
+
+    // "at 25:00", "at 13pm": the user gave a time, but not one that exists.
+    static readonly Regex AtClock = new(@"(?:^|\s)at\s+(?<clock>\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?=\s|$)", Opts);
+
     public static ProductivityCommand? Parse(string text, DateTime now)
     {
         var s = Spaces.Replace(text, " ").Trim().TrimEnd('.', '!', '?').Trim();
-        if (s.Length == 0 || s.Length > 300) return null;
+        if (s.Length == 0 || s.Length > MaxNote) return null;
         var polite = Polite.Match(s);
         if (polite.Success) s = polite.Groups["body"].Value;
+        // A long dictated note is still a note; anything else that long is a search, not a command.
+        if (s.Length > MaxCommand) return ParseNote(s);
 
         return ParseNote(s)
             ?? ParseShowNotes(s)
@@ -163,8 +170,16 @@ public static class ProductivityParser
             : null;
     }
 
-    static ProductivityCommand Reminder(DateTime due, IEnumerable<string> words) =>
-        new(ProductivityAction.Remind) { Due = due, Text = ReminderText(words) };
+    static ProductivityCommand Reminder(DateTime due, IEnumerable<string> words)
+    {
+        var text = ReminderText(words);
+        // "tomorrow at 25:00": the day parsed but the clock didn't, so it would silently become 9 AM.
+        // Ask for a time instead of guessing.
+        var at = AtClock.Match(text);
+        if (at.Success && WhenParser.ParseClock(at.Groups["clock"].Value.Replace(" ", "")) is null)
+            return new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = ReminderText(AtClock.Replace(text, " ").Split(' ', StringSplitOptions.RemoveEmptyEntries)) };
+        return new ProductivityCommand(ProductivityAction.Remind) { Due = due, Text = text };
+    }
 
     static string ReminderText(IEnumerable<string> words)
     {
@@ -181,6 +196,8 @@ public static class ProductivityParser
         if (TimerFirst.Match(s) is { Success: true } first)
         {
             var rest = first.Groups["rest"].Value;
+            // "timer -5 minutes" isn't a timer anyone can run; don't quietly make it 5 minutes.
+            if (rest.TrimStart().StartsWith('-')) return null;
             if (DurationParser.ParsePrefix(rest, out var label) is { } d)
                 return new ProductivityCommand(ProductivityAction.StartTimer) { Duration = d, Text = Label(label) };
             // "timer 10" means minutes.

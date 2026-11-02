@@ -15,6 +15,8 @@ public static class Calculator
 
     const int MaxLength = 256;
 
+    static readonly Regex NotArithmetic = new(@"^(?:\d{4}-\d{1,2}(?:-\d{1,2})?|(?:19|20)\d{2}-\d{2}|\d{3,}-\d{3,}(?:-\d+)?)$", RegexOptions.CultureInvariant);
+
     public static bool TryEvaluate(string input, out double result, out string expression)
     {
         result = 0;
@@ -34,6 +36,8 @@ public static class Calculator
         // The parser recurses per bracket/sign; a long hostile input ("((((…") would overflow the stack,
         // which kills the process. Real sums are far shorter than this.
         if (text.Length > MaxLength) return false;
+        // Dates, year ranges and phone numbers look like subtraction but are things to search for.
+        if (NotArithmetic.IsMatch(text)) return false;
         if (!Regex.IsMatch(text, @"\d")) return false;
         if (!Regex.IsMatch(text, @"[+\-*/^%]|\b(?:sqrt|sin|cos|tan|log|ln|abs|round|floor|ceil)\b", RegexOptions.IgnoreCase)) return false;
 
@@ -60,6 +64,7 @@ public static class Calculator
         if (Math.Abs(value) >= 1e15 || (Math.Abs(value) < 1e-6 && value != 0))
             return value.ToString("G10", CultureInfo.InvariantCulture);
         var rounded = Math.Round(value, 10);
+        if (rounded == 0) rounded = 0; // no "-0"
         return rounded % 1 == 0
             ? rounded.ToString("#,0", CultureInfo.InvariantCulture)
             : rounded.ToString("#,0.##########", CultureInfo.InvariantCulture);
@@ -102,7 +107,10 @@ public static class Calculator
 
         double ParseFactor()
         {
-            var v = ParseUnary();
+            // Unary minus binds looser than ^, as in maths: -2^2 is -(2^2) = -4.
+            if (Eat('-')) return -ParseFactor();
+            if (Eat('+')) return ParseFactor();
+            var v = ParsePostfix();
             if (Eat('^')) v = Math.Pow(v, ParseFactor()); // right associative
             return v;
         }

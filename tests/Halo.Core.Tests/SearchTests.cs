@@ -102,6 +102,29 @@ public class CalculatorTests
     [InlineData(1.0 / 3, "0.3333333333")]
     public void Formats(double value, string expected) => Assert.Equal(expected, Calculator.Format(value));
 
+    [Theory]
+    [InlineData("-2^2", -4)]
+    [InlineData("2^-1", 0.5)]
+    [InlineData("-(2)^2", -4)]
+    [InlineData("(-2)^2", 4)]
+    [InlineData("10-3", 7)]
+    public void Unary_minus_binds_looser_than_power(string text, double expected)
+    {
+        Assert.True(Calculator.TryEvaluate(text, out var v, out _));
+        Assert.Equal(expected, v, 10);
+    }
+
+    [Theory]
+    [InlineData("2025-11-03")]
+    [InlineData("2024-25")]
+    [InlineData("555-1234")]
+    [InlineData("800-555-0199")]
+    public void Dates_and_phone_numbers_are_searched_not_calculated(string text) =>
+        Assert.False(Calculator.TryEvaluate(text, out _, out _));
+
+    [Fact]
+    public void Negative_zero_shows_as_zero() => Assert.Equal("0", Calculator.Format(-0.0));
+
     [Fact]
     public void Deeply_nested_input_is_refused_instead_of_overflowing_the_stack()
     {

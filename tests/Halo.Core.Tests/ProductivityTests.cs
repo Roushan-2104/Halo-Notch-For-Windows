@@ -350,6 +350,40 @@ public class ProductivityParserTests
     }
 
     [Theory]
+    [InlineData("remind me tomorrow at 25:00 to submit the form", "Submit the form")]
+    [InlineData("remind me tomorrow at 13pm to call mom", "Call mom")]
+    [InlineData("remind me tomorrow at 9:75 to stretch", "Stretch")]
+    public void Reminder_with_an_impossible_time_asks_instead_of_guessing(string text, string reminder)
+    {
+        var c = Parse(text);
+        Assert.Equal(ProductivityAction.ReminderNeedsTime, c.Action);
+        Assert.Equal(reminder, c.Text);
+    }
+
+    [Fact]
+    public void Reminder_with_a_real_time_left_in_the_text_is_still_set()
+    {
+        var c = Parse("remind me tomorrow to meet john at 5");
+        Assert.Equal(ProductivityAction.Remind, c.Action);
+    }
+
+    [Fact]
+    public void Long_dictated_note_is_saved_not_searched()
+    {
+        var body = string.Join(' ', Enumerable.Repeat("remember the long list of things", 30));
+        var c = Parse("note: " + body);
+        Assert.Equal(ProductivityAction.Note, c.Action);
+        Assert.True(c.Text.Length > 300);
+        Assert.Null(ProductivityParser.Parse("timer " + body, Now));
+    }
+
+    [Theory]
+    [InlineData("timer -5 minutes")]
+    [InlineData("set a timer for -10 seconds")]
+    public void Negative_timer_is_not_turned_into_a_positive_one(string text) =>
+        Assert.Null(ProductivityParser.Parse(text, Now));
+
+    [Theory]
     [InlineData("note: buy milk", "Buy milk")]
     [InlineData("Note: Buy milk, eggs", "Buy milk, eggs")]
     [InlineData("note buy milk", "Buy milk")]

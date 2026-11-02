@@ -195,9 +195,14 @@ internal sealed class ModuleContext
             }
             if (File.Exists(LegacyPath)) return JsonSerializer.Deserialize<T>(File.ReadAllText(LegacyPath)) ?? new T();
         }
-        catch (Exception ex) when (ex is IOException or JsonException or CryptographicException)
+        catch (Exception ex) when (ex is IOException or JsonException or CryptographicException or UnauthorizedAccessException)
         {
+            // Never let the next save overwrite it: a store copied from another PC or account (DPAPI can't
+            // decrypt it) still holds the user's notes. Keep it next to the new one and say so.
             Log.Warn($"{Name}: data unreadable, starting fresh", ex);
+            var kept = KeepUnreadable();
+            if (kept is not null)
+                Ui.BeginInvoke(() => ShowMessage("", $"Couldn't read saved {Name} data", error: true));
         }
         return new T();
     }
@@ -212,10 +217,31 @@ internal sealed class ModuleContext
             File.Move(tmp, StorePath, true);
             if (File.Exists(LegacyPath)) File.Delete(LegacyPath);
         }
-        catch (Exception ex) when (ex is IOException or CryptographicException)
+        catch (Exception ex) when (ex is IOException or CryptographicException or UnauthorizedAccessException)
         {
             Log.Warn($"{Name}: saving data failed", ex);
         }
+    }
+
+    /// <summary>Renames an unreadable store aside (…unreadable-yyyyMMdd-HHmmss); returns the new path or null.</summary>
+    string? KeepUnreadable()
+    {
+        foreach (var path in new[] { StorePath, LegacyPath })
+        {
+            if (!File.Exists(path)) continue;
+            try
+            {
+                var aside = $"{path}.unreadable-{DateTime.Now:yyyyMMdd-HHmmss}";
+                File.Move(path, aside);
+                Log.Warn($"{Name}: kept the unreadable file as {Path.GetFileName(aside)}");
+                return aside;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn($"{Name}: couldn't move the unreadable file aside", ex);
+            }
+        }
+        return null;
     }
 
     static readonly byte[] Entropy = "Halo module store v1"u8.ToArray();
@@ -234,7 +260,8 @@ internal sealed class ModuleContext
     }
 
     /// <summary>Open a URL, file or shell target (e.g. "shell:AppsFolder\&lt;AUMID&gt;").</summary>
-    public void Open(string target, string? arguments = null)
+    /// <returns>False when Windows couldn't open it (deleted shortcut, uninstalled app, no handler).</returns>
+    public bool Open(string target, string? arguments = null)
     {
         try
         {
@@ -243,10 +270,12 @@ internal sealed class ModuleContext
                 UseShellExecute = true,
                 Arguments = arguments ?? "",
             });
+            return true;
         }
         catch (Exception ex)
         {
-            Log.Warn($"{Name}: opening {target} failed", ex);
+            Log.Warn($"{Name}: opening something failed", ex);
+            return false;
         }
     }
 

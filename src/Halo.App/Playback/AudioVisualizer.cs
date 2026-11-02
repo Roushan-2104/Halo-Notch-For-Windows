@@ -32,9 +32,18 @@ internal sealed class AudioVisualizer : IDisposable
         {
             _capture = new WasapiLoopbackCapture();
             _capture.DataAvailable += OnData;
+            var capture = _capture;
             _capture.RecordingStopped += (_, e) =>
             {
-                if (e.Exception is not null) Log.Warn("Loopback capture stopped", e.Exception);
+                if (e.Exception is null) return;
+                Log.Warn("Loopback capture stopped", e.Exception);
+                // The stream died (sample-rate or spatial-sound change, another app in exclusive mode). Drop
+                // it so the bars go flat and the next media change can start a fresh one, instead of the
+                // bars freezing at their last heights with Start() refusing because it "is running".
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    if (ReferenceEquals(_capture, capture)) Stop();
+                });
             };
             _capture.StartRecording();
         }

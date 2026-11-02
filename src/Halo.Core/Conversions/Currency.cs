@@ -35,8 +35,10 @@ public static class Currency
         ["USD"] = "$", ["INR"] = "₹", ["EUR"] = "€", ["GBP"] = "£", ["JPY"] = "¥", ["KRW"] = "₩",
     };
 
+    static readonly Regex DotThousands = new(@"^\d{1,3}(?:\.\d{3})+$", RegexOptions.CultureInvariant);
+
     static readonly Regex MoneyRx = new(
-        @"^(?<pre>[^\d\s.,-][^\d\s]{0,3})? ?(?<num>\d[\d,]*(?:\.\d+)?|\.\d+) ?(?:(?<mult>k|thousand|lakhs?|lacs?|crores?|cr|million|mn|billion|bn)(?![a-z]))? ?(?<post>[^\d\s].*)?$");
+        @"^(?<pre>[^\d\s.,-][^\d\s]{0,3})? ?(?<num>\d[\d.,]*\d|\d|\.\d+) ?(?:(?<mult>k|thousand|lakhs?|lacs?|crores?|cr|million|mn|billion|bn)(?![a-z]))? ?(?<post>[^\d\s].*)?$");
 
     static Dictionary<string, string> BuildAliases()
     {
@@ -100,7 +102,13 @@ public static class Currency
         }
 
         var m = MoneyRx.Match(s);
-        if (!m.Success || !NumberText.TryParse(m.Groups["num"].Value, out var amount)) return false;
+        if (!m.Success) return false;
+        var num = m.Groups["num"].Value;
+        double amount;
+        // "1.299 €" on a German shop is 1299: no supported currency has three decimals, so a dot followed
+        // by exactly three digits (and only dots) is a thousands separator.
+        if (DotThousands.IsMatch(num)) amount = double.Parse(num.Replace(".", ""), CultureInfo.InvariantCulture);
+        else if (!NumberText.TryParse(num, out amount)) return false;
         string? pre = null, post = null;
         if (m.Groups["pre"].Success && !TryFindCode(m.Groups["pre"].Value, out pre!)) return false;
         if (m.Groups["post"].Success && !TryFindCode(m.Groups["post"].Value, out post!)) return false;

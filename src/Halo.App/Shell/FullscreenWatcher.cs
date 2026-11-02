@@ -58,6 +58,11 @@ internal sealed class FullscreenWatcher : IDisposable
 
         var primary = Native.PrimaryMonitor();
         if (Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST) != primary) return false;
+        // A normal maximized window (title bar and all) overhangs the monitor by its resize border, so
+        // with an auto-hidden taskbar it "covers" the screen. That's not fullscreen; games, videos and
+        // F11 browsers drop the caption.
+        const long WS_CAPTION = 0x00C00000;
+        if (Native.IsZoomed(fg) && (Native.GetWindowLongPtr(fg, -16).ToInt64() & WS_CAPTION) == WS_CAPTION) return false;
         if (!Native.GetWindowRect(fg, out var r)) return false;
         var m = Native.MonitorBounds(primary);
         return r.Left <= m.Left && r.Top <= m.Top && r.Right >= m.Right && r.Bottom >= m.Bottom;

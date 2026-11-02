@@ -22,10 +22,15 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
         "keeperpasswordmanager", "protonpass", "passwordsafe", "pwsafe", "credentialuibroker", "consent", "logonui", "lockapp",
     };
 
+    /// <summary>
+    /// Built-in snippets are never stored: only your own (or edited) ones, plus the built-ins you deleted.
+    /// So an empty or old store can't lose the built-ins, and new built-ins reach existing users.
+    /// </summary>
     sealed class Data
     {
         public bool Enabled { get; set; } = true;
         public Dictionary<string, string>? Snippets { get; set; }
+        public List<string>? RemovedDefaults { get; set; }
     }
 
     readonly SnippetBuffer _buffer = new();
@@ -54,7 +59,10 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
     {
         _ctx = ctx;
         _data = ctx.Load<Data>();
-        foreach (var (trigger, text) in _data.Snippets ?? SnippetText.Defaults())
+        var removed = new HashSet<string>(_data.RemovedDefaults ?? new(), StringComparer.OrdinalIgnoreCase);
+        foreach (var (trigger, text) in SnippetText.Defaults())
+            if (!removed.Contains(trigger)) _snippets[trigger.ToLowerInvariant()] = text;
+        foreach (var (trigger, text) in _data.Snippets ?? new())
             if (SnippetText.IsValidTrigger(trigger)) _snippets[trigger.ToLowerInvariant()] = text;
         Publish();
 
@@ -88,6 +96,12 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
         CommandResult result;
         switch (command)
         {
+            case { Action: SnippetAction.Add, Trigger: { } trigger, Expansion: { } expansion }
+                when SnippetText.Clash(trigger, _snippets.Keys) is { } clash:
+                // ";d" next to ";date" would fire as soon as ";d" is typed, so ";date" could never be reached.
+                result = new CommandResult("", $"{trigger} clashes with {clash}",
+                    $"One starts with the other; pick a different trigger or delete {clash} first", IsError: true);
+                break;
             case { Action: SnippetAction.Add, Trigger: { } trigger, Expansion: { } expansion }:
                 bool replaced = _snippets.ContainsKey(trigger);
                 _snippets[trigger] = expansion;
@@ -130,7 +144,10 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
 
     void Save()
     {
-        _data.Snippets = new Dictionary<string, string>(_snippets);
+        var defaults = SnippetText.Defaults();
+        _data.Snippets = _snippets.Where(s => !defaults.TryGetValue(s.Key, out var d) || d != s.Value)
+            .ToDictionary(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
+        _data.RemovedDefaults = defaults.Keys.Where(k => !_snippets.ContainsKey(k)).ToList();
         _ctx.Save(_data);
     }
 

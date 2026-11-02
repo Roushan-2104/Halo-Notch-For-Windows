@@ -70,10 +70,14 @@ internal sealed class SnippetTyper : IDisposable
             {
                 case '\r':
                     break;
-                // Unicode '\n' arrives as a raw character most editors ignore; Enter is what users mean.
+                // Unicode '\n' arrives as a raw character most editors ignore. Plain Enter would *send* the
+                // first line in chat apps (WhatsApp, Slack, Teams, Discord); Shift+Enter is a line break
+                // there and in editors alike.
                 case '\n':
+                    inputs.Add(Key(VK_SHIFT, false));
                     inputs.Add(Key(VK_RETURN, false));
                     inputs.Add(Key(VK_RETURN, true));
+                    inputs.Add(Key(VK_SHIFT, true));
                     break;
                 case '\t':
                     inputs.Add(Key(VK_TAB, false));

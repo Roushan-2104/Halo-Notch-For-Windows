@@ -51,7 +51,10 @@ internal static class SnippetNative
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint count, INPUT[] inputs, int size);
 
-    [DllImport("user32.dll")]
+    // CharSet.Unicode is essential: without it char[] is marshalled as one byte per char, and Windows
+    // writes two bytes per char into that buffer (an 8-byte heap overrun on every keystroke, which
+    // corrupted the process heap and crashed Halo minutes later in unrelated code).
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int ToUnicodeEx(uint vk, uint scanCode, byte[] keyState,
         [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 4)] char[] buffer, int bufferSize, uint flags, IntPtr hkl);
 

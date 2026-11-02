@@ -70,7 +70,12 @@ internal sealed class LauncherModule : IHaloModule, ITextCommand
                 if (!plan.CanLaunch)
                     return new CommandResult("", $"No app called “{request.Target}”", $"Did you mean {app.Name}?", IsError: true);
                 _ctx.Info("Launching an app");
-                _ctx.Open(app.Target);
+                if (!_ctx.Open(app.Target))
+                {
+                    // Most likely uninstalled since the last index: refresh so it stops being offered.
+                    _index.Refresh();
+                    return new CommandResult("", $"Couldn't open {app.Name}", "It may have been uninstalled", IsError: true);
+                }
                 return new CommandResult("", "Opening", app.Name);
             }
         }

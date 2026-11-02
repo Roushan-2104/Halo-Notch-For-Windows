@@ -11,7 +11,8 @@ namespace Halo.Interop;
 internal sealed class KeyboardHook : IDisposable
 {
     /// <summary>Return true to swallow the key so no other app sees it.</summary>
-    public delegate bool KeyFilter(int vk, bool down);
+    /// <param name="time">The event's timestamp (ms); AltGr shows up as LCtrl and RAlt with the same one.</param>
+    public delegate bool KeyFilter(int vk, bool down, uint time);
 
     readonly KeyFilter _filter;
     readonly Native.LowLevelKeyboardProc _proc;
@@ -61,7 +62,7 @@ internal sealed class KeyboardHook : IDisposable
                 if ((k.flags & LLKHF_LOWER_IL_INJECTED) != 0) return Native.CallNextHookEx(_hook, nCode, wParam, lParam);
                 try
                 {
-                    if (_filter((int)k.vkCode, down)) return new IntPtr(1);
+                    if (_filter((int)k.vkCode, down, k.time)) return new IntPtr(1);
                 }
                 catch (Exception ex)
                 {

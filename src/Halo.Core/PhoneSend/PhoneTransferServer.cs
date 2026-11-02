@@ -41,7 +41,7 @@ public sealed class PhoneTransferServer : IDisposable
     readonly ConcurrentDictionary<TcpClient, byte> _clients = new();
     readonly object _progressGate = new();
     TcpListener? _listener;
-    int _connections, _activeDownloads, _completedDownloads, _received;
+    int _connections, _activeDownloads, _activeUploads, _completedDownloads, _received;
     long _contiguous, _lastActivityTicks;
 
     public PhoneTransferServer(PhoneTransferOptions options)
@@ -60,6 +60,9 @@ public sealed class PhoneTransferServer : IDisposable
     public long BytesSent => Interlocked.Read(ref _contiguous);
 
     public int ActiveDownloads => Volatile.Read(ref _activeDownloads);
+
+    /// <summary>Uploads being received right now; the transfer must not stop under them.</summary>
+    public int ActiveUploads => Volatile.Read(ref _activeUploads);
     public int CompletedDownloads => Volatile.Read(ref _completedDownloads);
     public int FilesReceived => Volatile.Read(ref _received);
     public DateTime LastActivityUtc => new(Interlocked.Read(ref _lastActivityTicks), DateTimeKind.Utc);
@@ -335,6 +338,20 @@ public sealed class PhoneTransferServer : IDisposable
         if (head.ExpectsContinue) await stream.WriteAsync("HTTP/1.1 100 Continue\r\n\r\n"u8.ToArray(), ct);
 
         cts.CancelAfter(_o.StallTimeout);
+        Interlocked.Increment(ref _activeUploads);
+        try
+        {
+            await ReceiveBodyAsync(stream, buf, headEnd, len, contentLength, boundary, cts, ct);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeUploads);
+        }
+    }
+
+    async Task ReceiveBodyAsync(NetworkStream stream, byte[] buf, int headEnd, int len, long contentLength, string boundary,
+        CancellationTokenSource cts, CancellationToken ct)
+    {
         var body = new BodyStream(buf, headEnd, len, stream, contentLength);
         var reader = new MultipartReader(body, boundary);
         var saved = new List<string>();
@@ -355,6 +372,12 @@ public sealed class PhoneTransferServer : IDisposable
         {
             error = saved.Count > 0 ? "Some files didn't arrive." : "The upload didn't complete.";
             Warning?.Invoke("upload rejected: " + ex.Message, ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && !ct.IsCancellationRequested)
+        {
+            // Disk filled up mid-upload, or Downloads isn't writable: tell the phone instead of resetting.
+            error = "The PC couldn't save the file (disk full?).";
+            Warning?.Invoke("upload save failed", ex);
         }
         await SendTextAsync(stream, saved.Count > 0 || error is null ? 200 : 400, saved.Count > 0 || error is null ? "OK" : "Bad Request",
             "text/html; charset=utf-8", PhonePage.Uploaded(_o.Token, saved, error), false, ct, html: true);

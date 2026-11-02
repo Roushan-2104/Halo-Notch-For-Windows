@@ -241,14 +241,17 @@ public class LrclibTests
     public void Parses_get_objects_and_search_arrays()
     {
         const string get = """{"id":1,"trackName":"A","artistName":"B","duration":219.0,"instrumental":false,"plainLyrics":"x","syncedLyrics":"[00:01.00]x"}""";
-        var one = Lrclib.ParseRecords(get).Single();
+        var one = Lrclib.ParseRecords(get)!.Single();
         Assert.Equal(new LrclibRecord("A", "B", 219, false, "x", "[00:01.00]x"), one);
 
         const string search = """[{"trackName":"A","duration":200,"plainLyrics":null,"syncedLyrics":null,"instrumental":true},{"trackName":"C","duration":201,"plainLyrics":"y","syncedLyrics":null}]""";
-        Assert.Equal(2, Lrclib.ParseRecords(search).Count);
+        Assert.Equal(2, Lrclib.ParseRecords(search)!.Count);
 
         Assert.Empty(Lrclib.ParseRecords("""{"code":404,"name":"TrackNotFound","message":"Failed to find specified track"}"""));
-        Assert.Empty(Lrclib.ParseRecords("oops"));
+        // Not JSON (a Wi-Fi login page): unknown, so it's retried rather than cached as "no lyrics".
+        Assert.Null(Lrclib.ParseRecords("oops"));
+        Assert.Null(Lrclib.ParseRecords("<html><body>Sign in to Airport Wi-Fi</body></html>"));
+        Assert.Null(Lrclib.ParseRecords("42"));
     }
 
     [Fact]

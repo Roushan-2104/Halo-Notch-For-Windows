@@ -7,6 +7,7 @@ namespace Halo.Search;
 internal sealed class MicRecorder
 {
     public const int SampleRate = 16000;
+    const int MaxSamples = SampleRate * 30;
 
     readonly object _gate = new();
     List<float> _samples = new();
@@ -53,7 +54,12 @@ internal sealed class MicRecorder
             chunk[i] = s;
             sum += s * s;
         }
-        lock (_gate) _samples.AddRange(chunk);
+        // Whisper only listens to 30 s; a key held down by accident mustn't buffer (and later process) minutes.
+        lock (_gate)
+        {
+            int room = MaxSamples - _samples.Count;
+            if (room > 0) _samples.AddRange(room >= n ? chunk : chunk[..room]);
+        }
         float rms = n > 0 ? (float)Math.Sqrt(sum / n) : 0;
         Volatile.Write(ref _level, Math.Min(1, rms * 6));
     }

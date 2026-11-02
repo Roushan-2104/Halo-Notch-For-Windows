@@ -48,12 +48,18 @@ internal sealed class ExchangeRates
             if (_fetch is null && DateTime.UtcNow - _failedAt < RetryAfterFailure) return Usable();
             fetch = _fetch ??= Task.Run(FetchAsync);
         }
-        var table = await fetch.ConfigureAwait(false);
-        lock (_gate)
+        RateTable? table = null;
+        try
         {
-            if (_fetch == fetch) _fetch = null;
-            return table ?? Usable();
+            table = await fetch.ConfigureAwait(false);
         }
+        finally
+        {
+            // Always clear it: a faulted fetch left in place would make every later conversion fail too.
+            lock (_gate)
+                if (_fetch == fetch) _fetch = null;
+        }
+        lock (_gate) return table ?? Usable();
     }
 
     public string Describe()
@@ -104,6 +110,12 @@ internal sealed class ExchangeRates
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
             Fail(ex is OperationCanceledException ? "timed out" : ex.Message);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _ctx.Warn("Exchange rate update failed", ex);
+            Fail(ex.GetType().Name);
             return null;
         }
     }

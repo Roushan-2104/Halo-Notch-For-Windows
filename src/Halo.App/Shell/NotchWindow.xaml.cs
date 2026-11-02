@@ -45,7 +45,7 @@ public partial class NotchWindow : Window
 
     Activity? _activity, _secondary;
     NotchMode? _searchMode;
-    bool _holdingAction;
+    string? _heldActionId;
     bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
     (FrameworkElement Panel, bool Hold)? _pendingTab;
     Color? _moduleGlow;
@@ -241,14 +241,15 @@ public partial class NotchWindow : Window
 
         bool isAction = IsAction(current);
         // An action that arrives under the pointer (e.g. while the notch is open) waits until it's seen.
-        if (isAction && Root.IsMouseOver && !_holdingAction) SetActionHold(true);
-        if (!isAction && _holdingAction) SetActionHold(false);
+        // A different pill (or none) is up now: the one we were holding gets its countdown back.
+        if (_heldActionId is { } held && (!isAction || current!.Id != held)) SetActionHold(false);
+        if (isAction && Root.IsMouseOver && _heldActionId is null) SetActionHold(true);
         // The pointer stayed on the notch while an action pill was up; once it's gone, hovering works again.
         if (wasAction && !isAction && Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
     }
 
     /// <summary>Raised while the pointer is on a one-shot action pill, so its countdown pauses.</summary>
-    public event Action<bool>? ActionHovered;
+    public event Action<string, bool>? ActionHovered;
 
     /// <summary>Raised after a one-shot action pill was clicked, with its activity id.</summary>
     public event Action<string>? ActionClicked;
@@ -260,10 +261,15 @@ public partial class NotchWindow : Window
     static bool IsAction(Activity? a) =>
         a is { Click: not null, Kind: ActivityKind.Message or ActivityKind.DownloadComplete };
 
+    /// <summary>
+    /// Holds or releases by id, so a release still finds the right pill after something with a higher
+    /// priority (a volume HUD, a notification) has pushed in front of it.
+    /// </summary>
     void SetActionHold(bool on)
     {
-        _holdingAction = on;
-        ActionHovered?.Invoke(on);
+        var id = on ? _activity?.Id : _heldActionId;
+        _heldActionId = on ? id : null;
+        if (id is not null) ActionHovered?.Invoke(id, on);
     }
 
     public void SetSearchMode(NotchMode? mode)
@@ -488,6 +494,8 @@ public partial class NotchWindow : Window
         if (mode == NotchMode.Compact) PrepareCompact();
         if (mode == NotchMode.Notification && _activity?.Payload is NotificationPayload p) NotificationCard.Show(p.Notification, p.More);
         if (mode != _mode || mode is NotchMode.Compact or NotchMode.Card) Transition(mode);
+        // The side bubble belongs next to the compact pill only; hide it whenever a card, tab or drop zone opens.
+        UpdateBubble();
     }
 
     void PrepareCompact()
@@ -688,7 +696,7 @@ public partial class NotchWindow : Window
         }
         if (IsAction(_activity))
         {
-            SetActionHold(true);
+            if (_heldActionId is null) SetActionHold(true);
             if (_mode == NotchMode.Compact) return;
         }
         if (!_hoverExpanded) StartHoverIn();
@@ -709,7 +717,7 @@ public partial class NotchWindow : Window
     void OnRootMouseLeave(object sender, MouseEventArgs e)
     {
         _hoverIn.Stop();
-        if (_holdingAction) SetActionHold(false);
+        if (_heldActionId is not null) SetActionHold(false);
         if (_hoveringNotification)
         {
             _hoveringNotification = false;
@@ -745,7 +753,8 @@ public partial class NotchWindow : Window
     void OnDragEnter(object sender, DragEventArgs e)
     {
         _dragOut.Stop();
-        bool files = e.Data.GetDataPresent(DataFormats.FileDrop) && _searchMode is null && _holdOpen == 0;
+        // A tab a module opened for you (held for 8 s) mustn't block dropping files; only a shelf drag does.
+        bool files = e.Data.GetDataPresent(DataFormats.FileDrop) && _searchMode is null && _holdOpen - (_held ? 1 : 0) == 0;
         e.Effects = files ? DragDropEffects.Copy | DragDropEffects.Link : DragDropEffects.None;
         e.Handled = true;
         if (files && !_dragging)

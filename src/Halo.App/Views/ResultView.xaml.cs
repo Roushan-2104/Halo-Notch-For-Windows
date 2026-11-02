@@ -9,6 +9,7 @@ using Halo.Core.Search;
 using Halo.Infrastructure;
 using Halo.Motion;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 
 namespace Halo.Views;
 
@@ -41,7 +42,7 @@ public partial class ResultView : UserControl
 
     internal bool CompactLayout { get; set; } = true;
 
-    public Uri? CurrentUrl => Web.CoreWebView2?.Source is { Length: > 0 } s ? new Uri(s) : null;
+    public Uri? CurrentUrl => Core?.Source is { Length: > 0 } s ? new Uri(s) : null;
 
     /// <summary>Starts the browser engine. Safe to call repeatedly; the first call does the work.</summary>
     internal Task EnsureReadyAsync() => _init ??= InitAsync();
@@ -116,7 +117,8 @@ public partial class ResultView : UserControl
             core.ProcessFailed += (_, e) =>
             {
                 Log.Warn($"WebView2 process failed: {e.ProcessFailedKind}");
-                if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited) _init = null;
+                if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
+                    Dispatcher.BeginInvoke(ReplaceCrashedBrowser);
             };
             core.NavigateToString("<html><body style='background:#101012'></body></html>");
             Log.Info($"WebView2 ready ({env.BrowserVersionString})");
@@ -137,6 +139,24 @@ public partial class ResultView : UserControl
         }
     }
 
+    /// <summary>
+    /// A control whose browser process died can never start again (it throws on every use), so swap in
+    /// a fresh one; the next search starts a new engine in it.
+    /// </summary>
+    void ReplaceCrashedBrowser()
+    {
+        var old = Web;
+        int index = WebFrame.Children.IndexOf(old);
+        WebFrame.Children.Remove(old);
+        try { old.Dispose(); } catch (Exception ex) { Log.Warn("Disposing the crashed results view failed", ex); }
+        Web = new WebView2CompositionControl { DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x10, 0x10, 0x12) };
+        WebFrame.Children.Insert(Math.Max(0, index), Web);
+        _init = null;
+        _generation++;
+        if (IsVisible) ShowError("The results view stopped. Search again to restart it.");
+        Log.Info("Results view replaced after its browser process exited");
+    }
+
     internal void SetContext(string query, ImageSource? thumbnail, bool lensAvailable, SearchMode mode, SearchFilter filters)
     {
         QueryText.Text = query;
@@ -154,7 +174,7 @@ public partial class ResultView : UserControl
         InstallWebView2.Visibility = Visibility.Collapsed;
     }
 
-    void SetModeChips(SearchMode mode)
+    internal void SetModeChips(SearchMode mode)
     {
         ModeAi.IsChecked = mode == SearchMode.Ai;
         ModeWeb.IsChecked = mode == SearchMode.Web;
@@ -166,20 +186,27 @@ public partial class ResultView : UserControl
 
     internal async Task NavigateAsync(Uri url)
     {
+        int generation = _generation;
         await EnsureReadyAsync();
+        // Cancelled while the engine was starting: don't open the page in a closed card.
+        if (generation != _generation || Core is not { } core) return;
         Wake();
         ErrorPanel.Visibility = Visibility.Collapsed;
         UseUserAgent(mobile: CompactLayout);
-        Web.CoreWebView2.Navigate(url.AbsoluteUri);
+        core.Navigate(url.AbsoluteUri);
     }
 
     /// <summary>
     /// After the card closes: blank the page (stops any video/audio and page scripts) and suspend the
     /// renderer so a hidden results page costs no CPU and less memory until the next search.
     /// </summary>
+    /// <summary>Drops a search that is still waiting for the engine to start (the card was cancelled).</summary>
+    internal void CancelPending() => _generation++;
+
     internal void Release()
     {
-        var core = Web.CoreWebView2;
+        _generation++;
+        var core = Core;
         if (core is null) return;
         _releasing = true;
         core.NavigateToString("<html><body style='background:#101012'></body></html>");
@@ -201,29 +228,43 @@ public partial class ResultView : UserControl
 
     bool _releasing;
 
-    async void SuspendAfterBlank()
+    void SuspendAfterBlank()
     {
         _releasing = false;
-        var core = Web.CoreWebView2;
-        if (core is null || core.IsSuspended) return;
-        try
-        {
-            // Suspending requires the controller to be hidden; the card is collapsed by now or soon will be.
-            await Task.Delay(400);
-            if (IsVisible || core.IsSuspended) return;
-            await core.TrySuspendAsync();
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Suspending results view failed", ex);
-        }
+        // TrySuspend is refused by the composition-hosted controller (ERROR_INVALID_STATE on every call),
+        // so ask the browser to trim memory instead; the blank page has already stopped media and scripts.
+        if (Core is not { } core) return;
+        try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; }
+        catch (Exception ex) { Log.Warn("Lowering results view memory failed", ex); }
     }
 
     void Wake()
     {
-        var core = Web.CoreWebView2;
-        if (core is { IsSuspended: true }) core.Resume();
+        _releasing = false;
+        if (Core is not { } core) return;
+        try
+        {
+            if (core.IsSuspended) core.Resume();
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+        }
+        catch (Exception ex) { Log.Warn("Waking results view failed", ex); }
     }
+
+    /// <summary>
+    /// The browser engine, or null if it isn't started or its process died: after a crash the control
+    /// throws on every access, and a throw in Release used to leave the card stuck open.
+    /// </summary>
+    CoreWebView2? Core
+    {
+        get
+        {
+            try { return Web.CoreWebView2; }
+            catch (InvalidOperationException) { return null; }
+        }
+    }
+
+    /// <summary>Bumped whenever the card is released, so a navigation still waiting on start-up is dropped.</summary>
+    int _generation;
 
     /// <summary>
     /// AI Mode and Web results get a phone layout that fits the card; Lens uploads go out as the
@@ -231,7 +272,8 @@ public partial class ResultView : UserControl
     /// </summary>
     void UseUserAgent(bool mobile)
     {
-        var settings = Web.CoreWebView2.Settings;
+        if (Core is not { } core) return;
+        var settings = core.Settings;
         var want = mobile ? MobileUserAgent : _desktopUserAgent;
         if (want is not null && settings.UserAgent != want) settings.UserAgent = want;
     }
@@ -242,12 +284,15 @@ public partial class ResultView : UserControl
     /// </summary>
     internal async Task NavigateLensAsync(byte[] png)
     {
+        int generation = _generation;
         await EnsureReadyAsync();
+        // Cancelled while the engine was starting: the image must not be uploaded after all.
+        if (generation != _generation || Core is null) return;
         Wake();
         ErrorPanel.Visibility = Visibility.Collapsed;
         UploadBadge.Visibility = Visibility.Visible;
         UseUserAgent(mobile: false);
-        var core = Web.CoreWebView2;
+        var core = Core!;
         string boundary = "----HaloLens" + Guid.NewGuid().ToString("N");
         var body = new MemoryStream();
         void Write(string s)
@@ -345,7 +390,7 @@ public partial class ResultView : UserControl
         FiltersChanged?.Invoke(f);
     }
 
-    void OnReload(object sender, RoutedEventArgs e) => Web.CoreWebView2?.Reload();
+    void OnReload(object sender, RoutedEventArgs e) => Core?.Reload();
 
     async void OnFullPageScreenshot(object sender, RoutedEventArgs e)
     {
@@ -371,8 +416,9 @@ public partial class ResultView : UserControl
     /// </summary>
     internal async Task<BitmapSource?> CaptureFullPageAsync()
     {
-        var core = Web.CoreWebView2;
-        if (core is null) return null;
+        if (Core is not { } core) return null;
+        int generation = _generation;
+        var source = core.Source;
         const int MaxHeight = 16000;
 
         using var metrics = System.Text.Json.JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}"));
@@ -383,6 +429,8 @@ public partial class ResultView : UserControl
         var args = System.FormattableString.Invariant(
             $"{{\"format\":\"png\",\"captureBeyondViewport\":true,\"clip\":{{\"x\":0,\"y\":0,\"width\":{width},\"height\":{height},\"scale\":1}}}}");
         using var shot = System.Text.Json.JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", args));
+        // The card was closed (and the page blanked) mid-capture: don't save a dark empty image.
+        if (generation != _generation || core.Source != source) return null;
         var bytes = Convert.FromBase64String(shot.RootElement.GetProperty("data").GetString() ?? "");
 
         var image = new BitmapImage();
@@ -413,7 +461,7 @@ public partial class ResultView : UserControl
     {
         await EnsureReadyAsync();
         Wake();
-        Web.CoreWebView2.NavigateToString(html);
+        Core?.NavigateToString(html);
     }
 
     void OnInstallWebView2(object sender, RoutedEventArgs e)

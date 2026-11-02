@@ -176,6 +176,10 @@ internal sealed class LyricsPanel : Grid
             tb.MouseLeftButtonUp += OnLineClicked;
             _lines.Children.Add(tb);
         }
+        // SizeChanged only fires if the new lines lay out to a different total height. The same song
+        // again (or one that happens to wrap to the same height) would otherwise never get its line
+        // positions, and the lyrics would sit there frozen and dim.
+        Dispatcher.BeginInvoke(MeasureLines, System.Windows.Threading.DispatcherPriority.Loaded);
         UpdateTicking();
     }
 

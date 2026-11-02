@@ -132,10 +132,9 @@ internal sealed class HaloHost : IDisposable
             _notch.NotificationView.Opened += OpenNotificationApp;
             _notch.ActionClicked += id => _activities.Remove(id);
             // Same for a clickable message: it waits while you move to click it.
-            _notch.ActionHovered += hovered =>
+            _notch.ActionHovered += (id, hovered) =>
             {
-                if (_activities.Current is { Click: not null } a && a.Kind is ActivityKind.Message or ActivityKind.DownloadComplete)
-                    Post(a with { ExpiresAt = hovered ? null : In(4) });
+                if (_activities.Get(id) is { } a) Post(a with { ExpiresAt = hovered ? null : In(4) });
             };
             _notch.NotificationView.Dismissed += () => _activities.Remove("notification");
             _notch.NotificationView.MuteRequested += n =>
@@ -207,6 +206,7 @@ internal sealed class HaloHost : IDisposable
 
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        SystemEvents.TimeChanged += OnTimeChanged;
 
         _updates = Own(new UpdateService(_ui));
         _updates.Ready += _ => AnnounceUpdate();
@@ -400,8 +400,10 @@ internal sealed class HaloHost : IDisposable
         {
             case "ping": return "pong";
             case "test-action":
-                // A clickable message like "update ready", for testing hover and click behaviour.
-                Post(new Activity("test-action", ActivityKind.Message, PriorityDownloadDone,
+                // A clickable message like "update ready", for testing hover and click behaviour. HALO_TEST_TOP=1
+                // puts it above everything (e.g. a real call's mic pill) so tests still see it.
+                Post(new Activity("test-action", ActivityKind.Message,
+                    Environment.GetEnvironmentVariable("HALO_TEST_TOP") == "1" ? 1000 : PriorityDownloadDone,
                     new MessagePayload("", arg.Length > 0 ? arg : "Test action · click me"), In(6))
                 {
                     Click = () => _testActionClicks++,
@@ -516,6 +518,16 @@ internal sealed class HaloHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// .NET caches the time zone; after travelling (or an automatic zone switch) DateTime.Now, reminders,
+    /// "time in Tokyo" and {time} snippets would keep using the old one until Halo restarted.
+    /// </summary>
+    static void OnTimeChanged(object? sender, EventArgs e)
+    {
+        TimeZoneInfo.ClearCachedData();
+        Log.Info("System time or time zone changed");
+    }
+
     void AnnounceUpdate()
     {
         if (_updates.ReadyVersion is not { } version) return;
@@ -551,6 +563,7 @@ internal sealed class HaloHost : IDisposable
     public void Dispose()
     {
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+        SystemEvents.TimeChanged -= OnTimeChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _tick?.Stop();
         _search?.Cancel();

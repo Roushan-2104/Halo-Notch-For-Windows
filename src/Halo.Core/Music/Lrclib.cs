@@ -86,12 +86,17 @@ public static class Lrclib
     }
 
     /// <summary>Parses a /api/get object or a /api/search array.</summary>
-    public static List<LrclibRecord> ParseRecords(string json)
+    /// <returns>
+    /// The records (empty for LRCLIB's "not found"), or null when the body isn't LRCLIB's JSON at all: a
+    /// captive portal's login page or a proxy error. That must not be cached as "no lyrics".
+    /// </returns>
+    public static List<LrclibRecord>? ParseRecords(string json)
     {
         var list = new List<LrclibRecord>();
         try
         {
             using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind is not (JsonValueKind.Array or JsonValueKind.Object)) return null;
             if (doc.RootElement.ValueKind == JsonValueKind.Array)
             {
                 foreach (var e in doc.RootElement.EnumerateArray())
@@ -104,6 +109,7 @@ public static class Lrclib
         }
         catch (JsonException)
         {
+            return null;
         }
         return list;
     }

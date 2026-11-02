@@ -8,12 +8,16 @@ namespace Halo.Interop;
 /// </summary>
 internal sealed class GlobalKeys : IDisposable
 {
-    const int VK_RMENU = 0xA5, VK_ESCAPE = 0x1B;
+    const int VK_RMENU = 0xA5, VK_LCONTROL = 0xA2, VK_ESCAPE = 0x1B;
     const int VK_VOLUME_MUTE = 0xAD, VK_VOLUME_DOWN = 0xAE, VK_VOLUME_UP = 0xAF;
 
     readonly Dispatcher _ui;
     readonly KeyboardHook _hook;
     volatile bool _searchHeld;
+    // AltGr (German, French, Spanish, Polish, Nordic... layouts) arrives as a fake LCtrl followed by RAlt
+    // with the same timestamp. It types @ € { } [ ] and must reach the app untouched.
+    uint _leftCtrlDownAt = uint.MaxValue;
+    bool _altGr;
 
     public GlobalKeys(Dispatcher ui)
     {
@@ -33,10 +37,19 @@ internal sealed class GlobalKeys : IDisposable
     /// <summary>+1 volume up, -1 volume down, 0 mute toggle.</summary>
     public event Action<int>? VolumeKey;
 
-    bool Filter(int vk, bool down)
+    bool Filter(int vk, bool down, uint time)
     {
         switch (vk)
         {
+            case VK_LCONTROL:
+                if (down) _leftCtrlDownAt = time;
+                return false;
+
+            case VK_RMENU when _altGr || (down && !_searchHeld && time == _leftCtrlDownAt):
+                // Swallowing it would leave the app with a bare Ctrl: AltGr+Q (@) would arrive as Ctrl+Q.
+                _altGr = down;
+                return false;
+
             case VK_RMENU:
                 if (down && !_searchHeld)
                 {

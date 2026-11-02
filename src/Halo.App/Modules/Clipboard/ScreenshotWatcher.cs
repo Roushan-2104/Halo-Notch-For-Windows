@@ -80,7 +80,7 @@ internal sealed class ScreenshotWatcher : IDisposable
     }
 
     /// <summary>Runs on the hook thread for every key: only flips flags, never blocks, never swallows.</summary>
-    bool OnKey(int vk, bool down)
+    bool OnKey(int vk, bool down, uint time)
     {
         switch (vk)
         {

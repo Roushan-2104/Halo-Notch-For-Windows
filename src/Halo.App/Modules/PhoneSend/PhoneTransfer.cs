@@ -15,6 +15,7 @@ internal sealed class PhoneTransfer : IDisposable
 {
     static readonly TimeSpan IdleLimit = TimeSpan.FromMinutes(10);
     static readonly TimeSpan LingerAfterSent = TimeSpan.FromSeconds(3);
+    static readonly TimeSpan UploadGrace = TimeSpan.FromSeconds(20);
 
     readonly ModuleContext _ctx;
     readonly PhoneTransferServer _server;
@@ -105,7 +106,10 @@ internal sealed class PhoneTransfer : IDisposable
                 _sentAt = now;
                 _card.ShowSent();
             }
-            else if (now - _sentAt >= LingerAfterSent && _server.ActiveDownloads == 0)
+            // Wait out uploads too, and give a phone that has just finished downloading a moment to send
+            // something back before the page goes dead.
+            else if (now - _sentAt >= LingerAfterSent && _server.ActiveDownloads == 0 && _server.ActiveUploads == 0 &&
+                     now - _server.LastActivityUtc >= UploadGrace)
             {
                 Stop();
                 return;
@@ -116,7 +120,7 @@ internal sealed class PhoneTransfer : IDisposable
             _card.SetProgress(_server.BytesSent, _server.FileLength);
         }
 
-        if (now - _server.LastActivityUtc > IdleLimit && _server.ActiveDownloads == 0)
+        if (now - _server.LastActivityUtc > IdleLimit && _server.ActiveDownloads == 0 && _server.ActiveUploads == 0)
         {
             _ctx.Info("Transfer idle for 10 minutes; stopping");
             Stop();

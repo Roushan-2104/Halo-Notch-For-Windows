@@ -54,6 +54,37 @@ internal static class MeetingSystemNative
     static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder name, ref uint size);
 
     /// <summary>Exe path of a process; works for most processes Process.MainModule can't open.</summary>
+    // Packaged (Store) apps are recorded by package family name, e.g. "MSTeams_8wekyb3d8bbwe".
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern int GetPackageFamilyName(IntPtr process, ref uint length, StringBuilder? name);
+
+    /// <summary>Package family names of all running packaged processes (best effort; access-denied ones are skipped).</summary>
+    public static HashSet<string> RunningPackageFamilies()
+    {
+        var families = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in System.Diagnostics.Process.GetProcesses())
+        {
+            using (p)
+            {
+                var handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, (uint)p.Id);
+                if (handle == IntPtr.Zero) continue;
+                try
+                {
+                    uint length = 0;
+                    // 122 = ERROR_INSUFFICIENT_BUFFER: it's packaged and told us the size; anything else isn't.
+                    if (GetPackageFamilyName(handle, ref length, null) != 122 || length == 0) continue;
+                    var name = new StringBuilder((int)length);
+                    if (GetPackageFamilyName(handle, ref length, name) == 0) families.Add(name.ToString());
+                }
+                finally
+                {
+                    CloseHandle(handle);
+                }
+            }
+        }
+        return families;
+    }
+
     public static string? ProcessPath(uint pid)
     {
         var handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);

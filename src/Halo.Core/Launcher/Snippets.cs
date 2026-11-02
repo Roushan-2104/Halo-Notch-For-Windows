@@ -52,6 +52,15 @@ public static class SnippetText
         [";shrug"] = "¯\\_(ツ)_/¯",
     };
 
+    /// <summary>
+    /// An existing trigger that is a prefix of <paramref name="trigger"/> or starts with it. Expansion fires
+    /// on the first match while typing, so of two such triggers the longer one could never be typed.
+    /// Replacing the same trigger isn't a clash.
+    /// </summary>
+    public static string? Clash(string trigger, IEnumerable<string> existing) =>
+        existing.FirstOrDefault(k => !k.Equals(trigger, StringComparison.OrdinalIgnoreCase) &&
+            (k.StartsWith(trigger, StringComparison.OrdinalIgnoreCase) || trigger.StartsWith(k, StringComparison.OrdinalIgnoreCase)));
+
     public static string? MatchTrigger(string typed, IEnumerable<string> triggers)
     {
         string? best = null;

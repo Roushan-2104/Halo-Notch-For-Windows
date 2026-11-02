@@ -35,7 +35,8 @@ internal sealed class MusicModule : IHaloModule
     string _trackKey = "";
     int _trackVersion;
     Color? _glow;
-    string? _glowTrack;
+    string? _glowTrack, _glowPending;
+    DispatcherTimer? _glowFallback;
     YouTubeMusicSong? _lastPlayed;
 
     public string Name => "music";
@@ -227,9 +228,32 @@ internal sealed class MusicModule : IHaloModule
     {
         var m = Media;
         if (!_settings.AlbumGlow || !m.HasSession || !m.IsPlaying) return;
-        var color = m.ArtColor;
         var track = NowPlaying();
         if (track == _glowTrack) return;
+        // Browser players (YouTube Music runs in Chrome) publish the title first and the artwork a moment
+        // later. Wait for it; only if it never comes, flash in the neutral colour.
+        if (m.Art is null)
+        {
+            if (_glowPending != track)
+            {
+                _glowPending = track;
+                _glowFallback ??= new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) =>
+                {
+                    _glowFallback!.Stop();
+                    if (_glowPending is { } pending && pending == NowPlaying() && pending != _glowTrack) Flash(pending, Media.ArtColor);
+                }, _ctx.Ui) { IsEnabled = false };
+                _glowFallback.Stop();
+                _glowFallback.Start();
+            }
+            return;
+        }
+        Flash(track, m.ArtColor);
+    }
+
+    void Flash(string track, Color color)
+    {
+        _glowFallback?.Stop();
+        _glowPending = null;
         _glowTrack = track;
         _glow = color;
         _ctx.FlashEdge(color);
@@ -368,6 +392,7 @@ internal sealed class MusicModule : IHaloModule
         Media.Changed -= OnMediaChanged;
         _ctx.NotchWheel -= OnWheel;
         _ctx.NotchHorizontalWheel -= OnSwipe;
+        _glowFallback?.Stop();
         _device?.Dispose();
         _enumerator?.Dispose();
     }

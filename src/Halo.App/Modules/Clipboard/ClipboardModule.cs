@@ -31,6 +31,7 @@ internal sealed class ClipboardModule : IHaloModule
     const int PreviewPriority = 35, ScreenshotPriority = 55;
     const string PreviewId = "clipboard.preview", ScreenshotId = "clipboard.screenshot";
     const int MaxSavedText = 20_000;
+    const int MaxHistoryText = 1_000_000;
     // Unpinned history is forgotten after a day so old passwords and tokens don't pile up.
     static readonly TimeSpan KeepFor = TimeSpan.FromHours(24);
 
@@ -143,8 +144,10 @@ internal sealed class ClipboardModule : IHaloModule
             else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
                      && !string.IsNullOrWhiteSpace(text))
             {
-                _history.Add(ClipEntry.FromText(text, now));
-                ShowPreview(ClipText.Preview(text), null);
+                // A copied 100 MB log mustn't sit in memory for a day or be re-split on every panel refresh;
+                // the preview only ever needs the start.
+                if (text.Length <= MaxHistoryText) _history.Add(ClipEntry.FromText(text, now));
+                ShowPreview(ClipText.Preview(text.Length > 4096 ? text[..4096] : text), null);
             }
             else if (ClipImages.FromDataObject(data) is { } image)
             {
@@ -330,6 +333,13 @@ internal sealed class ClipboardModule : IHaloModule
     internal string? EnsureFile(Capture c)
     {
         if (c.HasFile) return c.Path;
+        // The screenshot's own file was moved or deleted and only the small preview is left: say so rather
+        // than quietly handing out a low-resolution copy as if it were the screenshot.
+        if (c.Full is null && c.Path is not null)
+        {
+            _ctx.ShowMessage("", "That screenshot's file is gone", error: true);
+            return null;
+        }
         try
         {
             var dir = Path.Combine(Paths.Root, "screenshots");
@@ -375,7 +385,7 @@ internal sealed class ClipboardModule : IHaloModule
             SetImage(data, image, png);
             return SetClipboard(data, echo: false);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or FormatException)
         {
             _ctx.Warn("Copying the screenshot failed", ex);
             return false;

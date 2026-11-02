@@ -18,7 +18,7 @@ namespace Halo.Search;
 /// </summary>
 internal sealed class SearchCoordinator
 {
-    enum Phase { Idle, Pending, Holding, Circling, Processing, Typing, Showing }
+    enum Phase { Idle, Pending, Holding, Circling, Processing, Typing, Showing, Message }
 
     static readonly TimeSpan HoldThreshold = TimeSpan.FromMilliseconds(180);
 
@@ -38,6 +38,7 @@ internal sealed class SearchCoordinator
     SearchOverlay? _overlay;
     Task<IReadOnlyList<OcrWord>>? _ocr;
     Context? _ctx;
+    CancellationTokenSource? _transcribe;
 
     sealed record Context(string Query, string DisplayQuery, SearchMode Mode, SearchFilter Filters, byte[]? Png, BitmapSource? Thumb)
     {
@@ -65,6 +66,12 @@ internal sealed class SearchCoordinator
         notch.ResultView.ModeChanged += mode =>
         {
             if (_ctx is null) return;
+            // An image with no words in or with it has nothing to search as text ("Selected area" isn't a query).
+            if (mode != SearchMode.Lens && _ctx.Query.Length == 0)
+            {
+                notch.ResultView.SetModeChips(_ctx.Mode);
+                return;
+            }
             _ctx = _ctx with { Mode = mode };
             _ = NavigateAsync(_ctx);
         };
@@ -216,7 +223,10 @@ internal sealed class SearchCoordinator
             if (_whisper.IsReady)
             {
                 _notch.SearchBarView.ShowThinking("Transcribing…");
-                try { spoken = await _whisper.TranscribeAsync(speechSamples); }
+                // Esc or a new search cancels this, so an abandoned transcription doesn't hold the model.
+                _transcribe = new CancellationTokenSource();
+                try { spoken = await _whisper.TranscribeAsync(speechSamples, _transcribe.Token); }
+                catch (OperationCanceledException) { return; }
                 catch (Exception ex) { Log.Error("Transcription failed", ex); }
                 if (session != _session) return;
                 // Never log what was said; the log isn't a transcript archive.
@@ -434,6 +444,8 @@ internal sealed class SearchCoordinator
         _notch.SetSearchMode(NotchMode.Thinking);
         _notch.SearchBarView.ShowMessage(glyph, primary, secondary);
         DismissOverlay();
+        // Not Processing: the hint often says "tap Right Alt to type", and that tap must work right away.
+        _phase = Phase.Message;
         await Task.Delay(2200);
         if (session == _session) Cancel();
     }
@@ -452,7 +464,18 @@ internal sealed class SearchCoordinator
         _holdTimer.Stop();
         if (_mic.IsRecording) _mic.Stop();
         DismissOverlay();
-        if (_phase == Phase.Showing) _notch.ResultView.Release();
+        // Teardown must always finish: a throw here used to leave Escape swallowed system-wide.
+        try
+        {
+            if (_phase == Phase.Showing) _notch.ResultView.Release();
+            else _notch.ResultView.CancelPending();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Releasing the results view failed", ex);
+        }
+        _transcribe?.Cancel();
+        _transcribe = null;
         _shot = null;
         _ocr = null;
         _ctx = null;

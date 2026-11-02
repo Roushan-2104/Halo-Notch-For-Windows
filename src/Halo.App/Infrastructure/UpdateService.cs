@@ -21,7 +21,6 @@ internal sealed class UpdateService : IDisposable
     readonly DispatcherTimer _timer;
     readonly string _source;
     VelopackAsset? _ready;
-    bool _checking;
 
     public UpdateService(Dispatcher ui)
     {
@@ -61,12 +60,22 @@ internal sealed class UpdateService : IDisposable
         _timer.Start();
     }
 
-    /// <summary>Checks now; returns a short description of what happened.</summary>
-    public async Task<string> CheckAsync()
+    /// <summary>
+    /// Checks now; returns a short description of what happened. A check already running (the background
+    /// one) is shared, so "Check for updates" never reports a stale "up to date" while downloading.
+    /// </summary>
+    public Task<string> CheckAsync()
     {
-        if (!IsInstalled || _checking) return LastResult;
+        if (!IsInstalled) return Task.FromResult(LastResult);
+        if (_inFlight is { IsCompleted: false } running) return running;
+        return _inFlight = CheckCoreAsync();
+    }
+
+    Task<string>? _inFlight;
+
+    async Task<string> CheckCoreAsync()
+    {
         if (_ready is not null) return LastResult = $"ready {_ready.Version}";
-        _checking = true;
         try
         {
             var info = await _manager.CheckForUpdatesAsync();
@@ -84,10 +93,6 @@ internal sealed class UpdateService : IDisposable
             // Offline, GitHub rate limits, a release mid-upload: just try again at the next interval.
             Log.Warn("Update check failed", ex);
             return LastResult = "check failed: " + ex.GetType().Name;
-        }
-        finally
-        {
-            _checking = false;
         }
     }
 
