@@ -36,7 +36,6 @@ internal sealed class MusicModule : IHaloModule
     int _trackVersion;
     Color? _glow;
     YouTubeMusicSong? _lastPlayed;
-    DispatcherTimer? _releaseHold;
 
     public string Name => "music";
 
@@ -113,10 +112,8 @@ internal sealed class MusicModule : IHaloModule
 
             case MusicAction.ShowLyrics:
                 LoadLyricsForCurrentTrack(debounce: false);
-                // Opened now but shown once the command card closes: the hold stops the hover timer
-                // collapsing it straight away, and ReleaseHoldLater lets go of it again.
-                _ctx.OpenTab(_panel, hold: true);
-                ReleaseHoldLater();
+                // OpenTab waits for the command's confirmation card to close by itself.
+                _ctx.OpenTab(_panel);
                 return new CommandResult("\uE8D6", "Lyrics", m.HasSession ? NowPlaying() : "Nothing playing");
         }
         return new CommandResult("\uE783", "Not a music command", IsError: true);
@@ -167,26 +164,6 @@ internal sealed class MusicModule : IHaloModule
     {
         var m = Media;
         return m.Artist.Length > 0 ? $"{m.Title} \u00B7 {m.Artist}" : m.Title;
-    }
-
-    void ReleaseHoldLater()
-    {
-        _releaseHold?.Stop();
-        var opened = DateTime.UtcNow;
-        bool hovered = false;
-        _releaseHold = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) =>
-        {
-            bool over = _ctx.Notch.IsMouseOver;
-            hovered |= over;
-            if (over) return;
-            // Let go once the pointer has visited and left, or after a while if it never came.
-            if (hovered || DateTime.UtcNow - opened > TimeSpan.FromSeconds(12))
-            {
-                _releaseHold?.Stop();
-                _ctx.Notch.Collapse();
-            }
-        }, _ctx.Ui);
-        _releaseHold.Start();
     }
 
     // ---- Media changes: lyrics and glow ------------------------------------------------------------
@@ -386,7 +363,6 @@ internal sealed class MusicModule : IHaloModule
         Media.Changed -= OnMediaChanged;
         _ctx.NotchWheel -= OnWheel;
         _ctx.NotchHorizontalWheel -= OnSwipe;
-        _releaseHold?.Stop();
         if (_glow is not null) _ctx.SetGlow(null);
         _device?.Dispose();
         _enumerator?.Dispose();

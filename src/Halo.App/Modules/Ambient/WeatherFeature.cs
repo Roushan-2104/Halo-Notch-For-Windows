@@ -186,31 +186,8 @@ internal sealed class WeatherFeature : IDisposable
             $"{City} \u00B7 feels {WeatherText.Temp(r.FeelsLike)} \u00B7 H {WeatherText.Temp(r.TodayHigh)} L {WeatherText.Temp(r.TodayLow)}");
     }
 
-    /// <summary>
-    /// The command card owns the notch for ~2.6 s, so the tab opens once it has gone. An unheld tab
-    /// collapses as soon as the pointer is elsewhere, so hold it and let go after a few seconds.
-    /// </summary>
-    void OpenTabSoon()
-    {
-        var opened = DateTime.UtcNow;
-        var timer = new DispatcherTimer(DispatcherPriority.Normal, _ctx.Ui) { Interval = TimeSpan.FromMilliseconds(2900) };
-        bool open = false;
-        timer.Tick += (_, _) =>
-        {
-            if (!open)
-            {
-                open = true;
-                _ctx.OpenTab(_panel, hold: true);
-                timer.Interval = TimeSpan.FromSeconds(1);
-                return;
-            }
-            if (_ctx.Notch.IsMouseOver && DateTime.UtcNow - opened < TimeSpan.FromSeconds(60)) return;
-            if (DateTime.UtcNow - opened < TimeSpan.FromSeconds(9)) return;
-            timer.Stop();
-            _ctx.Notch.Collapse();
-        };
-        timer.Start();
-    }
+    /// <summary>OpenTab waits for the command's confirmation card and holds the tab until it's been looked at.</summary>
+    void OpenTabSoon() => _ctx.OpenTab(_panel);
 
     public void Dispose()
     {

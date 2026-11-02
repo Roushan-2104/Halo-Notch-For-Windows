@@ -27,11 +27,10 @@ internal sealed class SystemModule : IHaloModule
     ModuleContext? _ctx;
     SystemSampler? _sampler;
     SystemPanel? _panel;
-    DispatcherTimer? _timer, _release;
+    DispatcherTimer? _timer;
     SystemSample? _last;
     double? _drainRate;
     bool _sampling;
-    int _awayTicks;
 
     public string Name => "system";
 
@@ -165,7 +164,7 @@ internal sealed class SystemModule : IHaloModule
             Apply(s);
         }
         // The host shows this result in the notch, then collapses it ~2.6 s later; open the tab after.
-        _ = OpenTabAfterAsync(TimeSpan.FromSeconds(2.9));
+        OpenTab();
 
         string cpuMemory = $"CPU {SystemFormat.Percent(s.Cpu)} · Memory {s.MemoryLoad}%";
         string battery = BatteryLine(s);
@@ -183,34 +182,11 @@ internal sealed class SystemModule : IHaloModule
             : $"Battery {s.BatteryPercent}%";
     }
 
-    async Task OpenTabAfterAsync(TimeSpan delay)
-    {
-        await Task.Delay(delay);
-        OpenTab();
-    }
-
+    // OpenTab waits for a command's confirmation card and holds the tab until it's been looked at.
     void OpenTab()
     {
         if (_ctx is null || _panel is null) return;
-        // Held, or it would close 0.3 s later unless the pointer is already on the notch; released
-        // below once the pointer has stayed away for a few seconds.
-        _ctx.OpenTab(_panel, hold: true);
-        _awayTicks = 0;
-        _release ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => ReleaseTick(), _ctx.Ui);
-        _release.Start();
-    }
-
-    void ReleaseTick()
-    {
-        if (_ctx is null || _release is null) return;
-        if (_ctx.Notch.IsMouseOver)
-        {
-            _awayTicks = 0;
-            return;
-        }
-        if (++_awayTicks < 6) return;
-        _release.Stop();
-        _ctx.Notch.Collapse();
+        _ctx.OpenTab(_panel);
     }
 
     string State()
@@ -239,7 +215,6 @@ internal sealed class SystemModule : IHaloModule
     public void Dispose()
     {
         _timer?.Stop();
-        _release?.Stop();
     }
 
     sealed class SystemCommand : ITextCommand

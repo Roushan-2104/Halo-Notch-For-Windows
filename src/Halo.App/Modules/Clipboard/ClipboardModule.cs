@@ -38,13 +38,12 @@ internal sealed class ClipboardModule : IHaloModule
     ClipboardPanel _panel = null!;
     ClipboardListener? _listener;
     ScreenshotWatcher? _screens;
-    DispatcherTimer? _readDelay, _saveDelay, _holdTimeout;
+    DispatcherTimer? _readDelay, _saveDelay;
     CopyPreview? _preview;
     Capture? _capture;
     ScreenshotCard? _card;
     DateTime _ignoreUntil, _simulateUntil;
     int _readGeneration;
-    bool _holding, _holdExpired;
 
     public string Name => "clipboard";
 
@@ -53,11 +52,6 @@ internal sealed class ClipboardModule : IHaloModule
         _ctx = ctx;
         _readDelay = OneShot(TimeSpan.FromMilliseconds(60), () => _ = ReadClipboardAsync());
         _saveDelay = OneShot(TimeSpan.FromSeconds(1), Persist);
-        _holdTimeout = OneShot(TimeSpan.FromSeconds(8), () =>
-        {
-            _holdExpired = true;
-            if (!ctx.Notch.IsMouseOver) ReleaseHold();
-        });
 
         _history.Load(ctx.Load<ClipStore>().Items.Where(e => e is { Kind: not ClipKind.Image, Text: not null, Files: not null }));
         _history.Changed += () => Restart(_saveDelay);
@@ -73,10 +67,6 @@ internal sealed class ClipboardModule : IHaloModule
             OpenTabHeld();
             return "ok";
         });
-        ctx.Notch.MouseLeave += (_, _) =>
-        {
-            if (_holding && (_holdExpired || ctx.Notch.Mode == NotchMode.Expanded)) ReleaseHold();
-        };
 
         try
         {
@@ -448,28 +438,8 @@ internal sealed class ClipboardModule : IHaloModule
         return new CommandResult("", "Clipboard", CountText());
     }
 
-    /// <summary>
-    /// Opens the tab and holds it open, since the pointer is usually nowhere near the notch. Queued at
-    /// background priority so a command's confirmation shows first and the tab appears as it closes.
-    /// The hold ends when the pointer leaves the notch, or after a few seconds if it never came.
-    /// </summary>
-    void OpenTabHeld()
-    {
-        _ctx.Ui.BeginInvoke(() =>
-        {
-            _ctx.OpenTab(_panel, hold: true);
-            _holding = true;
-            _holdExpired = false;
-            Restart(_holdTimeout);
-        }, DispatcherPriority.Background);
-    }
-
-    void ReleaseHold()
-    {
-        _holding = false;
-        _holdTimeout?.Stop();
-        _ctx.Notch.Collapse();
-    }
+    /// <summary>OpenTab waits for a command's confirmation card and holds the tab until it's been looked at.</summary>
+    void OpenTabHeld() => _ctx.OpenTab(_panel);
 
     string CountText()
     {
@@ -545,7 +515,6 @@ internal sealed class ClipboardModule : IHaloModule
         _listener?.Dispose();
         _screens?.Dispose();
         _readDelay?.Stop();
-        _holdTimeout?.Stop();
         if (_saveDelay?.IsEnabled == true)
         {
             _saveDelay.Stop();

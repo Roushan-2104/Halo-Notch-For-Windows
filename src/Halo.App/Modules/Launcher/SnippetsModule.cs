@@ -39,10 +39,8 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
     Dictionary<string, string> _snippets = new(StringComparer.OrdinalIgnoreCase);
     volatile Dictionary<string, string> _live = new(StringComparer.OrdinalIgnoreCase);
     SnippetsPanel _panel = null!;
-    DispatcherTimer _release = null!;
     SnippetKeyHook? _hook;
     SnippetTyper? _typer;
-    bool _holding;
 
     // Hook thread state (guarded by _gate).
     IntPtr _foreground;
@@ -67,18 +65,6 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
         };
         ctx.AddTab("", "Snippets", _panel);
         _panel.Show(_snippets);
-
-        // OpenTab(hold) keeps the notch open until something collapses it, and the API has no way to drop
-        // just our hold, so let go once the user has had a look and the pointer isn't on the notch.
-        _release = new DispatcherTimer(TimeSpan.FromSeconds(9), DispatcherPriority.Normal, (_, _) =>
-        {
-            _release.Stop();
-            if (!ctx.Notch.IsMouseOver) Release();
-        }, ctx.Ui) { IsEnabled = false };
-        ctx.Notch.MouseLeave += (_, _) =>
-        {
-            if (_holding && !_release.IsEnabled) Release();
-        };
 
         ctx.AddCommand(this);
         ctx.AddTrayToggle("Text snippets", () => _data.Enabled, on =>
@@ -129,17 +115,8 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
     void ShowPanel()
     {
         _panel.Show(_snippets);
-        _ctx.OpenTab(_panel, hold: true);
-        _holding = true;
-        _release.Stop();
-        _release.Start();
-    }
-
-    void Release()
-    {
-        if (!_holding) return;
-        _holding = false;
-        _ctx.Notch.Collapse();
+        // OpenTab waits for the command's confirmation card to close by itself.
+        _ctx.OpenTab(_panel);
     }
 
     void Changed()
@@ -305,6 +282,5 @@ internal sealed class SnippetsModule : IHaloModule, ITextCommand
     {
         _hook?.Dispose();
         _typer?.Dispose();
-        _release?.Stop();
     }
 }

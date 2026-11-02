@@ -45,7 +45,9 @@ public partial class NotchWindow : Window
 
     Activity? _activity, _secondary;
     NotchMode? _searchMode;
-    bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification;
+    bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
+    (FrameworkElement Panel, bool Hold)? _pendingTab;
+    readonly DispatcherTimer _holdTimeout;
     int _holdOpen;
 
     internal NotchWindow(HaloServices services)
@@ -68,6 +70,11 @@ public partial class NotchWindow : Window
         _hoverIn = new DispatcherTimer(TimeSpan.FromMilliseconds(110), DispatcherPriority.Input, OnHoverIn, Dispatcher) { IsEnabled = false };
         _hoverOut = new DispatcherTimer(TimeSpan.FromMilliseconds(320), DispatcherPriority.Input, OnHoverOut, Dispatcher) { IsEnabled = false };
         _dragOut = new DispatcherTimer(TimeSpan.FromMilliseconds(140), DispatcherPriority.Input, OnDragOut, Dispatcher) { IsEnabled = false };
+        _holdTimeout = new DispatcherTimer(TimeSpan.FromSeconds(8), DispatcherPriority.Input, (timer, _) =>
+        {
+            if (!_visitedWhileHeld && !Root.IsMouseOver) ReleaseHold();
+            else ((DispatcherTimer)timer!).Stop();
+        }, Dispatcher) { IsEnabled = false };
 
         Expanded.Attach(services);
         Expanded.ShelfDragging += dragging =>
@@ -224,6 +231,11 @@ public partial class NotchWindow : Window
         }
         Recompute();
         UpdateBubble();
+        if (mode is null && _pendingTab is { } pending)
+        {
+            _pendingTab = null;
+            OpenTab(pending.Panel, pending.Hold);
+        }
     }
 
     public void SetFullscreen(bool fullscreen)
@@ -267,19 +279,52 @@ public partial class NotchWindow : Window
 
     /// <summary>
     /// Open the expanded card on a tab, as if hovered (after a drop, a click, or a command). With
-    /// <paramref name="hold"/> it stays open until <see cref="Collapse"/> instead of on mouse leave.
+    /// <paramref name="hold"/> it stays open until the pointer has visited and left, or for 8 s if the
+    /// pointer never comes over, instead of closing straight away because nobody is hovering.
     /// </summary>
-    public void ExpandTo(bool shelf, bool hold = false)
+    public void ExpandTo(bool shelf, bool hold = false) =>
+        Open(() => { if (shelf) Expanded.ShowShelf(); else Expanded.ShowHome(); }, hold);
+
+    /// <summary>
+    /// Open a module's tab. While a search or command card is showing, the tab opens as soon as that
+    /// card closes, so a command can confirm first and then show its tab.
+    /// </summary>
+    internal void OpenTab(FrameworkElement panel, bool hold)
     {
-        if (shelf) Expanded.ShowShelf();
-        else Expanded.ShowHome();
-        _hoverExpanded = true;
-        if (hold && !_held)
+        if (_searchMode is not null)
         {
-            _held = true;
-            _holdOpen++;
+            _pendingTab = (panel, hold);
+            return;
+        }
+        Open(() => Expanded.ShowTab(panel), hold);
+    }
+
+    void Open(Action selectTab, bool hold)
+    {
+        selectTab();
+        _hoverExpanded = true;
+        if (hold)
+        {
+            if (!_held)
+            {
+                _held = true;
+                _holdOpen++;
+            }
+            _visitedWhileHeld = Root.IsMouseOver;
+            _holdTimeout.Stop();
+            _holdTimeout.Start();
         }
         Recompute();
+        if (!Root.IsMouseOver) _hoverOut.Start();
+    }
+
+    /// <summary>Drop this window's own hold; other holds (a drag, a context menu) still keep it open.</summary>
+    void ReleaseHold()
+    {
+        _holdTimeout.Stop();
+        if (!_held) return;
+        _held = false;
+        _holdOpen--;
         if (!Root.IsMouseOver) _hoverOut.Start();
     }
 
@@ -346,6 +391,8 @@ public partial class NotchWindow : Window
 
     public void Collapse()
     {
+        _pendingTab = null;
+        _holdTimeout.Stop();
         if (_held)
         {
             _held = false;
@@ -554,6 +601,7 @@ public partial class NotchWindow : Window
     void OnRootMouseEnter(object sender, MouseEventArgs e)
     {
         _hoverOut.Stop();
+        if (_held) _visitedWhileHeld = true;
         if (_mode == NotchMode.Card) return;
         // Hovering a notification holds it on screen (to read or click) instead of opening the card.
         if (_mode == NotchMode.Notification)
@@ -573,6 +621,8 @@ public partial class NotchWindow : Window
             _hoveringNotification = false;
             NotificationHovered?.Invoke(false);
         }
+        // A tab opened for the user (by a command or a click) closes once they've looked and moved on.
+        if (_held && _visitedWhileHeld) ReleaseHold();
         if (_hoverExpanded) _hoverOut.Start();
     }
 

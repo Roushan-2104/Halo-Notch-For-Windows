@@ -145,12 +145,12 @@ internal sealed class ModuleContext
     /// <summary>A tab in the expanded notch (the card is 480×204; your panel gets about 436×150).</summary>
     public void AddTab(string glyph, string tooltip, FrameworkElement panel) => Notch.ExpandedView.AddTab(glyph, tooltip, panel);
 
-    /// <summary>Open the expanded notch on one of your tabs.</summary>
-    public void OpenTab(FrameworkElement panel, bool hold = false)
-    {
-        Notch.ExpandTo(shelf: false, hold);
-        Notch.ExpandedView.ShowTab(panel);
-    }
+    /// <summary>
+    /// Open the expanded notch on one of your tabs. Safe to call from a command's RunAsync: the tab opens
+    /// right after the confirmation card closes. With <paramref name="hold"/> (the default) it stays open
+    /// until the pointer has visited and left, or 8 s if the user never comes over; no timers needed.
+    /// </summary>
+    public void OpenTab(FrameworkElement panel, bool hold = true) => Notch.OpenTab(panel, hold);
 
     // ---- Cards, glow, input ----------------------------------------------------------------------
 

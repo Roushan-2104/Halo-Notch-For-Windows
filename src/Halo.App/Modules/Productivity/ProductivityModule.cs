@@ -34,13 +34,11 @@ internal sealed class ProductivityModule : IHaloModule, ITextCommand
     readonly DispatcherTimer _reminders = new();
     readonly DispatcherTimer _glowOff = new() { Interval = AlertTime };
     readonly DispatcherTimer _cardClose = new() { Interval = CardTime };
-    readonly DispatcherTimer _holdRelease = new() { Interval = TimeSpan.FromSeconds(1) };
 
     ModuleContext _ctx = null!;
     ProductivityStore _store = new();
     NotesPanel _panel = null!;
     ReminderCard? _card;
-    DateTime _holdUntil;
     bool _glowing;
     int _nextId;
 
@@ -60,7 +58,6 @@ internal sealed class ProductivityModule : IHaloModule, ITextCommand
         _reminders.Tick += (_, _) => OnReminderTick();
         _glowOff.Tick += (_, _) => ClearGlow();
         _cardClose.Tick += (_, _) => CloseCard();
-        _holdRelease.Tick += (_, _) => ReleaseHold();
 
         _panel = new NotesPanel(() => _store, Delete, Copy);
         ctx.AddTab(NoteGlyph, "Notes", _panel);
@@ -85,7 +82,6 @@ internal sealed class ProductivityModule : IHaloModule, ITextCommand
         _tick.Stop();
         _reminders.Stop();
         _cardClose.Stop();
-        _holdRelease.Stop();
         if (_ctx is null) return;
         foreach (var c in _clocks) _ctx.Remove(c.ActivityId);
         _clocks.Clear();
@@ -258,28 +254,12 @@ internal sealed class ProductivityModule : IHaloModule, ITextCommand
 
     CommandResult ShowNotes(bool typed)
     {
-        // A typed command shows its confirmation first (about 2.6 s); open the tab once that has gone.
-        if (typed) After(TimeSpan.FromSeconds(2.8), OpenNotes);
-        else OpenNotes();
+        // OpenTab waits for the command's confirmation card to close by itself.
+        _panel.Refresh();
+        _ctx.OpenTab(_panel);
         int upcoming = _store.Reminders.Count(r => !r.Fired), notes = _store.Notes.Count;
         return new CommandResult(NoteGlyph, "Notes",
             $"{notes} {(notes == 1 ? "note" : "notes")} \u00B7 {upcoming} upcoming {(upcoming == 1 ? "reminder" : "reminders")}");
-    }
-
-    void OpenNotes()
-    {
-        _panel.Refresh();
-        // Held so it doesn't fold away before the pointer gets there; released once the pointer is elsewhere.
-        _ctx.OpenTab(_panel, hold: true);
-        _holdUntil = DateTime.UtcNow.AddSeconds(5);
-        _holdRelease.Start();
-    }
-
-    void ReleaseHold()
-    {
-        if (DateTime.UtcNow < _holdUntil || _ctx.Notch.IsMouseOver) return;
-        _holdRelease.Stop();
-        _ctx.Notch.Collapse();
     }
 
     // ---- Clocks ----------------------------------------------------------------------------------

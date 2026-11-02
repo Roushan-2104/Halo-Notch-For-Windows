@@ -57,8 +57,11 @@ public sealed class ActivityManager
 
     public void Tick(DateTime now)
     {
+        // Callers may stamp expiry in local or UTC time; compare like with like so a local stamp
+        // in India doesn't silently last 5½ hours longer.
+        var nowUtc = now.Kind == DateTimeKind.Local ? now.ToUniversalTime() : now;
         var expired = _items.Values
-            .Where(v => v.Activity.ExpiresAt is { } at && at <= now)
+            .Where(v => v.Activity.ExpiresAt is { } at && (at.Kind == DateTimeKind.Local ? at.ToUniversalTime() : at) <= nowUtc)
             .Select(v => v.Activity.Id)
             .ToList();
         if (expired.Count == 0) return;

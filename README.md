@@ -17,6 +17,28 @@ Google does the answering, speech-to-text runs offline with Whisper, and OCR use
 | A notification arrives | It drops out of the notch with app icon, title and text; hover to keep it, click to open the app, right-click to mute that app |
 | Bell tab (expanded notch) | Recent notifications, newest first |
 
+### Things you can type (tap Right Alt) or say (hold Right Alt)
+
+| Say or type | What happens |
+|---|---|
+| `play kaahe mose` · `play tum hi ho on spotify` · `pause` · `next` | Plays in your YouTube Music app (or Spotify) · media controls |
+| `lyrics` | Synced lyrics tab for the current song |
+| `timer 25m tea` · `stopwatch` · `pomodoro` · `focus 45m` | Live countdown in the notch |
+| `remind me at 6pm to call mom` · `note: buy milk` · `notes` | Reminder card when due · Notes tab |
+| `5 ft in cm` · `100 usd to inr` · `5pm ist in pst` · `time in tokyo` | Instant answers (free exchange rates) |
+| `translate good morning to hindi` | Opens Google Translate |
+| `open spotify` · `open github.com` · `open downloads` | App / site / folder launcher |
+| `snippet ;sig Best, Roushan` · `snippets` | Text expansion in any app (`;date`, `;time`, `;shrug` built in) |
+| `weather` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `ticker off` · `pet on` | Weather tab · rotating ticker · a tiny notch pet |
+| `mute mic` · `cpu` · `clipboard` · `send to phone` | Mic toggle · System tab · Clipboard tab · QR transfer of the latest shelf file |
+
+Also automatic: a meeting pill with one-click mic mute while any app uses your microphone, a preview
+when you copy, a screenshot catcher (drag it into any app or onto the shelf), circling a QR code opens it,
+circling a price converts it, results get **Copy text** / **Translate** chips, scroll over the notch for
+volume, swipe sideways to skip tracks, and the notch outline takes on the album colour.
+
+Each feature is a self-contained module in `src/Halo.App/Modules/`; see its README to add more.
+
 To see notifications only in the notch, turn on Windows **Do Not Disturb** (tray › "Turn off Windows
 pop-ups…"). Windows doesn't let apps hide its pop-ups themselves, so Halo deliberately keeps showing
 notifications while Do Not Disturb is on, and they still land in Action Center.

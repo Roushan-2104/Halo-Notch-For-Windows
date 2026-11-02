@@ -38,6 +38,17 @@ public class ActivityManagerTests
     }
 
     [Fact]
+    public void Local_and_utc_expiry_times_are_both_honoured()
+    {
+        var m = new ActivityManager();
+        var nowUtc = DateTime.UtcNow;
+        m.Post(new Activity("local", ActivityKind.Message, 50, ExpiresAt: nowUtc.ToLocalTime().AddSeconds(1)));
+        m.Post(new Activity("utc", ActivityKind.Message, 40, ExpiresAt: nowUtc.AddSeconds(1)));
+        m.Tick(nowUtc.AddSeconds(2));
+        Assert.Null(m.Current);
+    }
+
+    [Fact]
     public void Short_lived_kinds_are_never_secondary()
     {
         var m = new ActivityManager();
