@@ -1,0 +1,41 @@
+<UserControl x:Class="Halo.Views.SearchBarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Halo.Views"
+             Width="420" Height="54">
+    <Grid Margin="11,0,18,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="34" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Grid x:Name="Orb" Width="34" Height="34" VerticalAlignment="Center">
+            <Ellipse x:Name="OrbPulse" Fill="{DynamicResource AccentBrush}" Opacity="0.3" RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform>
+                    <ScaleTransform x:Name="PulseScale" ScaleX="0.8" ScaleY="0.8" />
+                </Ellipse.RenderTransform>
+            </Ellipse>
+            <Ellipse x:Name="OrbCore" Width="28" Height="28" Fill="{DynamicResource AccentBrush}" />
+            <TextBlock x:Name="OrbGlyph" Style="{StaticResource Icon}" Text="&#xE720;" FontSize="14" Foreground="{DynamicResource OnAccentBrush}" />
+            <views:Spinner x:Name="Spin" Width="22" Height="22" Visibility="Collapsed" />
+        </Grid>
+
+        <StackPanel x:Name="TextStack" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
+            <TextBlock x:Name="Primary" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="Secondary" FontSize="11.5" Foreground="{StaticResource Fg2}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+        </StackPanel>
+
+        <Grid x:Name="InputHost" Grid.Column="1" Margin="12,0,10,0" Visibility="Collapsed">
+            <TextBlock x:Name="Placeholder" Text="Ask anything, or type a sum" FontSize="15" Foreground="{StaticResource Fg3}"
+                       VerticalAlignment="Center" IsHitTestVisible="False" />
+            <TextBox x:Name="Input" Style="{StaticResource BareTextBox}" TextChanged="OnInputChanged" KeyDown="OnInputKeyDown" />
+        </Grid>
+
+        <views:VisualizerBars x:Name="Wave" Grid.Column="2" BarCount="6" Height="18" VerticalAlignment="Center" />
+        <Border x:Name="EnterHint" Grid.Column="2" Background="{StaticResource Fill2}" CornerRadius="6" Padding="7,2"
+                VerticalAlignment="Center" Visibility="Collapsed">
+            <TextBlock Text="Enter" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Fg2}" />
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,199 @@
+using System.Collections.Specialized;
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
+using Halo.Infrastructure;
+using Halo.Shelf;
+
+namespace Halo.Views;
+
+public partial class ExpandedView : UserControl
+{
+    HaloServices? _s;
+    readonly DispatcherTimer _clock;
+    bool _seeking;
+    Point _dragStart;
+    ShelfItem? _pressed;
+
+    public ExpandedView()
+    {
+        InitializeComponent();
+        _clock = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Render, (_, _) => Tick(), Dispatcher) { IsEnabled = false };
+        IsVisibleChanged += (_, _) =>
+        {
+            _clock.IsEnabled = IsVisible;
+            if (IsVisible) Refresh();
+        };
+    }
+
+    /// <summary>Raised while a file is being dragged off the shelf, so the notch stays open.</summary>
+    internal event Action<bool>? ShelfDragging;
+
+    internal void Attach(HaloServices services)
+    {
+        _s = services;
+        ShelfItems.ItemsSource = services.Shelf.Items;
+        services.Shelf.Items.CollectionChanged += (_, _) => RefreshShelf();
+        Bars.Source = services.Visualizer.Level;
+        RefreshShelf();
+    }
+
+    internal void ShowShelf() => ShelfTab.IsChecked = true;
+    internal void ShowHome() => HomeTab.IsChecked = true;
+
+    void OnTabChanged(object sender, RoutedEventArgs e) => Refresh();
+
+    internal void Refresh()
+    {
+        if (_s is null || !IsInitialized) return;
+        bool shelf = ShelfTab.IsChecked == true;
+        var media = _s.Media;
+        MediaPanel.Visibility = !shelf && media.HasSession ? Visibility.Visible : Visibility.Collapsed;
+        ClockPanel.Visibility = !shelf && !media.HasSession ? Visibility.Visible : Visibility.Collapsed;
+        ShelfPanel.Visibility = shelf ? Visibility.Visible : Visibility.Collapsed;
+        ShelfClear.Visibility = shelf && _s.Shelf.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        BatteryPanel.Visibility = Visibility.Visible;
+        Battery.Visibility = BatteryText.Visibility = _s.Battery.HasBattery ? Visibility.Visible : Visibility.Collapsed;
+        if (_s.Battery.HasBattery)
+        {
+            Battery.Set(_s.Battery.Percent, _s.Battery.IsCharging);
+            BatteryText.Text = $"{_s.Battery.Percent}%";
+        }
+
+        if (media.HasSession)
+        {
+            TitleText.Text = media.Title;
+            ArtistText.Text = media.Artist;
+            CompactView.ApplyArt(ArtFrame, media, 24);
+            Bars.Color = media.ArtColor;
+            Bars.Active = media.IsPlaying;
+            PlayButton.Content = media.IsPlaying ? "" : "";
+            PrevButton.IsEnabled = media.CanSkipPrevious;
+            NextButton.IsEnabled = media.CanSkipNext;
+            Track.IsEnabled = media.CanSeek;
+        }
+        Tick();
+    }
+
+    void Tick()
+    {
+        if (_s is null) return;
+        var now = DateTime.Now;
+        ClockText.Text = now.ToString("t");
+        DateText.Text = now.ToString("dddd, d MMMM");
+
+        var media = _s.Media;
+        if (!media.HasSession || _seeking) return;
+        var dur = media.Duration;
+        var pos = media.Position;
+        bool hasTimeline = dur > TimeSpan.Zero;
+        Track.Visibility = ElapsedText.Visibility = RemainingText.Visibility = hasTimeline ? Visibility.Visible : Visibility.Hidden;
+        if (!hasTimeline) return;
+        SetProgress(pos.TotalSeconds / dur.TotalSeconds);
+        ElapsedText.Text = Format(pos);
+        RemainingText.Text = "-" + Format(dur - pos);
+    }
+
+    void SetProgress(double fraction)
+    {
+        double w = Track.ActualWidth;
+        TrackFill.Width = Math.Clamp(fraction, 0, 1) * w;
+    }
+
+    static string Format(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+
+    void OnPlayPause(object sender, RoutedEventArgs e) => _s?.Media.TogglePlayPause();
+    void OnNext(object sender, RoutedEventArgs e) => _s?.Media.Next();
+    void OnPrev(object sender, RoutedEventArgs e) => _s?.Media.Previous();
+    void OnArtClicked(object sender, MouseButtonEventArgs e) => _s?.Media.TogglePlayPause();
+
+    void OnTrackDown(object sender, MouseButtonEventArgs e)
+    {
+        _seeking = true;
+        Track.CaptureMouse();
+        SetProgress(e.GetPosition(Track).X / Track.ActualWidth);
+    }
+
+    void OnTrackMove(object sender, MouseEventArgs e)
+    {
+        if (_seeking) SetProgress(e.GetPosition(Track).X / Track.ActualWidth);
+    }
+
+    void OnTrackUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_seeking) return;
+        _seeking = false;
+        Track.ReleaseMouseCapture();
+        if (_s is null) return;
+        double f = Math.Clamp(e.GetPosition(Track).X / Track.ActualWidth, 0, 1);
+        _s.Media.Seek(TimeSpan.FromSeconds(f * _s.Media.Duration.TotalSeconds));
+    }
+
+    void RefreshShelf()
+    {
+        if (_s is null) return;
+        int n = _s.Shelf.Items.Count;
+        ShelfEmpty.Visibility = n == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShelfScroll.Visibility = n == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ShelfBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShelfCount.Text = n.ToString();
+        ShelfClear.Visibility = ShelfTab.IsChecked == true && n > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    void OnClearShelf(object sender, MouseButtonEventArgs e) => _s?.Shelf.Clear();
+
+    void OnShelfWheel(object sender, MouseWheelEventArgs e)
+    {
+        ShelfScroll.ScrollToHorizontalOffset(ShelfScroll.HorizontalOffset - e.Delta * 0.6);
+        e.Handled = true;
+    }
+
+    void OnTileDown(object sender, MouseButtonEventArgs e)
+    {
+        _pressed = (sender as FrameworkElement)?.DataContext as ShelfItem;
+        _dragStart = e.GetPosition(this);
+        if (e.ClickCount == 2 && _pressed is not null)
+        {
+            Open(_pressed.Path);
+            _pressed = null;
+        }
+    }
+
+    void OnTileMove(object sender, MouseEventArgs e)
+    {
+        if (_pressed is null || e.LeftButton != MouseButtonState.Pressed) return;
+        var d = e.GetPosition(this) - _dragStart;
+        if (Math.Abs(d.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(d.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        var item = _pressed;
+        _pressed = null;
+        var data = new DataObject(DataFormats.FileDrop, new[] { item.Path });
+        ShelfDragging?.Invoke(true);
+        try
+        {
+            var result = DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+            if (result == DragDropEffects.Move) _s?.Shelf.Remove(item);
+        }
+        finally
+        {
+            ShelfDragging?.Invoke(false);
+        }
+    }
+
+    void OnTileUp(object sender, MouseButtonEventArgs e) => _pressed = null;
+
+    void OnRemoveDown(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ShelfItem item) _s?.Shelf.Remove(item);
+        e.Handled = true;
+    }
+
+    static void Open(string path)
+    {
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+        catch (Exception ex) { Log.Warn($"Opening {path} failed", ex); }
+    }
+}

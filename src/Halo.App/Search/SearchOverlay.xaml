@@ -1,0 +1,40 @@
+<Window x:Class="Halo.Search.SearchOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Halo Search" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
+        ShowActivated="False" Background="Black" Cursor="Cross" Left="-32000" Top="-32000" Width="400" Height="300"
+        FontFamily="{StaticResource HaloFont}">
+    <Grid x:Name="Root">
+        <Image x:Name="Shot" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality" />
+        <Rectangle x:Name="Dim" Fill="Black" Opacity="0" />
+        <Path x:Name="Outside" Fill="Black" Opacity="0" IsHitTestVisible="False" />
+
+        <Border x:Name="GlowSoft" BorderThickness="14" Opacity="0" IsHitTestVisible="False">
+            <Border.Effect>
+                <BlurEffect Radius="30" />
+            </Border.Effect>
+        </Border>
+        <Border x:Name="GlowEdge" BorderThickness="3" Opacity="0" IsHitTestVisible="False" />
+
+        <Canvas x:Name="Ink" IsHitTestVisible="False">
+            <Path x:Name="StrokeGlow" StrokeThickness="16" Opacity="0.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round">
+                <Path.Effect>
+                    <BlurEffect Radius="14" />
+                </Path.Effect>
+            </Path>
+            <Path x:Name="StrokeCore" StrokeThickness="4.5" Stroke="White" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+            <Border x:Name="Highlight" BorderThickness="2.5" CornerRadius="14" Visibility="Collapsed" />
+        </Canvas>
+
+        <Border x:Name="Hint" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,56" CornerRadius="20"
+                Background="#E6141416" BorderBrush="#26FFFFFF" BorderThickness="1" Padding="16,9" Opacity="0" IsHitTestVisible="False">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="HintShift" Y="24" />
+            </Border.RenderTransform>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE7C9;" Foreground="White" Margin="0,0,10,0" />
+                <TextBlock x:Name="HintText" Foreground="White" FontSize="13" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
