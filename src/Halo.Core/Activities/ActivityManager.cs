@@ -11,6 +11,7 @@ public enum ActivityKind
     DownloadComplete,
     Progress,
     Message,
+    Notification,
 }
 
 /// <summary>Something the notch can show in its compact state. Higher priority wins the pill.</summary>

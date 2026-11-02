@@ -15,8 +15,10 @@
                          IsChecked="True" ToolTip="Home" Checked="OnTabChanged" />
             <RadioButton x:Name="ShelfTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xE7B8;"
                          Margin="4,0,0,0" ToolTip="Shelf" Checked="OnTabChanged" />
+            <RadioButton x:Name="AlertsTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xEA8F;"
+                         Margin="4,0,0,0" ToolTip="Notifications" Checked="OnTabChanged" />
             <Border x:Name="ShelfBadge" Background="{DynamicResource AccentBrush}" CornerRadius="7" Height="14" MinWidth="14"
-                    Padding="4,0" Margin="-8,-12,0,0" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
+                    Padding="4,0" Margin="-42,-12,0,0" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
                 <TextBlock x:Name="ShelfCount" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource OnAccentBrush}"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
@@ -90,6 +92,52 @@
                     <TextBlock Text="hold to search" FontSize="12.5" Foreground="{StaticResource Fg2}" VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
+        </Grid>
+
+        <!-- Notification history -->
+        <Grid x:Name="AlertsPanel" Grid.Row="1" Margin="0,6,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="AlertsEmpty" Text="No notifications" FontSize="12.5" Foreground="{StaticResource Fg2}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <ScrollViewer x:Name="AlertsScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <ItemsControl x:Name="AlertItems">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid x:Name="Row" Height="48" Background="Transparent" Cursor="Hand" MouseLeftButtonUp="OnAlertClicked">
+                                <Border x:Name="RowBg" CornerRadius="12" Background="Transparent" Margin="-6,0" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="30" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="30" Height="30" CornerRadius="8" Background="{StaticResource Fill1}">
+                                        <Grid>
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xEA8F;" FontSize="13" Foreground="{StaticResource Fg3}" />
+                                            <Image Source="{Binding Icon}" Width="24" Height="24" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBlock FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Title, Mode=OneWay}" />
+                                        </TextBlock>
+                                        <TextBlock FontSize="11.5" Foreground="{StaticResource Fg2}" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding AppName, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Body, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="3" Text="{Binding TimeText, Mode=OneWay}" FontSize="11" Foreground="{StaticResource Fg3}"
+                                               VerticalAlignment="Top" Margin="8,8,0,0" />
+                                </Grid>
+                            </Grid>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="RowBg" Property="Background" Value="{StaticResource Fill1}" />
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
         </Grid>
 
         <!-- Shelf -->

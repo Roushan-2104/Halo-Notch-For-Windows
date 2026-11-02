@@ -31,17 +31,23 @@ public partial class ExpandedView : UserControl
     /// <summary>Raised while a file is being dragged off the shelf, so the notch stays open.</summary>
     internal event Action<bool>? ShelfDragging;
 
+    /// <summary>A notification in the history list was clicked.</summary>
+    internal event Action<Notifications.HaloNotification>? NotificationOpened;
+
     internal void Attach(HaloServices services)
     {
         _s = services;
         ShelfItems.ItemsSource = services.Shelf.Items;
         services.Shelf.Items.CollectionChanged += (_, _) => RefreshShelf();
+        AlertItems.ItemsSource = services.Notifications.History;
+        services.Notifications.History.CollectionChanged += (_, _) => Refresh();
         Bars.Source = services.Visualizer.Level;
         RefreshShelf();
     }
 
     internal void ShowShelf() => ShelfTab.IsChecked = true;
     internal void ShowHome() => HomeTab.IsChecked = true;
+    internal void ShowAlerts() => AlertsTab.IsChecked = true;
 
     void OnTabChanged(object sender, RoutedEventArgs e) => Refresh();
 
@@ -49,11 +55,18 @@ public partial class ExpandedView : UserControl
     {
         if (_s is null || !IsInitialized) return;
         bool shelf = ShelfTab.IsChecked == true;
+        bool alerts = AlertsTab.IsChecked == true;
+        bool home = !shelf && !alerts;
         var media = _s.Media;
-        MediaPanel.Visibility = !shelf && media.HasSession ? Visibility.Visible : Visibility.Collapsed;
-        ClockPanel.Visibility = !shelf && !media.HasSession ? Visibility.Visible : Visibility.Collapsed;
+        MediaPanel.Visibility = home && media.HasSession ? Visibility.Visible : Visibility.Collapsed;
+        ClockPanel.Visibility = home && !media.HasSession ? Visibility.Visible : Visibility.Collapsed;
         ShelfPanel.Visibility = shelf ? Visibility.Visible : Visibility.Collapsed;
-        ShelfClear.Visibility = shelf && _s.Shelf.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        AlertsPanel.Visibility = alerts ? Visibility.Visible : Visibility.Collapsed;
+        int alertCount = _s.Notifications.History.Count;
+        AlertsEmpty.Text = _s.Notifications.IsAvailable ? "No notifications" : _s.Notifications.Problem ?? "Notifications are starting…";
+        AlertsEmpty.Visibility = alertCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+        AlertsScroll.Visibility = alertCount == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ShelfClear.Visibility = (shelf && _s.Shelf.Items.Count > 0) || (alerts && alertCount > 0) ? Visibility.Visible : Visibility.Collapsed;
 
         BatteryPanel.Visibility = Visibility.Visible;
         Battery.Visibility = BatteryText.Visibility = _s.Battery.HasBattery ? Visibility.Visible : Visibility.Collapsed;
@@ -140,10 +153,19 @@ public partial class ExpandedView : UserControl
         ShelfScroll.Visibility = n == 0 ? Visibility.Collapsed : Visibility.Visible;
         ShelfBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
         ShelfCount.Text = n.ToString();
-        ShelfClear.Visibility = ShelfTab.IsChecked == true && n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (ShelfTab.IsChecked == true) ShelfClear.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    void OnClearShelf(object sender, MouseButtonEventArgs e) => _s?.Shelf.Clear();
+    void OnClearShelf(object sender, MouseButtonEventArgs e)
+    {
+        if (AlertsTab.IsChecked == true) _s?.Notifications.ClearHistory();
+        else _s?.Shelf.Clear();
+    }
+
+    void OnAlertClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Notifications.HaloNotification n) NotificationOpened?.Invoke(n);
+    }
 
     void OnShelfWheel(object sender, MouseWheelEventArgs e)
     {

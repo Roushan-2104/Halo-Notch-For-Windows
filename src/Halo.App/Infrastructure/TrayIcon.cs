@@ -13,7 +13,7 @@ internal sealed class TrayIcon : IDisposable
     readonly Icon _image;
 
     public TrayIcon(AppSettings settings, Action onQuit, Action<bool> onReplaceVolumeChanged, Action<bool> onVisualizerChanged,
-        Action onPlacementChanged, Action onVoiceLanguageChanged)
+        Action onPlacementChanged, Action onVoiceLanguageChanged, Action onNotificationSettingsChanged)
     {
         _image = DrawIcon();
         var menu = new ContextMenuStrip { ShowImageMargin = false };
@@ -64,9 +64,31 @@ internal sealed class TrayIcon : IDisposable
             onVoiceLanguageChanged();
         };
 
+        var notifications = new ToolStripMenuItem("Show notifications in the notch") { Checked = settings.ShowNotifications, CheckOnClick = true };
+        notifications.CheckedChanged += (_, _) =>
+        {
+            settings.ShowNotifications = notifications.Checked;
+            settings.Save();
+            onNotificationSettingsChanged();
+        };
+        // Only Windows can hide its own pop-ups; this opens the page with Do Not Disturb and per-app banners.
+        var windowsPopups = new ToolStripMenuItem("Turn off Windows pop-ups…") { ToolTipText = "Turn on Do Not Disturb; Halo keeps showing notifications" };
+        windowsPopups.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true });
+        var unmute = new ToolStripMenuItem("Unmute all apps") { Enabled = settings.MutedNotificationApps.Count > 0 };
+        unmute.Click += (_, _) =>
+        {
+            settings.MutedNotificationApps.Clear();
+            settings.Save();
+        };
+        menu.Opening += (_, _) => unmute.Enabled = settings.MutedNotificationApps.Count > 0;
+
         menu.Items.Add(startup);
         menu.Items.Add(pin);
         menu.Items.Add(autoLang);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(notifications);
+        menu.Items.Add(windowsPopups);
+        menu.Items.Add(unmute);
         menu.Items.Add(volume);
         menu.Items.Add(viz);
         menu.Items.Add(compact);

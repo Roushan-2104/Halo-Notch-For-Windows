@@ -1,0 +1,51 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using Halo.Notifications;
+
+namespace Halo.Views;
+
+/// <summary>A notification as it drops out of the notch: app icon, app name, title and two lines of text.</summary>
+public partial class NotificationView : UserControl
+{
+    HaloNotification? _shown;
+
+    public NotificationView()
+    {
+        InitializeComponent();
+        MouseEnter += (_, _) => DismissButton.Visibility = Visibility.Visible;
+        MouseLeave += (_, _) => DismissButton.Visibility = Visibility.Hidden;
+        MouseLeftButtonUp += (_, e) =>
+        {
+            if (_shown is not null && e.OriginalSource is not Button) Opened?.Invoke(_shown);
+        };
+    }
+
+    internal event Action<HaloNotification>? Opened;
+    internal event Action? Dismissed;
+    internal event Action<HaloNotification>? MuteRequested;
+
+    internal void Show(HaloNotification n, int more)
+    {
+        _shown = n;
+        AppText.Text = n.AppName;
+        TimeText.Text = n.TimeText;
+        TitleText.Text = n.Title;
+        BodyText.Text = n.Body;
+        BodyText.Visibility = n.Body.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        MoreBadge.Visibility = more > 0 ? Visibility.Visible : Visibility.Collapsed;
+        MoreText.Text = $"+{more}";
+        MuteItem.Header = $"Don't show from {n.AppName}";
+        // Shell icons have transparent padding, so they sit on a subtle tile rather than filling it.
+        IconImage.Source = n.Icon;
+        IconGlyph.Visibility = n.Icon is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    void OnDismiss(object sender, RoutedEventArgs e) => Dismissed?.Invoke();
+
+    void OnMute(object sender, RoutedEventArgs e)
+    {
+        if (_shown is not null) MuteRequested?.Invoke(_shown);
+    }
+}

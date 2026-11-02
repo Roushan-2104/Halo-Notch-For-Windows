@@ -14,6 +14,12 @@ Google does the answering, speech-to-text runs offline with Whisper, and OCR use
 | **Tap Right Alt** | Type-to-search box (sums like `18% of 2400` are answered instantly) |
 | Drag files onto the notch | They're kept on the shelf; drag them back out any time |
 | Volume keys | Halo's volume HUD instead of Windows' popup |
+| A notification arrives | It drops out of the notch with app icon, title and text; hover to keep it, click to open the app, right-click to mute that app |
+| Bell tab (expanded notch) | Recent notifications, newest first |
+
+To see notifications only in the notch, turn on Windows **Do Not Disturb** (tray › "Turn off Windows
+pop-ups…"). Windows doesn't let apps hide its pop-ups themselves, so Halo deliberately keeps showing
+notifications while Do Not Disturb is on, and they still land in Action Center.
 
 Say filters out loud ("…only from Reddit", "…from the past week", "…no junk", "…from the docs") or
 toggle them as chips on the results card.
@@ -53,6 +59,7 @@ src/Halo.App     WPF app
   Playback/      now playing (Windows media sessions), loopback audio visualizer
   SystemInfo/    volume, brightness, battery, Bluetooth, downloads
   Shelf/         shelf store, Explorer-quality icons
+  Notifications/ other apps' toasts via the notification listener, history
   Interop/       Win32: keyboard hook, window styles, capture
 tests/           xUnit tests for Halo.Core
 ```
@@ -65,6 +72,9 @@ tests/           xUnit tests for Halo.Core
   and could change.
 - **Brightness** pop-ups: Halo shows its HUD, but Windows' own brightness flyout can't be suppressed
   (brightness keys are handled by firmware, not the keyboard hook).
-- **Notifications mirroring** needs MSIX packaging (planned with the Store build).
+- **Notifications** come from Windows' notification listener, checked every 0.7 s (desktop apps don't
+  get its live event). Clicking opens the app, not the exact chat or email: Windows doesn't let other
+  apps trigger a toast's own action or reply buttons. Older Windows builds may require MSIX packaging
+  for notification access; Halo says so in the bell tab if that's the case.
 - Right Alt is reserved for search, so AltGr characters on non-US layouts won't type while Halo runs.
 - First launch shows the notch ~3 s after start (WPF's one-time theme load).

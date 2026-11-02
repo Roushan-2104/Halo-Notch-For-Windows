@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using Halo.Core.Activities;
 using Halo.Infrastructure;
 using Halo.Interop;
+using Halo.Notifications;
 using Halo.Playback;
 using Halo.Search;
 using Halo.Shelf;
@@ -16,7 +17,7 @@ namespace Halo;
 /// <summary>Creates every service, wires them to the notch, and turns their events into activities.</summary>
 internal sealed class HaloHost : IDisposable
 {
-    const int PriorityHud = 90, PriorityBatteryLow = 75, PriorityCharging = 70, PriorityBluetooth = 60,
+    const int PriorityHud = 90, PriorityNotification = 80, PriorityBatteryLow = 75, PriorityCharging = 70, PriorityBluetooth = 60,
         PriorityDownloadDone = 55, PriorityMessage = 50, PriorityDownloading = 40, PriorityProgress = 30, PriorityMedia = 20;
 
     readonly AppSettings _settings;
@@ -34,6 +35,7 @@ internal sealed class HaloHost : IDisposable
     SearchCoordinator _search = null!;
     DownloadsService _downloads = null!;
     ShelfStore _shelf = null!;
+    NotificationService _notifications = null!;
     DispatcherTimer _tick = null!;
     bool _wasPlaying;
 
@@ -46,7 +48,8 @@ internal sealed class HaloHost : IDisposable
         _visualizer = Own(new AudioVisualizer());
         _battery = new BatteryService(_ui);
         _shelf = new ShelfStore(_settings);
-        var services = new HaloServices(_media, _visualizer, _battery, _shelf, _settings);
+        _notifications = Own(new NotificationService(_ui));
+        var services = new HaloServices(_media, _visualizer, _battery, _shelf, _notifications, _settings);
 
         _notch = new NotchWindow(services);
         _notch.FilesDropped += files =>
@@ -113,6 +116,30 @@ internal sealed class HaloHost : IDisposable
             _downloads.Start();
         });
 
+        Safe("notifications", () =>
+        {
+            _notifications.Arrived += OnNotification;
+            _notch.NotificationHovered += hovered =>
+            {
+                // Hold the notification while it's being read; give a moment after the pointer leaves.
+                if (_activities.Get("notification") is { } a) Post(a with { ExpiresAt = hovered ? null : In(3) });
+            };
+            _notch.NotificationView.Opened += OpenNotificationApp;
+            _notch.NotificationView.Dismissed += () => _activities.Remove("notification");
+            _notch.NotificationView.MuteRequested += n =>
+            {
+                if (n.AppId.Length > 0 && !_settings.MutedNotificationApps.Contains(n.AppId))
+                {
+                    _settings.MutedNotificationApps.Add(n.AppId);
+                    _settings.Save();
+                }
+                _activities.Remove("notification");
+                Post(new Activity("muted", ActivityKind.Message, PriorityMessage, new MessagePayload("", $"Muted {n.AppName}"), In(2.5)));
+            };
+            _notch.ExpandedView.NotificationOpened += OpenNotificationApp;
+            if (_settings.ShowNotifications) _ = StartNotificationsAsync();
+        });
+
         _whisper = Own(new WhisperService { Language = _settings.VoiceLanguage });
         _whisper.Progress += p => _ui.BeginInvoke(() => Post(new Activity("voice-model", ActivityKind.Progress, PriorityProgress,
             new ProgressPayload("", "Voice", p))));
@@ -154,6 +181,11 @@ internal sealed class HaloHost : IDisposable
             {
                 _whisper.Language = _settings.VoiceLanguage;
                 _ = Task.Run(_whisper.ResetProcessors);
+            },
+            () =>
+            {
+                if (_settings.ShowNotifications) _ = StartNotificationsAsync();
+                else _activities.Remove("notification");
             }));
         Own(new CommandServer(_ui, HandleCommand));
 
@@ -161,6 +193,41 @@ internal sealed class HaloHost : IDisposable
         _ = WarmUpBrowserAsync();
 
         Log.Info($"Halo ready in {clock.ElapsedMilliseconds} ms");
+    }
+
+    async Task StartNotificationsAsync()
+    {
+        try
+        {
+            if (!_notifications.IsAvailable) await _notifications.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Starting notifications failed", ex);
+        }
+    }
+
+    // Windows doesn't let apps hide its own pop-ups, so Do Not Disturb is how users get "notch only".
+    // That's why Halo deliberately keeps showing notifications while DND is on.
+    void OnNotification(HaloNotification n)
+    {
+        if (!_settings.ShowNotifications || _settings.MutedNotificationApps.Contains(n.AppId)) return;
+
+        int more = _activities.Get("notification") is { Payload: NotificationPayload p } ? p.More + 1 : 0;
+        Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(6))
+        {
+            Click = () => OpenNotificationApp(n),
+        });
+    }
+
+    void OpenNotificationApp(HaloNotification n)
+    {
+        _activities.Remove("notification");
+        _notch.Collapse();
+        if (n.AppId.Length == 0) return;
+        // Windows doesn't let other apps trigger a toast's own action, so open the app it came from.
+        try { System.Diagnostics.Process.Start("explorer.exe", $"shell:AppsFolder\\{n.AppId}"); }
+        catch (Exception ex) { Log.Warn($"Opening {n.AppId} failed", ex); }
     }
 
     async Task WarmUpBrowserAsync()
@@ -235,11 +302,21 @@ internal sealed class HaloHost : IDisposable
         {
             case "ping": return "pong";
             case "diag": return Motion.Animator.Diagnostics;
+            case "unmute":
+                _settings.MutedNotificationApps.Clear();
+                _settings.Save();
+                return "ok";
+            case "notifications":
+                return $"available={_notifications.IsAvailable} problem={_notifications.Problem ?? "-"} history={_notifications.History.Count} " +
+                       $"muted={_settings.MutedNotificationApps.Count}";
             case "state":
                 return $"mode={_notch.Mode} activity={_activities.Current?.Id ?? "-"} secondary={_activities.Secondary?.Id ?? "-"} " +
                        $"whisper={(_whisper.IsReady ? "ready" : _whisper.IsDownloading ? $"downloading {_whisper.DownloadProgress:P0}" : _whisper.Failure ?? "loading")} " +
                        $"keys={_keys.IsInstalled} media={(_media.HasSession ? _media.Title : "-")} playing={_media.IsPlaying} height={_notch.Height}";
-            case "expand": _notch.ExpandTo(arg.Contains("shelf"), hold: arg.Contains("hold")); return "ok";
+            case "expand":
+                _notch.ExpandTo(arg.Contains("shelf"), hold: arg.Contains("hold"));
+                if (arg.Contains("alerts")) _notch.ExpandedView.ShowAlerts();
+                return "ok";
             case "viz":
                 return $"running={_visualizer.IsRunning} levels=" +
                        string.Join(",", Enumerable.Range(0, AudioVisualizer.Bands).Select(i => _visualizer.Level(i).ToString("0.00", CultureInfo.InvariantCulture)));

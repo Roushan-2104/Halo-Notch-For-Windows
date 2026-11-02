@@ -34,6 +34,15 @@ internal sealed class AppSettings
 
     public List<string> Shelf { get; set; } = new();
 
+    /// <summary>
+    /// Show other apps' notifications in the notch. Windows' own pop-ups can only be turned off by the
+    /// user (Do Not Disturb or per-app banners in Settings); Halo keeps showing notifications either way.
+    /// </summary>
+    public bool ShowNotifications { get; set; } = true;
+
+    /// <summary>App IDs the user muted from the notch.</summary>
+    public List<string> MutedNotificationApps { get; set; } = new();
+
     [JsonIgnore]
     public bool StartWithWindows
     {

@@ -44,7 +44,8 @@ internal static class ShellIcons
         }
         catch (Exception ex)
         {
-            Log.Warn($"Icon for {path} failed", ex);
+            // Missing items (deleted files, apps without a Start entry) are expected; don't spam the log.
+            if (ex is not (COMException or FileNotFoundException)) Log.Warn($"Icon for {path} failed", ex);
             return null;
         }
         finally

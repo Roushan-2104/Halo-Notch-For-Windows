@@ -1,3 +1,4 @@
+using Halo.Notifications;
 using Halo.Playback;
 using Halo.Shelf;
 using Halo.SystemInfo;
@@ -10,4 +11,5 @@ internal sealed record HaloServices(
     AudioVisualizer Visualizer,
     BatteryService Battery,
     ShelfStore Shelf,
+    NotificationService Notifications,
     AppSettings Settings);

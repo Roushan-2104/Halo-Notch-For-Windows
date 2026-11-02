@@ -8,11 +8,12 @@ using Halo.Core.Activities;
 using Halo.Infrastructure;
 using Halo.Interop;
 using Halo.Motion;
+using Halo.Notifications;
 using Halo.Views;
 
 namespace Halo.Shell;
 
-public enum NotchMode { Hidden, Idle, Compact, Expanded, Drop, Listening, Circling, Thinking, Typing, Answer, Result }
+public enum NotchMode { Hidden, Idle, Compact, Notification, Expanded, Drop, Listening, Circling, Thinking, Typing, Answer, Result }
 
 /// <summary>
 /// The notch. One fixed-width transparent window pinned to the top-centre of the primary monitor; the
@@ -30,7 +31,7 @@ public partial class NotchWindow : Window
     readonly SpringValue _w = new(186), _h = new(32), _r = new(11), _shadow = new(0, 0.002);
     readonly SpringValue _bubbleOpacity = new(0, 0.002), _bubbleScale = new(0.4, 0.001);
     readonly List<Layer> _layers = new();
-    readonly Layer _compactA, _compactB, _expanded, _drop, _searchBar, _answer, _result;
+    readonly Layer _compactA, _compactB, _expanded, _drop, _searchBar, _answer, _result, _notification;
     readonly DispatcherTimer _hoverIn, _hoverOut, _dragOut;
     Layer _compactActive;
     IntPtr _hwnd;
@@ -42,7 +43,7 @@ public partial class NotchWindow : Window
 
     Activity? _activity, _secondary;
     NotchMode? _searchMode;
-    bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held;
+    bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification;
     int _holdOpen;
 
     internal NotchWindow(HaloServices services)
@@ -58,6 +59,7 @@ public partial class NotchWindow : Window
         _searchBar = AddLayer(SearchBar);
         _answer = AddLayer(Answer);
         _result = AddLayer(Result);
+        _notification = AddLayer(NotificationCard);
         _compactActive = _compactA;
 
         _hoverIn = new DispatcherTimer(TimeSpan.FromMilliseconds(110), DispatcherPriority.Input, OnHoverIn, Dispatcher) { IsEnabled = false };
@@ -93,11 +95,15 @@ public partial class NotchWindow : Window
     public event Action? InteractiveDeactivated;
     public event Action<string[]>? FilesDropped;
 
+    /// <summary>The pointer entered/left a notification on display (so the host can pause its timer).</summary>
+    public event Action<bool>? NotificationHovered;
+
     public NotchMode Mode => _mode;
     internal SearchBarView SearchBarView => SearchBar;
     internal ResultView ResultView => Result;
     internal AnswerView AnswerView => Answer;
     internal ExpandedView ExpandedView => Expanded;
+    internal NotificationView NotificationView => NotificationCard;
 
     sealed class Layer
     {
@@ -291,11 +297,13 @@ public partial class NotchWindow : Window
         if (_searchMode is { } s) mode = s;
         else if (_fullscreen && _activity?.Kind != ActivityKind.Hud) mode = NotchMode.Hidden;
         else if (_dragging) mode = NotchMode.Drop;
+        else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded) mode = NotchMode.Notification;
         else if (_hoverExpanded) mode = NotchMode.Expanded;
         else if (_activity is not null) mode = NotchMode.Compact;
         else mode = NotchMode.Idle;
 
         if (mode == NotchMode.Compact) PrepareCompact();
+        if (mode == NotchMode.Notification && _activity?.Payload is NotificationPayload p) NotificationCard.Show(p.Notification, p.More);
         if (mode != _mode || mode == NotchMode.Compact) Transition(mode);
     }
 
@@ -320,6 +328,7 @@ public partial class NotchWindow : Window
         NotchMode.Hidden => (150, 0, 0),
         NotchMode.Idle => (186, 32, 11),
         NotchMode.Compact => (_compactWidth, 32, 12),
+        NotchMode.Notification => (460, 92, 30),
         NotchMode.Expanded => (480, 204, 32),
         NotchMode.Drop => (480, 150, 32),
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => (420, 54, 27),
@@ -332,6 +341,7 @@ public partial class NotchWindow : Window
     Layer? LayerFor(NotchMode mode) => mode switch
     {
         NotchMode.Compact => _compactActive,
+        NotchMode.Notification => _notification,
         NotchMode.Expanded => _expanded,
         NotchMode.Drop => _drop,
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking or NotchMode.Typing => _searchBar,
@@ -474,12 +484,24 @@ public partial class NotchWindow : Window
     void OnRootMouseEnter(object sender, MouseEventArgs e)
     {
         _hoverOut.Stop();
+        // Hovering a notification holds it on screen (to read or click) instead of opening the card.
+        if (_mode == NotchMode.Notification)
+        {
+            _hoveringNotification = true;
+            NotificationHovered?.Invoke(true);
+            return;
+        }
         if (!_hoverExpanded && CanHover) _hoverIn.Start();
     }
 
     void OnRootMouseLeave(object sender, MouseEventArgs e)
     {
         _hoverIn.Stop();
+        if (_hoveringNotification)
+        {
+            _hoveringNotification = false;
+            NotificationHovered?.Invoke(false);
+        }
         if (_hoverExpanded) _hoverOut.Start();
     }
 
