@@ -43,6 +43,9 @@ internal sealed class AppSettings
     /// </summary>
     public bool ShowNotifications { get; set; } = true;
 
+    /// <summary>The one-time "start with Windows?" question has been answered (or startup was already on).</summary>
+    public bool StartupAsked { get; set; }
+
     /// <summary>Halo's own soft ping for notifications and a chime for timers/reminders.</summary>
     public bool NotchSounds { get; set; } = true;
 

@@ -13,15 +13,19 @@
         <StackPanel x:Name="TabStrip" Orientation="Horizontal" VerticalAlignment="Center">
             <RadioButton x:Name="HomeTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xE80F;"
                          IsChecked="True" ToolTip="Home" Checked="OnTabChanged" />
-            <RadioButton x:Name="ShelfTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xE7B8;"
-                         Margin="4,0,0,0" ToolTip="Shelf" Checked="OnTabChanged" />
+            <Grid Margin="4,0,0,0">
+                <RadioButton x:Name="ShelfTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xE7B8;"
+                             ToolTip="Shelf" Checked="OnTabChanged" />
+                <!-- File count, pinned to the shelf tab's top-right corner however many tabs follow it. -->
+                <Border x:Name="ShelfBadge" Background="{DynamicResource AccentBrush}" CornerRadius="7" Height="14" MinWidth="14"
+                        Padding="4,0" Margin="0,-6,-6,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Visibility="Collapsed" IsHitTestVisible="False">
+                    <TextBlock x:Name="ShelfCount" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource OnAccentBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </Grid>
             <RadioButton x:Name="AlertsTab" Style="{StaticResource TabButton}" GroupName="NotchTabs" Content="&#xEA8F;"
                          Margin="4,0,0,0" ToolTip="Notifications" Checked="OnTabChanged" />
-            <Border x:Name="ShelfBadge" Background="{DynamicResource AccentBrush}" CornerRadius="7" Height="14" MinWidth="14"
-                    Padding="4,0" Margin="-42,-12,0,0" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
-                <TextBlock x:Name="ShelfCount" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource OnAccentBrush}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
         </StackPanel>
         <StackPanel x:Name="BatteryPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
             <TextBlock x:Name="ShelfClear" Text="Clear" FontSize="12" Foreground="{StaticResource Fg2}" Cursor="Hand"
@@ -85,11 +89,17 @@
                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8D6;" Foreground="{StaticResource Fg3}" Margin="0,0,8,0" />
                     <TextBlock Text="Nothing playing" FontSize="12.5" Foreground="{StaticResource Fg2}" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
                     <Border Background="{StaticResource Fill2}" CornerRadius="5" Padding="6,1" Margin="0,0,6,0">
                         <TextBlock Text="Right Alt" FontSize="11" FontWeight="SemiBold" />
                     </Border>
-                    <TextBlock Text="hold to search" FontSize="12.5" Foreground="{StaticResource Fg2}" VerticalAlignment="Center" />
+                    <TextBlock Text="hold to talk" FontSize="12.5" Foreground="{StaticResource Fg2}" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Border Background="{StaticResource Fill2}" CornerRadius="5" Padding="6,1" Margin="0,0,6,0">
+                        <TextBlock Text="Copilot" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                    <TextBlock Text="circle to search" FontSize="12.5" Foreground="{StaticResource Fg2}" VerticalAlignment="Center" />
                 </StackPanel>
             </StackPanel>
         </Grid>

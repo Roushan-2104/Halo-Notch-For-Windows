@@ -1,101 +1,261 @@
-# Halo
+<p align="center">
+  <img src="docs/images/banner.svg" alt="Halo: a Dynamic Island for Windows" width="100%">
+</p>
 
-A Dynamic Island–style notch for Windows: live activities, a media player, a file shelf, and
-Circle-to-Search that answers with Google (AI Mode, Web or Lens) right inside the notch. No paid LLM:
-Google does the answering, speech-to-text runs offline with Whisper, and OCR uses Windows' built-in engine.
-At rest the notch is plain black with a soft shadow. A thin colour edge lights up briefly when something
-happens:
-- a new song, in its album colour;
-- a notification or a finished timer, in your accent colour;
-- plugging in, in green;
-- low battery or an error, in red.
+<p align="center">
+  <a href="https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Roushan-2104/Halo-Notch-For-Windows?style=flat-square&color=7c5cff&label=download"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%C2%B7%2011-2b2d42?style=flat-square&logo=windows11">
+  <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512bd4?style=flat-square&logo=dotnet">
+  <img alt="No paid AI" src="https://img.shields.io/badge/paid%20AI-none-ff8a65?style=flat-square">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-64b5f6?style=flat-square"></a>
+</p>
 
-It stays lit in your accent colour while Halo is listening.
+<p align="center">
+  <b><a href="#install">Install</a></b> ·
+  <a href="#three-keys">Three keys</a> ·
+  <a href="#a-day-with-halo">Tour</a> ·
+  <a href="#say-it-or-type-it">Commands</a> ·
+  <a href="#privacy-by-default">Privacy</a> ·
+  <a href="#build-it-yourself">Build</a>
+</p>
+
+---
+
+Halo turns the top-centre of your screen into a living notch, like the iPhone's Dynamic Island, made for Windows.
+
+It answers questions with Google AI Mode, Web or Lens right inside the notch, lets you circle anything on screen to search it, and shows your music, timers, calls, downloads and notifications as little live pills. Hover it and it opens into a small dashboard.
+
+It runs on your PC with **no paid AI**:
+- Google does the answering.
+- Speech-to-text runs offline with Whisper.
+- Text recognition uses Windows' built-in OCR.
+
+<!-- DEMO: replace this comment with the demo GIF, e.g. <p align="center"><img src="docs/images/demo.gif" width="760"></p> -->
+> 🎬 **Demo video coming soon.**
+
+## Three keys
+
+| | Key | What happens |
+|:-:|---|---|
+| 🗣️ | **Hold** <kbd>Right Alt</kbd> | **Talk.** Ask a question or say a command: *"play kesariya"*, *"5 ft in cm"*, *"timer 10 minutes"*. The screen stays live. |
+| ⌨️ | **Tap** <kbd>Right Alt</kbd> | **Type.** A search box drops out of the notch. Sums like `18% of 2400` are answered instantly. |
+| ⭕ | <kbd>Copilot</kbd>, or hold <kbd>Right Ctrl</kbd> | **Circle.** The screen freezes. Circle, scribble or tap anything, speak if you like, then let go. |
+
+Everything else is a **hover** away.
+
+> On layouts where Right Alt is AltGr (English India, German, French…), Right Alt on its own is the talk key, and AltGr + a key still types (₹, €, @). Right Ctrl only counts when held on its own, so Ctrl shortcuts are unaffected.
+
+## A day with Halo
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### ☕ It starts quiet
+At rest Halo is just a black notch with a soft shadow. A thin colour edge flashes briefly when something happens:
+- the album colour for a new song;
+- your accent colour for a notification or timer;
+- green for charging;
+- red for low battery.
+
+</td>
+<td width="50%"><img src="docs/images/idle.png" alt="Idle notch"><br><img src="docs/images/edge.png" alt="Colour edge flash"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### 💬 Ask it anything
+Tap <kbd>Right Alt</kbd> to type, or hold it to speak. Questions open Google **AI Mode** right inside the notch:
+- switch to **Web** or **Lens** with one click;
+- add **Reddit**, **Past week**, **No junk** or **Docs** filters, or just say them;
+- save the whole scrolling page as one screenshot.
+
+</td>
+<td><img src="docs/images/results.png" alt="Google AI Mode answer in the notch"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⚡ Instant answers
+Sums, unit and currency conversions and time zones never leave your PC: no search, no wait. Exchange rates are free and refreshed daily.
+
+</td>
+<td><img src="docs/images/answer.png" alt="Calculator answer"><br><img src="docs/images/convert.png" alt="Unit conversion"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⭕ Circle to search
+Press <kbd>Copilot</kbd> and the screen freezes. Circle a photo, a word or a paragraph:
+- text goes to Google;
+- images go to **Lens**, and a "Sent to Google" badge tells you when one leaves your PC;
+- a circled **QR code** opens;
+- a circled **price** converts to your currency.
+
+</td>
+<td><img src="docs/images/circle.png" alt="Circle anything"><br><img src="docs/images/listening.png" alt="Listening"><br><img src="docs/images/typing.png" alt="Type to search"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🔔 Notifications, calmly
+Other apps' notifications drop out of the notch with a soft ping instead of Windows' chime:
+- **hover** to keep one on screen;
+- **click** to open the app;
+- **right-click** to mute that app.
+
+During a call or while you share your screen, Halo shows who a notification is from, but not what it says.
+
+</td>
+<td><img src="docs/images/notification.png" alt="Notification card"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⏱️ Live activities
+Timers, stopwatches, Pomodoro and focus sessions, meeting mic mute, volume and brightness, charging, Bluetooth, downloads and updates all live in the notch as small pills. When two things happen at once, one splits off into a bubble.
+
+</td>
+<td><img src="docs/images/timer.png" alt="Timer"><br><img src="docs/images/meeting.png" alt="Meeting mic"><br><img src="docs/images/hud-volume.png" alt="Volume"><br><img src="docs/images/charging.png" alt="Charging"><br><img src="docs/images/bluetooth.png" alt="Bluetooth"><br><img src="docs/images/download.png" alt="Download finished"><br><img src="docs/images/update-ready.png" alt="Update ready"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🗂️ Hover for the dashboard
+Hover the notch to open it: clock, now playing, battery, and a tab for each part of Halo:
+- Shelf
+- Notifications
+- Weather
+- Clipboard
+- Lyrics
+- Notes
+- Snippets
+- System
+
+</td>
+<td><img src="docs/images/expanded.png" alt="Expanded notch"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📎 The shelf
+Drag files onto the notch to park them, and drag them back out into any app later. Right-click a file for **Send to phone**.
+
+</td>
+<td><img src="docs/images/shelf.png" alt="File shelf"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📱 Send to your phone
+Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the file in its browser, or uploads photos back into your PC's **Downloads** folder. No app, no cloud, no account.
+
+</td>
+<td><img src="docs/images/phone.png" alt="Phone transfer QR"></td>
+</tr>
+</table>
+
+### And quietly, in the background
+- 🎵 **Music:**
+  - say *"play …"* to play it in YouTube Music, or *"… on spotify"*;
+  - synced lyrics;
+  - scroll over the notch for volume, swipe sideways to skip.
+- 📋 **Clipboard:**
+  - history of what you copy, with pinning;
+  - a screenshot catcher you can drag into any app;
+  - Wi-Fi passwords from QR codes stay out of Windows' clipboard history.
+- ✍️ **Snippets:** type `;date`, `;time`, `;shrug` or your own triggers in any app and they expand.
+- 🚀 **Launcher:** *"open spotify"*, *"open github.com"*, *"open downloads"*.
+- 🌤️ **Ambient:** weather, a rotating cricket, stocks or crypto ticker, and a tiny notch pet.
+- 🖥️ **System:**
+  - a CPU, memory and battery tab;
+  - alerts when an app hogs the CPU or the battery drains fast.
+- 🙈 **Fullscreen:** Halo hides itself for fullscreen games, videos and presentations, and never covers a top taskbar.
 
 ## Install
 
-1. Download `HaloNotch-win-Setup.exe` from the [latest release](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases/latest) and run it.
-   - It installs for your account only (no admin prompt), adds Halo to the Start menu and starts it.
-   - Nothing else to install: .NET is included.
-2. Optional: tray icon › **Start with Windows**.
+1. Download **`HaloNotch-win-Setup.exe`** from the [latest release](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases/latest) and run it.
+   - It installs for your account only, with no admin prompt.
+   - .NET is included.
+2. On first run, Halo asks once whether it should **start with Windows**. You can change this later in the tray menu.
 
-Prefer no installer? `HaloNotch-win-Portable.zip` runs from any folder and updates itself the same way.
+- **Updates are automatic.** Halo downloads new versions in the background, usually just a few MB, and the notch offers *Update ready · click to restart*. If you ignore it, the update installs when Halo next quits.
+- **No installer?** `HaloNotch-win-Portable.zip` runs from any folder and updates itself the same way.
+- **First launch:** Halo downloads the offline voice model once (~148 MB). Typing and circling work meanwhile.
 
-**Updates are automatic.**
-- Halo checks for a new version shortly after it starts, then every 4 hours.
-- It downloads updates in the background; usually only the changed parts, a few MB.
-- When an update is ready, the notch shows "Halo x.y.z is ready · click to restart".
-- Ignore it and the update is applied the next time Halo quits.
-- The tray menu shows your version and has **Check for updates**.
-- Uninstall from Windows Settings › Apps. Your settings and data in `%LOCALAPPDATA%\Halo` are kept.
+<details>
+<summary><b>Requirements and first-run notes</b></summary>
 
-- **Voice model:** on first launch Halo downloads the Whisper voice model (~148 MB, once) and says "Voice search ready" when done. Typing and circling work meanwhile. If you're offline then, it retries when you're back online or when you hold Right Alt.
-- **WebView2:** search results use the Microsoft Edge WebView2 Runtime, which comes with Windows 11 and current Edge. If it's missing, the notch offers a link to Microsoft's installer.
-- **SmartScreen:** needs Windows 10 2004+ or Windows 11. The build isn't code-signed yet, so SmartScreen may ask you to confirm the first run.
+- **Windows:** 10 (2004+) or 11.
+- **WebView2 Runtime** for search results. It comes with Windows 11 and current Edge; if it's missing, the notch links to Microsoft's installer.
+- **SmartScreen:** the build isn't code-signed yet, so SmartScreen may ask you to confirm the first run.
+- **To hear only Halo's ping,** turn off *Allow notifications to play sounds* in Settings › System › Notifications. The tray menu has a shortcut to that page.
+- **Uninstall** from Settings › Apps. Your settings and data in `%LOCALAPPDATA%\Halo` are kept.
 
-## Using it
+</details>
 
-| Do this | Get this |
-|---|---|
-| Hover the notch | Expands: now playing (art, progress, controls), clock, battery, shelf tab |
-| **Hold Right Alt** | Talk: say a command or question ("play kesariya", "5 ft in cm", "timer 10 minutes"); the screen stays live; let go to run it |
-| **Tap Right Alt** | Type-to-search box (sums like `18% of 2400` are answered instantly) |
-| **Copilot key**, or **hold Right Ctrl** on its own (~0.4 s) | Look: the screen freezes; speak and/or circle anything; let go to search |
-| Tap the Copilot key (or let go without doing anything) | The screen stays frozen so you can circle at leisure (Esc cancels) |
-| Drag files onto the notch | They're kept on the shelf; drag them back out any time |
-| Volume keys | Halo's volume HUD instead of Windows' popup |
-| A notification arrives | It drops out of the notch with app icon, title and text; hover to keep it, click to open the app, right-click to mute that app |
-| Bell tab (expanded notch) | Recent notifications, newest first |
-
-### Things you can type (tap Right Alt) or say (hold Right Alt)
+## Say it or type it
 
 | Say or type | What happens |
 |---|---|
-| `play kaahe mose` · `play tum hi ho on spotify` · `pause` · `next` | Plays in your YouTube Music app (or Spotify) · media controls |
-| `lyrics` | Synced lyrics tab for the current song |
-| `timer 25m tea` · `stopwatch` · `pomodoro` · `focus 45m` | Live countdown in the notch |
-| `remind me at 6pm to call mom` · `note: buy milk` · `notes` | Reminder card when due · Notes tab |
-| `5 ft in cm` · `100 usd to inr` · `5pm ist in pst` · `time in tokyo` | Instant answers (free exchange rates) |
-| `translate good morning to hindi` | Opens Google Translate |
-| `open spotify` · `open github.com` · `open downloads` | App / site / folder launcher |
-| `snippet ;sig Best, Roushan` · `snippets` | Text expansion in any app (`;date`, `;time`, `;shrug` built in) |
-| `weather` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `ticker off` · `pet on` | Weather tab · rotating ticker · a tiny notch pet |
-| `mute mic` · `cpu` · `clipboard` · `send to phone` | Mic toggle · System tab · Clipboard tab · QR transfer of the latest shelf file |
-| `take a screenshot` | Whole screen saved to Pictures › Screenshots and copied |
+| `play kaahe mose` · `play tum hi ho on spotify` · `pause` · `next` | Plays in YouTube Music (or Spotify) · media controls |
+| `lyrics` | Synced lyrics for the current song |
+| `timer 25m tea` · `stopwatch` · `pomodoro` · `focus 45m` | A live countdown in the notch |
+| `remind me at 6pm to call mom` · `note: buy milk` · `notes` | A reminder card when it's due · the Notes tab |
+| `5 ft in cm` · `100 usd to inr` · `5pm ist in pst` · `time in tokyo` | Instant answers |
+| `translate good morning to hindi` | Google Translate |
+| `open spotify` · `open github.com` · `open downloads` | App, site or folder launcher |
+| `snippet ;sig Best, Roushan` · `snippets` | Text expansion in any app |
+| `weather` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `pet on` | Weather · ticker · notch pet |
+| `mute mic` · `cpu` · `clipboard` · `send to phone` · `take a screenshot` | Mic toggle · System tab · Clipboard tab · QR transfer · Screenshot |
+| *"…only from Reddit"*, *"…from the past week"*, *"…no junk"*, *"…from the docs"* | Search filters, spoken |
 
-Screenshots: besides the command, the frozen circle screen has **Screenshot** (everything) and **Snip**
-(drag an area) buttons, and the results card has a button that captures the whole scrolling page.
+## Privacy by default
 
-Also automatic: a meeting pill with one-click mic mute while any app uses your microphone, a preview
-when you copy, a screenshot catcher (drag it into any app or onto the shelf), circling a QR code opens it,
-circling a price converts it, results get **Copy text** / **Translate** chips, scroll over the notch for
-volume, swipe sideways to skip tracks, and the notch outline takes on the album colour.
+- **Voice and on-screen text:**
+  - your voice is transcribed offline, on your PC;
+  - text on screen is read with Windows' own OCR.
+- **What leaves your PC:**
+  - searches go to Google only when you ask;
+  - the notch shows a "Sent to Google" badge whenever an image is uploaded to Lens.
+- **The results browser:** it can only open web pages, so pages can't launch apps or files.
+- **Notifications:** their text is hidden while an app uses your microphone or camera, or captures the screen.
+- **Your data:**
+  - clipboard history, notes and snippets are encrypted with Windows DPAPI under your account;
+  - unpinned clipboard items are forgotten after 24 hours.
+- **Logs:** they never contain what you said, searched or copied, and are kept for 3 days.
+- **Phone transfers:**
+  - local network only, behind a random one-time link;
+  - received programs are renamed `.blocked`;
+  - every received file is marked as downloaded from the internet.
+- **Downloads and builds:**
+  - the voice model download is pinned and checked against its SHA-256;
+  - release builds contain no paths from the build machine.
 
-Each feature is a self-contained module in `src/Halo.App/Modules/`; see its README to add more.
+<details>
+<summary><b>Known limits</b></summary>
 
-To see notifications only in the notch, turn on Windows **Do Not Disturb** (tray › "Turn off Windows
-pop-ups…"). Windows doesn't let apps hide its pop-ups themselves, so Halo deliberately keeps showing
-notifications while Do Not Disturb is on, and they still land in Action Center.
+- **Google robot check.** On shared or mobile connections Google sometimes shows "I'm not a robot" in the results card. Tick it once and the browser profile remembers it.
+- **Lens** uses the same upload endpoint as lens.google.com's own upload button. It isn't a public API, so it could change.
+- **Brightness keys:** Halo shows its HUD, but Windows' own brightness pop-up can't be suppressed, because the firmware handles those keys.
+- **Notifications** are read when Windows' notification store changes. Clicking one opens the app, not the exact chat: Windows doesn't let other apps trigger a toast's own buttons.
+- **The Copilot key** replaces Windows' Copilot/Search action while Halo runs.
+- **First launch** shows the notch about 3 s after start (WPF's one-time theme load).
 
-Say filters out loud ("…only from Reddit", "…from the past week", "…no junk", "…from the docs") or
-toggle them as chips on the results card.
+</details>
 
-Halo also shows charging, low battery, Bluetooth headphones connecting, downloads in progress/finished,
-and a detached bubble (like Dynamic Island's split) when two things are happening at once. It hides
-itself for fullscreen games, videos and presentations, and sits below a top taskbar so it never covers it.
-
-## Build and run
-
-Requires Windows 10 2004+ / Windows 11, the .NET 8 SDK, and the WebView2 runtime (preinstalled on Windows 11).
+## Build it yourself
 
 ```bash
 dotnet test tests/Halo.Core.Tests
 dotnet run --project src/Halo.App
 ```
 
-### Releasing an update
+You need Windows 10 (2004+) or 11, the .NET 8 SDK, and the WebView2 Runtime.
 
-To ship a version that every installed copy picks up:
+<details>
+<summary><b>Releasing an update</b></summary>
+
 1. Bump `<Version>` in `Directory.Build.props`.
 2. Commit and push.
 3. Run:
@@ -105,71 +265,37 @@ powershell -File scripts/release.ps1 -Publish
 ```
 
 The script:
-- builds a self-contained Release;
-- packages it with [Velopack](https://velopack.io) (`vpk` is a repo-local dotnet tool), including a small delta from the previous release;
-- uploads `Setup.exe`, the portable zip and the update packages to a new GitHub release, using your `gh` login.
+- builds a self-contained release;
+- packages it with [Velopack](https://velopack.io), including a small delta from the previous release;
+- uploads Setup, the portable zip and the update packages to a GitHub release using your `gh` login.
 
-Run it without `-Publish` to build the packages into `artifacts/releases` and try them first.
+Without `-Publish` it only builds into `artifacts/releases`, so you can try it first.
 
-On first launch Halo downloads the Whisper `base` model (~148 MB) to `%LOCALAPPDATA%\Halo\models`.
-Settings, logs and the browser profile live in `%LOCALAPPDATA%\Halo`. The tray icon has the options
-(start with Windows, pin over a top taskbar, voice language, volume popup, visualizer) and "Open logs".
+</details>
 
-## Layout
+<details>
+<summary><b>How it's put together</b></summary>
 
 ```
-src/Halo.Core    pure logic, unit tested: springs, activity priority, query/filter building,
-                 calculator, circle/scribble/tap selection analysis
-src/Halo.App     WPF app
-  Shell/         notch window (state machine + springs), notch shape, fullscreen watcher
-  Views/         compact ears, expanded card, search bar, results card, answer card
-  Search/        hotkey flow, screen freeze overlay, OCR, mic, Whisper
-  Playback/      now playing (Windows media sessions), loopback audio visualizer
-  SystemInfo/    volume, brightness, battery, Bluetooth, downloads
-  Shelf/         shelf store, Explorer-quality icons
-  Notifications/ other apps' toasts via the notification listener, history
-  Interop/       Win32: keyboard hook, window styles, capture
-tests/           xUnit tests for Halo.Core
+src/Halo.Core      pure logic, unit tested: springs, activity priority, parsers (time, money, units,
+                   reminders, snippets, music), calculator, selection analysis, phone-transfer server
+src/Halo.App       WPF app
+  Shell/           the notch window: state machine, spring animation, shape, colour edge
+  Views/           compact pills, expanded dashboard, search bar, results and answer cards
+  Search/          hotkeys, screen freeze, OCR, microphone, Whisper
+  Modules/         self-contained features (music, productivity, clipboard, launcher, snippets,
+                   ambient, meeting/system, phone send, screenshots, selection tools)
+  Playback/        media sessions, audio visualizer
+  SystemInfo/      volume, brightness, battery, Bluetooth, downloads
+  Notifications/   other apps' notifications via the Windows listener
+  Interop/         Win32: keyboard hook, window styles, capture
+tests/             over 1,000 xUnit tests for Halo.Core
 ```
 
-## Known limits
+Each feature is a module in `src/Halo.App/Modules/`; its README explains how to add your own.
 
-- **Google robot check.** On shared/mobile IP addresses Google sometimes shows "I'm not a robot" in
-  the results card. Tick it once; the browser profile keeps the exemption.
-- **Lens** uses the same upload endpoint as lens.google.com's own upload button. It isn't a public API
-  and could change.
-- **Brightness** pop-ups: Halo shows its HUD, but Windows' own brightness flyout can't be suppressed
-  (brightness keys are handled by firmware, not the keyboard hook).
-- **Rare crash (likely fixed in 0.2.1).** Versions up to 0.2.0 could exit with a native heap-corruption
-  error (0xc0000374), usually soon after start. Crash dumps pointed at the WMI component, which 0.2.1 removed.
-  If it still happens, please open an issue.
-- **Notifications** come from Windows' notification listener, read when Windows' notification store
-  changes (desktop apps don't get its live event). Clicking opens the app, not the exact chat or email: Windows doesn't let other
-  apps trigger a toast's own action or reply buttons. Older Windows builds may require MSIX packaging
-  for notification access; Halo says so in the bell tab if that's the case.
-- On layouts where Right Alt is AltGr (English India for ₹, German, French, Spanish, Polish...), Right Alt
-  on its own is the talk key and AltGr + a key still types its character.
-- Halo plays its own soft ping for notifications and a two-note chime for timers and reminders (tray:
-  **Notch sounds**). To stop Windows' own notification sound as well, turn off **Allow notifications to
-  play sounds** in Settings › System › Notifications (tray: **Turn off Windows pop-ups and sounds…**).
-- The Copilot key replaces Windows' own Copilot/Search action while Halo runs. Right Ctrl only counts when
-  held on its own, so Ctrl shortcuts (and Ctrl+click) are unaffected.
-- First launch shows the notch ~3 s after start (WPF's one-time theme load).
-
-## Privacy and security
-
-- Voice is transcribed offline with Whisper. The model download is pinned to a fixed revision and checked against its SHA-256.
-- Searches go to Google, and only when you ask. When a circled image is uploaded to Lens, the card shows "Sent to Google".
-- The results card can only open http/https pages. Pages can't launch apps or protocol handlers.
-- Notification text is hidden while an app has your microphone or camera open, or is capturing the screen.
-- Clipboard history, notes, snippets and other module data are encrypted with Windows DPAPI under your account. Unpinned clipboard items are forgotten after 24 hours.
-- Clipboard secrets from QR codes (e.g. Wi-Fi passwords) are kept out of Windows clipboard history and cloud sync.
-- Logs never contain what you said, searched or copied. They are kept for 3 days.
-- Phone transfers:
-  - work only on your local network, behind a random link token;
-  - received executables are renamed to `.blocked`;
-  - every received file is marked as downloaded from the internet.
+</details>
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Roushan

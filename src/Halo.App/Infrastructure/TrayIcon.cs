@@ -24,6 +24,8 @@ internal sealed class TrayIcon : IDisposable
         menu.Items.Add(new ToolStripSeparator());
 
         var startup = new ToolStripMenuItem("Start with Windows") { Checked = settings.StartWithWindows, CheckOnClick = true };
+        // It can also be turned on from the first-run question; show the real state each time.
+        menu.Opening += (_, _) => startup.Checked = settings.StartWithWindows;
         startup.CheckedChanged += (_, _) =>
         {
             try { settings.StartWithWindows = startup.Checked; }

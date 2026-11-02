@@ -82,7 +82,7 @@ internal sealed class ReminderCard : Grid
     public ReminderItem Reminder { get; }
 
     /// <summary>A rounded text button; Borders rather than Buttons so the card never takes keyboard focus for them.</summary>
-    static Border Pill(string label, bool primary, Action onClick)
+    internal static Border Pill(string label, bool primary, Action onClick)
     {
         var text = new TextBlock
         {

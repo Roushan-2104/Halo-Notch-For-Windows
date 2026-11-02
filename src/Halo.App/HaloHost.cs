@@ -223,6 +223,7 @@ internal sealed class HaloHost : IDisposable
         // is also applied whenever Halo quits, so nothing is lost if it's never clicked.
         _updateReminder = new DispatcherTimer(TimeSpan.FromHours(2), DispatcherPriority.Background, (_, _) => AnnounceUpdate(), _ui);
         _updates.Start();
+        AskAboutStartup();
 
         Own(new TrayIcon(_settings, () => Application.Current.Shutdown(),
             replace => _keys.InterceptVolume = replace && _volume is not null,
@@ -438,6 +439,8 @@ internal sealed class HaloHost : IDisposable
             case "sound":
                 NotchSound.Play(arg.Trim() == "alert" ? Halo.Core.Audio.PingKind.Alert : Halo.Core.Audio.PingKind.Notification);
                 return "ok";
+            case "startup-state":
+                return $"asked={_settings.StartupAsked} enabled={_settings.StartWithWindows} card={_startupAnswer}";
             case "edge-flash":
                 _notch.FlashEdge((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(arg.Trim()));
                 return "ok";
@@ -548,13 +551,69 @@ internal sealed class HaloHost : IDisposable
         Log.Info("System time or time zone changed");
     }
 
+    /// <summary>
+    /// Once, after installing: ask whether Halo should start with Windows. Only for installed copies (a dev
+    /// build's path changes with every build). Ignoring the card for a minute just asks again next launch.
+    /// </summary>
+    void AskAboutStartup()
+    {
+        if (_settings.StartupAsked) return;
+        if (_settings.StartWithWindows)
+        {
+            _settings.StartupAsked = true;
+            _settings.Save();
+            return;
+        }
+        bool test = Environment.GetEnvironmentVariable("HALO_TEST_STARTUP_CARD") == "1" && CommandServer.IsEnabled;
+        if (!_updates.IsInstalled && !test) return;
+
+        DispatcherTimer? dismiss = null;
+        void Answer(bool yes)
+        {
+            dismiss?.Stop();
+            _notch.CloseCard();
+            _settings.StartupAsked = true;
+            if (yes && !test)
+            {
+                try { _settings.StartWithWindows = true; }
+                catch (Exception ex) { Log.Warn("Adding Halo to startup failed", ex); }
+            }
+            _settings.Save();
+            _startupAnswer = yes ? "yes" : "no";
+            Log.Info($"Start with Windows: {(yes ? "on" : "not now")} (first-run question)");
+            Post(new Activity("startup-answer", ActivityKind.Message, PriorityMessage,
+                new MessagePayload(yes ? "" : "", yes ? "Halo will start with Windows" : "OK · change it any time in the tray"), In(2.5)));
+        }
+
+        // A few seconds in, once the first-run messages (voice model download etc.) have had their moment.
+        // (The interval+callback constructor rejects a null callback, so set the interval separately.)
+        var show = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromSeconds(6) };
+        show.Tick += (_, _) =>
+        {
+            show.Stop();
+            _notch.ShowCard(new StartupCard(() => Answer(true), () => Answer(false)), StartupCard.CardWidth, StartupCard.CardHeight, interactive: false);
+            _startupAnswer = "showing";
+            dismiss = new DispatcherTimer(TimeSpan.FromSeconds(60), DispatcherPriority.Background, (_, _) =>
+            {
+                dismiss!.Stop();
+                if (_startupAnswer != "showing") return;
+                _notch.CloseCard();
+                _startupAnswer = "ignored";
+            }, _ui);
+            dismiss.Start();
+        };
+        show.Start();
+    }
+
+    string _startupAnswer = "-";
+
     void AnnounceUpdate()
     {
         if (_updates.ReadyVersion is not { } version) return;
         _updateReminder?.Start();
         // Above routine messages, so a battery or clipboard toast can't bump it off the notch.
         Post(new Activity("update-ready", ActivityKind.Message, PriorityDownloadDone,
-            new MessagePayload("", $"Halo {version} is ready · click to restart"), In(20))
+            new MessagePayload("", "Update ready · click to restart"), In(20))
         {
             Click = RestartForUpdate,
         });
