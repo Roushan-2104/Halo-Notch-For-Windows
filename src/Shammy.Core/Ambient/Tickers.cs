@@ -12,6 +12,36 @@ public enum TickerKind { Cricket, Stocks, Crypto }
 /// <summary>One line the compact ticker rotates through, e.g. "IND 287/4 v AUS".</summary>
 public sealed record TickerItem(TickerKind Kind, string Text, bool Live = false);
 
+public enum TickerTrend { Flat, Up, Down }
+
+/// <summary>
+/// The ticker as one of the resting notch's glances (it used to own a pill that pushed the pet aside). Glance
+/// providers are asked whenever the glance rotates or the peek opens, so the line shown is picked by the clock
+/// rather than by how often it was asked: it moves on every <see cref="Step"/>.
+/// </summary>
+public static class TickerGlance
+{
+    public static readonly TimeSpan Step = TimeSpan.FromSeconds(8);
+
+    /// <summary>Above the clock, below weather (10); a live match is worth more.</summary>
+    public const int Priority = 5, LivePriority = 25;
+
+    /// <summary>The line to show at <paramref name="now"/> (each line in turn, <see cref="Step"/> apiece); null when there is none.</summary>
+    public static TickerItem? Pick(IReadOnlyList<TickerItem> items, DateTime now)
+    {
+        if (items.Count == 0) return null;
+        long slot = now.Ticks / Step.Ticks;
+        return items[(int)(slot % items.Count)];
+    }
+
+    /// <summary>A live match lifts the whole ticker above the weather.</summary>
+    public static int PriorityOf(IReadOnlyList<TickerItem> items) => items.Any(i => i.Live) ? LivePriority : Priority;
+
+    /// <summary>Which way a stock or coin moved ("▲0.4%" / "▼1.2%"), for the glance's dot colour.</summary>
+    public static TickerTrend Trend(string text) =>
+        text.Contains('▼') ? TickerTrend.Down : text.Contains('▲') ? TickerTrend.Up : TickerTrend.Flat;
+}
+
 public static class TickerFormat
 {
     const string Up = "\u25B2", Down = "\u25BC";

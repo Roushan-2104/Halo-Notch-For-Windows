@@ -30,6 +30,7 @@ internal sealed class RestView : Grid
     FrameworkElement? _slot;
     GlanceEntry? _shown;
     VisualizerBars? _bars;
+    bool _petEnabled = true;
 
     public RestView(ShammyServices services, GlanceFeed feed)
     {
@@ -74,6 +75,19 @@ internal sealed class RestView : Grid
     public ShammyPet Pet { get; }
     public PetController Mood { get; }
 
+    public bool PetEnabled => _petEnabled;
+
+    /// <summary>"pet off": no eyes, and none of the moods' own texts; the glance has the resting notch to itself.</summary>
+    public void SetPetEnabled(bool on)
+    {
+        _petEnabled = on;
+        Pet.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        _glanceHost.Margin = new Thickness(on ? 8 : Padding, 0, Padding, 0);
+        _shown = null;
+        if (IsVisible) Rotate(animate: false, advance: false);
+        else Swap(null, animate: false);
+    }
+
     public string CurrentText => _shown is null ? "-" : _shown.Item.Text + (_shown.Secondary is null || _shown.Kind == GlanceKind.Badge ? "" : " " + _shown.Secondary);
 
     double MusicLevel()
@@ -85,6 +99,7 @@ internal sealed class RestView : Grid
     /// <summary>What the mood shows on the right instead of the rotation, or null to rotate.</summary>
     GlanceEntry? MoodSide()
     {
+        if (!_petEnabled) return null;
         var mood = Mood.Mood;
         return mood switch
         {
@@ -178,7 +193,8 @@ internal sealed class RestView : Grid
         var row = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            // Beside the pet the glance sits at the right; on its own it's centred in the notch.
+            HorizontalAlignment = _petEnabled ? HorizontalAlignment.Right : HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             RenderTransform = new TranslateTransform(),
         };

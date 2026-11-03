@@ -63,6 +63,9 @@ internal sealed class AppSettings
     /// <summary>Shammy's own soft ping for notifications and a chime for timers/reminders.</summary>
     public bool NotchSounds { get; set; } = true;
 
+    /// <summary>Shammy the pet (the eyes on the resting notch); off leaves just the rotating glance ("pet off").</summary>
+    public bool PetEnabled { get; set; } = true;
+
     /// <summary>App IDs the user muted from the notch.</summary>
     public List<string> MutedNotificationApps { get; set; } = new();
 

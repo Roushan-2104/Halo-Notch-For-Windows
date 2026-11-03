@@ -17,13 +17,12 @@ internal sealed class AmbientData
     public List<TickerKind> TickerKinds { get; set; } = new();
     public List<string> StockSymbols { get; set; } = new(StocksProvider.DefaultSymbols);
     public string? CricketTeam { get; set; }
-
-    public bool PetEnabled { get; set; }
 }
 
 /// <summary>
-/// Weather, customizable tickers and a tiny pet: quiet things that live in the notch when nothing
-/// else is happening. Each feature owns its timers and only runs while it has something to do.
+/// Weather and customizable tickers: quiet things for the resting notch's glance and the weather card, plus
+/// "pet on/off" for the resting notch's pet (AppSettings.PetEnabled). Each feature owns its timers and only
+/// runs while it has something to do.
 /// </summary>
 internal sealed class AmbientModule : IShammyModule
 {
@@ -31,7 +30,6 @@ internal sealed class AmbientModule : IShammyModule
     AmbientData _data = new();
     WeatherFeature? _weather;
     TickerFeature? _ticker;
-    PetFeature? _pet;
 
     public string Name => "ambient";
 
@@ -44,21 +42,17 @@ internal sealed class AmbientModule : IShammyModule
 
         _weather = new WeatherFeature(ctx, _data, Save);
         _ticker = new TickerFeature(ctx, _data, Save);
-        _pet = new PetFeature(ctx, _data, Save);
         _weather.Start();
         _ticker.Start();
-        _pet.Start();
 
-        ctx.AddCommand(new AmbientCommand(_weather, _ticker, _pet));
+        ctx.AddCommand(new AmbientCommand(_weather, _ticker, ctx));
         ctx.AddTrayToggle("Ticker", () => _data.TickerEnabled, on => _ticker.SetEnabled(on));
-        ctx.AddTrayToggle("Pet", () => _data.PetEnabled, on => _pet.SetEnabled(on));
 
         ctx.AddPipeCommand("ambient-weather", _ => _weather.RefreshNowBlocking());
         ctx.AddPipeCommand("ambient-weather-city", arg => _weather.CityBlocking(arg));
         ctx.AddPipeCommand("ambient-ticker-preview", arg => _ticker.PreviewBlocking(arg));
-        ctx.AddPipeCommand("ambient-pet", arg => _pet.Force(arg));
         ctx.AddPipeCommand("ambient-state", _ =>
-            $"online={NetworkInterface.GetIsNetworkAvailable()}; weather: {_weather.State}; ticker: {_ticker.State}; pet: {_pet.State}");
+            $"online={NetworkInterface.GetIsNetworkAvailable()}; weather: {_weather.State}; ticker: {_ticker.State}; pet: {(ctx.Settings.PetEnabled ? "on" : "off")}");
     }
 
     void Save() => _ctx.Save(_data);
@@ -67,12 +61,11 @@ internal sealed class AmbientModule : IShammyModule
     {
         _weather?.Dispose();
         _ticker?.Dispose();
-        _pet?.Dispose();
     }
 }
 
 /// <summary>"weather", "weather in mumbai", "ticker cricket", "pet on"... Parsing lives in Shammy.Core so it is unit tested.</summary>
-internal sealed class AmbientCommand(WeatherFeature weather, TickerFeature ticker, PetFeature pet) : ITextCommand, ICommandPreview
+internal sealed class AmbientCommand(WeatherFeature weather, TickerFeature ticker, ModuleContext ctx) : ITextCommand, ICommandPreview
 {
     public bool CanHandle(string text) =>
         AmbientCommands.ParseWeather(text) is not null || CityWeather.Parse(text) is not null
@@ -91,8 +84,10 @@ internal sealed class AmbientCommand(WeatherFeature weather, TickerFeature ticke
         if (AmbientCommands.ParseTicker(text) is { } cmd) return ticker.Run(cmd);
         if (AmbientCommands.ParsePet(text) is { } on)
         {
-            pet.SetEnabled(on);
-            return new CommandResult(on ? "\uE76E" : "\uE711", on ? "Pet on" : "Pet off", on ? "It lives in the notch when nothing else is showing" : null);
+            // The pet is the resting notch's eyes; off leaves just the rotating glance there.
+            ctx.Notch.SetPetEnabled(on);
+            return new CommandResult(on ? "\uE76E" : "\uE711", on ? "Pet on" : "Pet off",
+                on ? "Shammy's eyes are back in the notch" : "The resting notch shows just the glance");
         }
         return new CommandResult("\uE783", "Not an ambient command", IsError: true);
     }

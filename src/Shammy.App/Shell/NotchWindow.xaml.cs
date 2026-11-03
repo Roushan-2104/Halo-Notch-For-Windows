@@ -106,6 +106,7 @@ public partial class NotchWindow : Window
         _peekView = new PeekView(services, _glances);
         ContentHost.Children.Insert(0, _peekView);
         ContentHost.Children.Insert(0, _restView);
+        if (!services.Settings.PetEnabled) _restView.SetPetEnabled(false);
         _rest = AddLayer(_restView);
         _peek = AddLayer(_peekView);
         _peekView.GlanceClicked += OnPeekGlanceClicked;
@@ -154,7 +155,7 @@ public partial class NotchWindow : Window
         {
             if (_hoverIn.IsEnabled) SampleHover();
             // Petting: a little wiggle over the resting pet makes it happy.
-            if (_mode == NotchMode.Idle && _wiggle.Add(e.GetPosition(Root).X, _hoverClock.Elapsed))
+            if (_mode == NotchMode.Idle && _restView.PetEnabled && _wiggle.Add(e.GetPosition(Root).X, _hoverClock.Elapsed))
             {
                 _restView.Mood.Petted();
                 _intent.Reset();
@@ -1055,7 +1056,7 @@ public partial class NotchWindow : Window
     {
         var pet = _restView.Pet;
         var mood = _restView.Mood;
-        return $"mode={_mode} peeking={_peeking} mood={mood.Mood}{(mood.Forced is null ? "" : "(forced)")} " +
+        return $"mode={_mode} peeking={_peeking} pet={(_restView.PetEnabled ? "on" : "off")} mood={mood.Mood}{(mood.Forced is null ? "" : "(forced)")} " +
                $"eyes={pet.Mood} sleepyHours={EyeLogic.IsSleepy(DateTime.Now)} following={pet.IsFollowing} " +
                $"look={pet.FollowOffset:0.0} glance='{_restView.CurrentText}' items=[{_glances.Describe()}] " +
                $"intent={_intent.Stage} speed={_intent.Speed:0.00}";
@@ -1064,6 +1065,17 @@ public partial class NotchWindow : Window
     internal string DescribePeek() => $"mode={_mode} {_peekView.Describe()}";
 
     internal void BounceEyes() => _restView.Pet.Bounce();
+
+    /// <summary>Shammy the pet on the resting notch on or off ("pet on/off"); saved in the settings.</summary>
+    internal void SetPetEnabled(bool on)
+    {
+        if (_services.Settings.PetEnabled != on)
+        {
+            _services.Settings.PetEnabled = on;
+            _services.Settings.Save();
+        }
+        _restView.SetPetEnabled(on);
+    }
 
     /// <summary>Force the pet's mood for testing ("auto" follows the real inputs again).</summary>
     internal string SetPetMood(string name)

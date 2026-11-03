@@ -1,26 +1,26 @@
 using System.Net.NetworkInformation;
 using System.Windows.Threading;
-using Shammy.Core.Activities;
 using Shammy.Core.Ambient;
+using Shammy.Core.Cards;
 
 namespace Shammy.Modules.Ambient;
 
 /// <summary>
-/// The customizable ticker: any mix of cricket, stocks and crypto rotating in the compact notch
-/// below media (priority 15), so it shows only when nothing more important is going on. Each provider
-/// polls on its own schedule and only while it is switched on.
+/// The customizable ticker: any mix of cricket, stocks and crypto, shown as one of the resting notch's glances
+/// (one line at a time, see <see cref="TickerGlance"/>) beside the pet, rather than as a pill that took the
+/// resting notch over. Each provider polls on its own schedule and only while it is switched on.
 /// </summary>
 internal sealed class TickerFeature : IDisposable
 {
-    const string ActivityId = "ambient.ticker";
-    const int Priority = 15;
     const string Glyph = "\uEAFC";
 
     readonly ModuleContext _ctx;
     readonly AmbientData _data;
     readonly Action _save;
-    readonly TickerContent _content = new();
     readonly Dictionary<TickerKind, Source> _sources = new();
+
+    /// <summary>The fresh lines from every active provider, in provider order; the glance steps through them.</summary>
+    IReadOnlyList<TickerItem> _items = Array.Empty<TickerItem>();
 
     sealed class Source(ITickerProvider provider, DispatcherTimer timer)
     {
@@ -59,8 +59,22 @@ internal sealed class TickerFeature : IDisposable
 
     public void Start()
     {
+        _ctx.AddGlance("ticker", Glance);
         NetworkChange.NetworkAvailabilityChanged += OnNetworkChanged;
         Apply();
+    }
+
+    /// <summary>The current line, with a dot that says which way it moved; null while there is nothing to show.</summary>
+    GlanceItem? Glance()
+    {
+        if (TickerGlance.Pick(_items, DateTime.UtcNow) is not { } item) return null;
+        var accent = TickerGlance.Trend(item.Text) switch
+        {
+            TickerTrend.Up => NotchPalette.Battery,
+            TickerTrend.Down => NotchPalette.Alarm,
+            _ => NotchPalette.Text2,
+        };
+        return new GlanceItem(CardMath.Fit(item.Text, 24), accent, TickerGlance.PriorityOf(_items));
     }
 
     void OnNetworkChanged(object? sender, NetworkAvailabilityEventArgs e)
@@ -82,7 +96,7 @@ internal sealed class TickerFeature : IDisposable
         Apply();
     }
 
-    /// <summary>Start what should run, stop what shouldn't, and refresh the pill.</summary>
+    /// <summary>Start what should run, stop what shouldn't, and refresh the glance's lines.</summary>
     void Apply()
     {
         foreach (var s in _sources.Values)
@@ -174,15 +188,8 @@ internal sealed class TickerFeature : IDisposable
             .OrderBy(s => s.Provider.Kind)
             .SelectMany(s => s.Items)
             .ToList();
-        if (items.Count == 0)
-        {
-            // Nothing to say (off, still loading, or no live matches): give the notch back.
-            _ctx.Remove(ActivityId);
-            _content.SetItems(items);
-            return;
-        }
-        _content.SetItems(items);
-        if (_ctx.Get(ActivityId) is null) _ctx.Post(new Activity(ActivityId, ActivityKind.Custom, Priority, _content));
+        // Nothing to say (off, still loading, or no live matches) means no glance.
+        _items = items;
     }
 
     public CommandResult Run(TickerCommand cmd)
@@ -300,8 +307,8 @@ internal sealed class TickerFeature : IDisposable
                 (s.Error is null ? "" : $" ({s.Error})") +
                 (s.Timer.IsEnabled ? $", next {s.Timer.Interval.TotalSeconds:0}s" : ""));
             return $"{(_data.TickerEnabled ? "on" : "off")} kinds=[{Describe()}] symbols=[{string.Join(",", _data.StockSymbols)}]" +
-                   $"{(_data.CricketTeam is { } t ? $" team={t}" : "")} shown={(_ctx.Get(ActivityId) is null ? "no" : "yes")}" +
-                   $" current='{_content.Current}' {string.Join("; ", sources)}";
+                   $"{(_data.CricketTeam is { } t ? $" team={t}" : "")} lines={_items.Count}" +
+                   $" glance='{Glance()?.Text ?? "-"}' {string.Join("; ", sources)}";
         }
     }
 
@@ -313,6 +320,5 @@ internal sealed class TickerFeature : IDisposable
             s.Timer.Stop();
             s.Cts?.Cancel();
         }
-        _content.Dispose();
     }
 }
