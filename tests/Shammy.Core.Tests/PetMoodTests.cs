@@ -86,14 +86,24 @@ public class PetMoodTests
     }
 
     [Theory]
-    [InlineData("Standup · 2 min", true)]
-    [InlineData("Standup in 5 min", true)]
-    [InlineData("Standup · 10 min", false)]
-    [InlineData("Standup now", true)]
-    [InlineData("Standup 10:30", false)]
-    [InlineData("31° Pune", false)]
-    public void Reads_meeting_soon_from_a_calendar_glance(string text, bool soon) =>
-        Assert.Equal(soon, PetMoods.IsMeetingSoon(text));
+    [InlineData(2, true)]
+    [InlineData(5, true)]
+    [InlineData(0, true)]
+    [InlineData(6, false)]
+    [InlineData(-1, false)]   // already started: the meeting pill has it, not the pet
+    [InlineData(90, false)]
+    public void Meeting_soon_comes_from_the_start_time(int minutesAway, bool soon)
+    {
+        var now = new DateTimeOffset(2026, 11, 3, 10, 25, 0, TimeSpan.FromHours(5.5));
+        Assert.Equal(soon, PetMoods.IsMeetingSoon(now.AddMinutes(minutesAway), now));
+    }
+
+    [Fact]
+    public void Meeting_soon_compares_instants_across_offsets()
+    {
+        var now = new DateTimeOffset(2026, 11, 3, 10, 25, 0, TimeSpan.FromHours(5.5));
+        Assert.True(PetMoods.IsMeetingSoon(now.ToUniversalTime().AddMinutes(3), now));
+    }
 }
 
 public class WiggleTests

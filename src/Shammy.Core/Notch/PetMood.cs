@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Shammy.Core.Notch;
 
 /// <summary>What Shammy the notch pet is feeling, shown by its eyes on the resting notch.</summary>
@@ -77,17 +75,14 @@ public static class PetMoods
         return PetMood.Idle;
     }
 
-    static readonly Regex Minutes = new(@"\b(?:in\s+)?(\d{1,3})\s*(?:min|mins|minutes|m)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
     /// <summary>
-    /// Whether a calendar glance ("Standup · 2 min", "Standup in 4 min", "Standup now") says a meeting starts
-    /// within <see cref="MeetingWithinMinutes"/>. Glances carry only text, so this reads the text.
+    /// Whether an event starting at <paramref name="startsAt"/> is about to: within the next
+    /// <see cref="MeetingWithinMinutes"/>. One that has already started isn't "soon" any more (its pill is up).
     /// </summary>
-    public static bool IsMeetingSoon(string glanceText)
+    public static bool IsMeetingSoon(DateTimeOffset startsAt, DateTimeOffset now)
     {
-        if (Regex.IsMatch(glanceText, @"\bnow\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) return true;
-        var m = Minutes.Match(glanceText);
-        return m.Success && int.TryParse(m.Groups[1].Value, out int minutes) && minutes <= MeetingWithinMinutes;
+        var until = startsAt - now;
+        return until >= TimeSpan.Zero && until <= TimeSpan.FromMinutes(MeetingWithinMinutes);
     }
 }
 

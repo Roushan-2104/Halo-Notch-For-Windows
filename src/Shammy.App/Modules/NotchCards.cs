@@ -62,4 +62,6 @@ public static class NotchPalette
 /// <param name="AccentHex">The dot colour, one of <see cref="NotchPalette"/>.</param>
 /// <param name="Priority">Higher shows first and, in the peek, wins the single slot.</param>
 /// <param name="OnClick">What clicking it in the peek does (join a meeting, open the card); null = open the notch.</param>
-public sealed record GlanceItem(string Text, string AccentHex, int Priority = 0, Action? OnClick = null);
+/// <param name="StartsAt">When the thing it's about starts (a meeting), so the pet can tell "about to start" without
+/// reading the text; null for anything that isn't an event.</param>
+public sealed record GlanceItem(string Text, string AccentHex, int Priority = 0, Action? OnClick = null, DateTimeOffset? StartsAt = null);

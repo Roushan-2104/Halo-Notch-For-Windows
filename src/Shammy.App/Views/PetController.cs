@@ -40,7 +40,7 @@ internal sealed class PetController
     public string NotificationTitle { get; private set; } = "";
     public string NotificationApp { get; private set; } = "";
 
-    /// <summary>The calendar glance that makes it "meeting soon", if any.</summary>
+    /// <summary>The glance about an event starting within minutes (the next meeting) that makes it "meeting soon", if any.</summary>
     public GlanceEntry? Meeting { get; private set; }
 
     public void SetActive(bool on)
@@ -109,9 +109,8 @@ internal sealed class PetController
 
     PetInputs Inputs()
     {
-        Meeting = _feed.Current().FirstOrDefault(e =>
-            e.Kind == GlanceKind.Plain && string.Equals(e.Item.AccentHex, NotchPalette.Calendar, StringComparison.OrdinalIgnoreCase) &&
-            PetMoods.IsMeetingSoon(e.Item.Text));
+        var now = DateTimeOffset.Now;
+        Meeting = _feed.Current().FirstOrDefault(e => e.Item.StartsAt is { } start && PetMoods.IsMeetingSoon(start, now));
 
         int? battery = null;
         bool charging = false;

@@ -334,7 +334,8 @@ internal sealed class CalendarModule : IShammyModule
     {
         if (CalendarAgenda.Glance(_store.Cache, DateTime.Now) is not { } g) return null;
         var item = g.Item;
-        return new GlanceItem(g.Text, NotchPalette.Calendar, g.Priority, item.HasLink ? () => Join(item) : null);
+        return new GlanceItem(g.Text, NotchPalette.Calendar, g.Priority, item.HasLink ? () => Join(item) : null,
+            StartsAt: new DateTimeOffset(DateTime.SpecifyKind(item.Start, DateTimeKind.Local)));
     }
 
     // ---- Test pipe -------------------------------------------------------------------------------
