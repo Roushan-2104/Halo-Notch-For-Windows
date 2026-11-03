@@ -81,7 +81,11 @@ internal interface ISelectionHandler
 /// <summary>An extra chip on the results card. <see cref="Selection"/> is null for typed/spoken searches.</summary>
 internal sealed record ResultChip(string Label, Func<SelectionInfo?, bool> IsVisible, Action<SelectionInfo?, ResultView> OnClick);
 
-internal sealed record ShelfAction(string Label, Action<ShelfItem> Run);
+internal sealed record ShelfAction(string Label, Action<ShelfItem> Run)
+{
+    /// <summary>Whether the action is offered for this item (Convert only for images); null means always.</summary>
+    public Func<ShelfItem, bool>? AppliesTo { get; init; }
+}
 
 internal sealed record ModuleTrayItem(string Text, Action? OnClick = null, Func<bool>? IsChecked = null, Action<bool>? SetChecked = null);
 

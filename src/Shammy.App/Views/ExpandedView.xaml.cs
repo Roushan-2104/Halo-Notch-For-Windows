@@ -696,7 +696,7 @@ public partial class ExpandedView : UserControl
         }
         Add("Open", () => Open(item.Path));
         Add("Show in folder", () => Process.Start(Interop.Native.ExplorerPath, $"/select,\"{item.Path}\""));
-        foreach (var action in ShelfActions) Add(action.Label, () => action.Run(item));
+        foreach (var action in ShelfActions.Where(a => a.AppliesTo?.Invoke(item) ?? true)) Add(action.Label, () => action.Run(item));
         Add("Remove from shelf", () => _s?.Shelf.Remove(item));
         menu.PlacementTarget = (UIElement)sender;
         // Keep the notch open while the menu is up (the pointer leaves the notch to reach it).
