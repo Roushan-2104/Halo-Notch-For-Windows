@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -25,7 +24,7 @@ internal sealed class ActivityView : Grid
     readonly ShammyServices _services;
     readonly StackPanel _left = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left };
     readonly StackPanel _right = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
-    readonly TrackedLabel _label = new();
+    readonly TrackedText _label = new() { FontWeight = FontWeights.SemiBold };
     readonly TextBlock _value = new()
     {
         FontSize = 14,
@@ -52,8 +51,9 @@ internal sealed class ActivityView : Grid
 
         _value.FontFamily = (FontFamily)Application.Current.Resources["WallFont"];
         _value.Foreground = (Brush)Application.Current.Resources["WallText"];
-        System.Windows.Documents.Typography.SetNumeralAlignment(_value, FontNumeralAlignment.Tabular);
 
+        // WallFont + SemiBold falls back to Regular; the SemiBold family is the real weight.
+        _label.SetResourceReference(TrackedText.FontFamilyProperty, "WallFontSemiBold");
         _left.Margin = new Thickness(Padding, 0, 4, 0);
         _left.Children.Add(_badge);
         _left.Children.Add(_label);
@@ -86,7 +86,10 @@ internal sealed class ActivityView : Grid
         PetOn = petOn;
         var s = live.State;
 
-        _label.Plain = s.PlainLabel;
+        // Names (an earbuds model) stay as typed, a touch larger; everything else is the tracked uppercase label.
+        _label.Uppercase = !s.PlainLabel;
+        _label.Tracking = s.PlainLabel ? 0 : 0.12;
+        _label.FontSize = s.PlainLabel ? 11.5 : 10.5;
         _label.Text = s.Label;
         _value.Text = s.Value;
         _value.Visibility = s.Value.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -224,91 +227,5 @@ internal sealed class ActivityView : Grid
         Canvas.SetLeft(e, x);
         Canvas.SetTop(e, y);
         return e;
-    }
-
-    /// <summary>
-    /// The board's tiny label: uppercase with 0.12em of tracking, which WPF's TextBlock can't do, so each letter
-    /// is laid out by hand. Names (an earbuds model) stay as typed, a touch larger. Trims with an ellipsis.
-    /// </summary>
-    internal sealed class TrackedLabel : FrameworkElement
-    {
-        string _text = "";
-        bool _plain;
-        readonly List<(FormattedText Glyph, double X)> _glyphs = new();
-        double _width;
-
-        public TrackedLabel()
-        {
-            VerticalAlignment = VerticalAlignment.Center;
-            SnapsToDevicePixels = true;
-        }
-
-        public string Text
-        {
-            get => _text;
-            set
-            {
-                if (_text == value) return;
-                _text = value;
-                InvalidateMeasure();
-                InvalidateVisual();
-            }
-        }
-
-        public bool Plain
-        {
-            get => _plain;
-            set
-            {
-                if (_plain == value) return;
-                _plain = value;
-                InvalidateMeasure();
-                InvalidateVisual();
-            }
-        }
-
-        double FontSize => _plain ? 11.5 : 10.5;
-        double Tracking => _plain ? 0 : FontSize * 0.12;
-
-        FormattedText Make(string s, double dpi) => new(s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface((FontFamily)Application.Current.Resources["WallFontSemiBold"], FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
-            FontSize, (Brush)Application.Current.Resources["WallText2"], dpi);
-
-        protected override Size MeasureOverride(Size available)
-        {
-            double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            string text = _plain ? _text : _text.ToUpper(CultureInfo.CurrentUICulture);
-            double max = Math.Min(available.Width, double.IsNaN(MaxWidth) ? double.PositiveInfinity : MaxWidth);
-            Layout(text, dpi);
-            if (_width > max && text.Length > 1)
-            {
-                // Drop letters until the text plus an ellipsis fits.
-                for (int n = text.Length - 1; n >= 1; n--)
-                {
-                    Layout(text[..n].TrimEnd() + "…", dpi);
-                    if (_width <= max) break;
-                }
-            }
-            return new Size(Math.Min(_width, max), 14);
-        }
-
-        void Layout(string text, double dpi)
-        {
-            _glyphs.Clear();
-            double x = 0;
-            var e = StringInfo.GetTextElementEnumerator(text);
-            while (e.MoveNext())
-            {
-                var g = Make(e.GetTextElement(), dpi);
-                _glyphs.Add((g, x));
-                x += g.WidthIncludingTrailingWhitespace + Tracking;
-            }
-            _width = Math.Max(0, x - Tracking);
-        }
-
-        protected override void OnRender(DrawingContext dc)
-        {
-            foreach (var (glyph, x) in _glyphs) dc.DrawText(glyph, new Point(x, (14 - glyph.Height) / 2));
-        }
     }
 }
