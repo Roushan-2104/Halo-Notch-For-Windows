@@ -54,15 +54,23 @@ public static class WindowsSearchSql
            .Append(ScopeUrl(scopeFolder)).Append('\'');
         foreach (var t in tokens)
             sql.Append(" AND CONTAINS(System.FileName, '\"").Append(Literal(t)).Append("*\"')");
-        // Package folders and app data would otherwise fill the top rows (one project's node_modules has
-        // hundreds of README.md). Full-text NOT CONTAINS costs ~100 ms; NOT LIKE '%…%' scans and took seconds.
+        // Package folders, build output and app data would otherwise fill the top rows (one project's
+        // node_modules has hundreds of README.md). Full-text NOT CONTAINS on the folder path costs ~100 ms
+        // for the whole list; NOT LIKE '%…%' scans and took seconds. It matches whole words, so a folder
+        // called "Build Week" is skipped too; dotted names (.vs, .idea) are filtered afterwards instead,
+        // since the word breaker would turn ".next" into "next".
         foreach (var dir in ExcludedFolderWords)
             sql.Append(" AND NOT CONTAINS(System.ItemFolderPathDisplay, '\"").Append(dir).Append("\"')");
         sql.Append(" ORDER BY System.DateModified DESC");
         return sql.ToString();
     }
 
-    static readonly string[] ExcludedFolderWords = { "node_modules", "AppData" };
+    /// <summary>Folder words excluded in the query itself (developer folders and app data).</summary>
+    public static readonly IReadOnlyList<string> ExcludedFolderWords = new[]
+    {
+        "node_modules", "AppData", "__pycache__", "venv", "env", "obj", "bin", "dist", "build", "target",
+        "packages", "coverage",
+    };
 
     static string Literal(string s) => s.Replace("'", "''");
 }
@@ -73,7 +81,12 @@ public sealed record FileHit(string Path, bool IsFolder);
 /// <summary>Turns raw index hits into the few worth showing.</summary>
 public static class FileResults
 {
-    static readonly string[] NoiseDirs = { "\\node_modules\\", "\\.git\\", "\\$recycle.bin\\", "\\__pycache__\\", "\\.vs\\", "\\obj\\", "\\bin\\debug\\", "\\bin\\release\\" };
+    /// <summary>Folder names never worth showing files from: VCS, IDE, package and build-output folders.</summary>
+    static readonly HashSet<string> NoiseDirs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "node_modules", ".git", "$recycle.bin", "__pycache__", "venv", ".venv", "env", "bin", "obj", "dist", "build",
+        ".vs", ".idea", ".gradle", "target", "packages", ".next", ".nuxt", "coverage",
+    };
 
     /// <summary>App data, build output, VCS internals, Office lock files and dotfiles nobody opens by name.</summary>
     public static bool IsNoise(string path, string profile)
@@ -81,9 +94,10 @@ public static class FileResults
         if (string.IsNullOrEmpty(path)) return true;
         var p = path.Replace('/', '\\');
         if (profile.Length > 0 && p.StartsWith(profile.TrimEnd('\\') + "\\AppData\\", StringComparison.OrdinalIgnoreCase)) return true;
-        var lower = p.ToLowerInvariant() + "\\";
-        if (NoiseDirs.Any(d => lower.Contains(d, StringComparison.Ordinal))) return true;
-        var name = System.IO.Path.GetFileName(p.TrimEnd('\\'));
+        var segments = p.TrimEnd('\\').Split('\\');
+        // Any folder on the way, or the item itself when it is one of those folders.
+        if (segments.Any(NoiseDirs.Contains)) return true;
+        var name = segments[^1];
         return name.Length == 0 || name.StartsWith("~$", StringComparison.Ordinal) || name.StartsWith('.') ||
                name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
     }

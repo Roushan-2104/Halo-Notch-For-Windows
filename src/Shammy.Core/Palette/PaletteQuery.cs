@@ -16,9 +16,6 @@ public static class PaletteQuery
     static readonly Regex Question = new(
         @"^(?:how|what|whats|what's|why|when|where|who|whom|whose|which|is|are|was|were|can|could|does|do|did|should|will|would|define|meaning|weather|news|price|best|near)\b", Opts);
 
-    static readonly Regex Mathy = new(@"^[\d\s.,+\-*/^%()=x×÷]+$", Opts);
-    static readonly Regex SongChars = new(@"^[\p{L}\p{N}\s'’&.,!\-]+$", Opts);
-
     static readonly (string Word, MediaControl Control)[] MediaWords =
     {
         ("pause", MediaControl.PlayPause), ("play", MediaControl.PlayPause), ("resume", MediaControl.PlayPause),
@@ -50,21 +47,29 @@ public static class PaletteQuery
     }
 
     /// <summary>
-    /// What to offer as "Play … on YouTube Music": the song from "play X", or the text itself when it reads
-    /// like a song or artist (a few plain words, not a question, not a sum, nothing local matched it
-    /// strongly). Null when it shouldn't be offered.
+    /// What to offer as "Play … on YouTube Music", only when the text asks to play something: "play X",
+    /// "put on X", or Hindi/Hinglish "X bajao / chalao / lagao / sunao" (also "bajao X"). Plain words are
+    /// never guessed to be songs. Null when there's no play intent.
     /// </summary>
-    public static string? MusicQuery(string text, bool strongLocalMatch)
+    public static string? MusicQuery(string text)
     {
         if (MusicCommand.Parse(text) is { Action: MusicAction.PlayYouTubeMusic } intent) return intent.Query;
-        if (strongLocalMatch) return null;
-        var t = Regex.Replace((text ?? "").Trim(), @"\s+", " ");
-        if (t.Length < 3 || t.Length > 60) return null;
-        if (IsQuestion(t) || Mathy.IsMatch(t) || !SongChars.IsMatch(t) || !t.Any(char.IsLetter)) return null;
-        if (t.Split(' ').Length > 6) return null;
+        var t = Regex.Replace((text ?? "").Trim().TrimEnd('.', '!', '?'), @"\s+", " ");
+        var m = HindiPlayAfter.Match(t);
+        if (!m.Success) m = HindiPlayBefore.Match(t);
+        if (!m.Success) return null;
+        var q = SongWord.Replace(m.Groups["q"].Value.Trim(), "").Trim();
+        if (q.Length < 2) return null;
         // What "play X" would actually do; "play store" and friends are searches, not songs.
-        return MusicCommand.Parse("play " + t) is { Action: MusicAction.PlayYouTubeMusic } guess ? guess.Query : null;
+        return MusicCommand.Parse("play " + q) is { Action: MusicAction.PlayYouTubeMusic } guess ? guess.Query : null;
     }
+
+    const string HindiVerb = @"(?:baja|bajao|baja\s+do|chalao|chala\s+do|lagao|laga\s+do|sunao|suna\s+do)";
+    static readonly Regex HindiPlayAfter = new($@"^(?<q>.+?)\s+{HindiVerb}(?:\s+(?:na|please|yaar))?$", Opts);
+    static readonly Regex HindiPlayBefore = new($@"^{HindiVerb}\s+(?<q>.+)$", Opts);
+
+    // "arijit ke gaane bajao" → "arijit"; "tum hi ho song chalao" → "tum hi ho".
+    static readonly Regex SongWord = new(@"\s+(?:ke|ka|ki)\s+(?:gaane|gane|gaana|gana|songs?)$|\s+(?:wala\s+|vala\s+)?(?:gaana|gana|gaane|gane|song|songs)$", Opts);
 
     /// <summary>What a timer/reminder/note command will do, in a few words; null when there's nothing useful to say.</summary>
     public static string? DescribeProductivity(ProductivityCommand c, DateTime now) => c.Action switch

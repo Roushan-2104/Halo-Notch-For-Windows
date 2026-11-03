@@ -82,6 +82,7 @@ internal sealed class PaletteView : Border
     static string EnterHint(PaletteItem item) => item.Kind switch
     {
         PaletteKind.File => "Enter · Ctrl+Enter folder",
+        _ when item.Tag is PaletteEntry { EnterHint: { } hint } => hint(),
         _ when item.Tag is PaletteEntry { Adjustable: true } => "← → · Enter",
         _ => "Enter",
     };

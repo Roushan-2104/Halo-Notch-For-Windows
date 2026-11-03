@@ -30,6 +30,9 @@ internal sealed class PaletteEntry
 
     public bool Adjustable => Adjust is not null;
 
+    /// <summary>The chosen row's hint when Enter does something other than "run it" ("Enter mute").</summary>
+    public Func<string>? EnterHint { get; init; }
+
     public FrameworkElement? Control { get; init; }
 
     /// <summary>Whether picking it should teach the ranker (web and in-place controls don't).</summary>
@@ -212,9 +215,8 @@ internal sealed class PaletteModule : IShammyModule
             foreach (var (control, match) in PaletteQuery.MediaControls(text))
                 items.Add(MediaItem(control, match));
         }
-        // A guess only when nothing local recognised the text: "wifi" or "chrome" aren't songs.
-        bool strong = command is not null || items.Any(i => i.Kind is PaletteKind.App or PaletteKind.Setting or PaletteKind.Media);
-        if (!musicCommand && PaletteQuery.MusicQuery(text, strong) is { } song)
+        // Only with a play intent the music command doesn't cover ("tum hi ho bajao"); plain words aren't songs.
+        if (!musicCommand && PaletteQuery.MusicQuery(text) is { } song)
         {
             items.Add(new PaletteItem("music:youtube", PaletteKind.Music, $"Play \u201C{song}\u201D", "YouTube Music", 60)
             {
@@ -312,7 +314,7 @@ internal sealed class PaletteModule : IShammyModule
                     {
                         Hint = "Sound",
                         Confident = exact,
-                        Tag = VolumeEntry(key, volume.Level, volume.Muted, OpenPage),
+                        Tag = VolumeEntry(key, volume.Level, volume.Muted),
                     });
                     // The output picker: one row per device, current one first.
                     foreach (var device in _audio.List().Take(3))
@@ -335,7 +337,7 @@ internal sealed class PaletteModule : IShammyModule
                     {
                         Hint = "Settings",
                         Confident = exact,
-                        Tag = BluetoothEntry(key, OpenPage),
+                        Tag = BluetoothEntry(key),
                     });
                     break;
                 default:
@@ -373,12 +375,20 @@ internal sealed class PaletteModule : IShammyModule
         slider.ValueChanged -= _brightnessHandler;
         _brightnessHandler = Apply;
         slider.ValueChanged += _brightnessHandler;
-        return new PaletteEntry { Glyph = "\uE706", Control = slider, Run = openPage, Adjust = d => slider.Nudge(d * 0.05), Learn = true };
+        // No toggle makes sense for brightness, so Enter opens the Display page.
+        return new PaletteEntry
+        {
+            Glyph = "\uE706",
+            Control = slider,
+            Run = openPage,
+            Adjust = d => slider.Nudge(d * 0.05),
+            EnterHint = () => "\u2190 \u2192 \u00B7 Enter settings",
+        };
     }
 
     Action<double>? _brightnessHandler, _volumeHandler;
 
-    PaletteEntry VolumeEntry(string key, float level, bool muted, Action<bool> openPage)
+    PaletteEntry VolumeEntry(string key, float level, bool muted)
     {
         var host = (Grid)Control(key, () =>
         {
@@ -415,7 +425,20 @@ internal sealed class PaletteModule : IShammyModule
             RefreshVolume(key);
         };
         slider.ValueChanged += _volumeHandler;
-        return new PaletteEntry { Glyph = "\uE767", Control = host, Run = openPage, Adjust = d => slider.Nudge(d * 0.05) };
+        // Enter mutes or unmutes in place; the palette stays open.
+        return new PaletteEntry
+        {
+            Glyph = "\uE767",
+            Control = host,
+            Learn = false,
+            Run = _ =>
+            {
+                _audio.ToggleMute();
+                RefreshVolume(key);
+            },
+            Adjust = d => slider.Nudge(d * 0.05),
+            EnterHint = () => _audio.Volume() is { Muted: true } ? "\u2190 \u2192 \u00B7 Enter unmute" : "\u2190 \u2192 \u00B7 Enter mute",
+        };
     }
 
     void RefreshVolume(string key)
@@ -426,7 +449,7 @@ internal sealed class PaletteModule : IShammyModule
         Retitle(key, VolumeTitle(v.Level, v.Muted));
     }
 
-    PaletteEntry BluetoothEntry(string key, Action<bool> openPage)
+    PaletteEntry BluetoothEntry(string key)
     {
         var toggle = (MiniSwitch)Control(key, () =>
         {
@@ -440,7 +463,13 @@ internal sealed class PaletteModule : IShammyModule
         {
             Glyph = "\uE702",
             Control = toggle,
-            Run = openPage,
+            Learn = false,
+            // Enter switches the radio in place; the palette stays open.
+            Run = ctrl =>
+            {
+                if (_bluetooth is { } on) _ = SetBluetoothAsync(key, !on);
+            },
+            EnterHint = () => "Enter on/off",
             Adjust = d =>
             {
                 if (_bluetooth is not null) _ = SetBluetoothAsync(key, d > 0);
@@ -499,6 +528,8 @@ internal sealed class PaletteModule : IShammyModule
         int j = _local.FindIndex(x => x.Key == key);
         if (j >= 0) _local[j] = _local[j] with { Title = title };
         _view.SetTitle(i, title);
+        // Hints can depend on the state too ("Enter mute" ↔ "Enter unmute").
+        _view.Select(_ranked.Selected);
     }
 
     // ---- Files (async) ----------------------------------------------------------------------------
@@ -509,7 +540,7 @@ internal sealed class PaletteModule : IShammyModule
         if (_files.Available == false) return null;
         if (text.Trim().Length < 2 || local.Any(i => i.Kind == PaletteKind.Command)) return null;
         if (local.Any(i => i.Kind == PaletteKind.Setting && i.Match >= 99)) return null;
-        return WindowsSearchSql.Build(text, _profile, 20);
+        return WindowsSearchSql.Build(text, _profile, 30);
     }
 
     void SubmitFileQuery()
@@ -747,7 +778,7 @@ internal sealed class PaletteModule : IShammyModule
 
     string PipeFiles(string text)
     {
-        var sql = WindowsSearchSql.Build(text, _profile, 20);
+        var sql = WindowsSearchSql.Build(text, _profile, 30);
         if (sql is null) return "no query for that text";
         var done = new ManualResetEventSlim();
         IReadOnlyList<FileHit>? hits = null;

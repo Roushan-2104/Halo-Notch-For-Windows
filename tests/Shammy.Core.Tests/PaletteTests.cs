@@ -26,11 +26,43 @@ public class PaletteRankerTests
     }
 
     [Fact]
-    public void Exact_app_match_beats_commands()
+    public void Commands_beat_even_an_exact_app_match()
     {
-        var r = PaletteRanker.Rank(new[] { Item("cmd", PaletteKind.Command, 100, true), Item("app", PaletteKind.App, 100, true), Web });
-        Assert.Equal("app", r.Items[0].Key);
+        // "weather" runs Shammy's weather even when a Weather app is installed.
+        var r = PaletteRanker.Rank(new[] { Item("app", PaletteKind.App, 100, true), Item("cmd", PaletteKind.Command, 100, true), Web });
+        Assert.Equal(new[] { "cmd", "app", "web" }, r.Items.Select(i => i.Key));
         Assert.Equal(0, r.Selected);
+    }
+
+    [Fact]
+    public void No_learned_boost_lifts_anything_over_a_command()
+    {
+        var r = PaletteRanker.Rank(new[] { Item("cmd", PaletteKind.Command, 0, true), Item("app", PaletteKind.App, 100, true) },
+            i => i.Key == "app" ? 10_000 : 0);
+        Assert.Equal("cmd", r.Items[0].Key);
+    }
+
+    [Fact]
+    public void Strong_apps_beat_settings_files_music_and_web()
+    {
+        // "spot": no command handles it, so Spotify is on top and Enter opens it.
+        var r = PaletteRanker.Rank(new[]
+        {
+            Item("setting", PaletteKind.Setting, 90), Item("file", PaletteKind.File, 100), Item("music", PaletteKind.Music, 100), Web,
+            Item("app", PaletteKind.App, 90, confident: true),
+        });
+        Assert.Equal(new[] { "app", "setting", "file", "music", "web" }, r.Items.Select(i => i.Key));
+        Assert.Equal(0, r.Selected);
+    }
+
+    [Fact]
+    public void An_exact_settings_word_beats_an_app_that_merely_starts_with_it()
+    {
+        // "sound" is the volume row, not Sound Recorder; an exact app name still wins.
+        var r = PaletteRanker.Rank(new[] { Item("recorder", PaletteKind.App, 90, true), Item("volume", PaletteKind.Setting, 100, true) });
+        Assert.Equal("volume", r.Items[0].Key);
+        var exact = PaletteRanker.Rank(new[] { Item("volume", PaletteKind.Setting, 100, true), Item("camera", PaletteKind.App, 100, true) });
+        Assert.Equal("camera", exact.Items[0].Key);
     }
 
     [Fact]
@@ -201,7 +233,7 @@ public class WindowsSearchSqlTests
         Assert.Equal(
             "SELECT TOP 20 System.ItemPathDisplay, System.ItemType FROM SystemIndex WHERE SCOPE='file:C:/Users/Roushan Sharma'" +
             " AND CONTAINS(System.FileName, '\"budget*\"') AND CONTAINS(System.FileName, '\"2024*\"')" +
-            " AND NOT CONTAINS(System.ItemFolderPathDisplay, '\"node_modules\"') AND NOT CONTAINS(System.ItemFolderPathDisplay, '\"AppData\"')" +
+            string.Concat(WindowsSearchSql.ExcludedFolderWords.Select(w => $" AND NOT CONTAINS(System.ItemFolderPathDisplay, '\"{w}\"')")) +
             " ORDER BY System.DateModified DESC",
             sql);
     }
@@ -252,6 +284,42 @@ public class WindowsSearchSqlTests
         Assert.Null(WindowsSearchSql.Build(text, Scope));
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\me\a\obj\x.cs")]
+    [InlineData(@"C:\Users\me\a\venv\x.py")]
+    [InlineData(@"C:\Users\me\a\env\x.py")]
+    [InlineData(@"C:\Users\me\a\__pycache__\x.pyc")]
+    [InlineData(@"C:\Users\me\a\dist\x.js")]
+    [InlineData(@"C:\Users\me\a\build\x.o")]
+    [InlineData(@"C:\Users\me\a\.vs\x")]
+    [InlineData(@"C:\Users\me\a\.idea\x.xml")]
+    [InlineData(@"C:\Users\me\a\.gradle\x")]
+    [InlineData(@"C:\Users\me\a\packages\x.nupkg")]
+    [InlineData(@"C:\Users\me\a\.nuxt\x.js")]
+    [InlineData(@"C:\Users\me\a\coverage\x.html")]
+    [InlineData(@"C:\Users\me\a\build")]
+    public void Developer_folders_are_noise(string path)
+    {
+        Assert.True(FileResults.IsNoise(path, @"C:\Users\me"));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\me\Documents\Build Week\plan.docx")]
+    [InlineData(@"C:\Users\me\Documents\binary notes.txt")]
+    [InlineData(@"C:\Users\me\Documents\distribution.xlsx")]
+    public void Similar_names_are_not_noise(string path)
+    {
+        Assert.False(FileResults.IsNoise(path, @"C:\Users\me"));
+    }
+
+    [Fact]
+    public void The_query_excludes_developer_folders()
+    {
+        var sql = WindowsSearchSql.Build("main", Scope)!;
+        foreach (var word in new[] { "node_modules", "AppData", "bin", "obj", "venv", "env", "__pycache__", "dist", "build", "target", "packages", "coverage" })
+            Assert.Contains($"AND NOT CONTAINS(System.ItemFolderPathDisplay, '\"{word}\"')", sql);
+    }
+
     [Fact]
     public void Scope_quotes_are_doubled()
     {
@@ -271,6 +339,10 @@ public class WindowsSearchSqlTests
             new FileHit(@"C:\Users\me\Documents\old budget notes.txt", false),
             new FileHit(@"C:\Users\me\Documents\Budget.xlsx", false),
             new FileHit(@"C:\Users\me\Documents\Budgets", true),
+            new FileHit(@"C:\Users\me\code\api\bin\Debug\budget.dll", false),
+            new FileHit(@"C:\Users\me\code\web\.next\budget.js", false),
+            new FileHit(@"C:\Users\me\code\ml\.venv\budget.py", false),
+            new FileHit(@"C:\Users\me\code\rs\target\budget", false),
         };
         var ranked = FileResults.Rank("budget", hits, profile);
         Assert.Equal(new[] { "Budget.xlsx", "Budgets", "old budget notes.txt" }, ranked.Select(r => Path.GetFileName(r.Hit.Path)));
@@ -359,27 +431,29 @@ public class PaletteQueryTests
     }
 
     [Theory]
-    [InlineData("play blinding lights", false, "blinding lights")]
-    [InlineData("play blinding lights", true, "blinding lights")]
-    [InlineData("arijit singh", false, "arijit singh")]
-    [InlineData("Bohemian Rhapsody", false, "Bohemian Rhapsody")]
-    public void Music_guesses(string text, bool strong, string expected)
+    [InlineData("play blinding lights", "blinding lights")]
+    [InlineData("put on bohemian rhapsody", "bohemian rhapsody")]
+    [InlineData("tum hi ho bajao", "tum hi ho")]
+    [InlineData("arijit ke gaane bajao", "arijit")]
+    [InlineData("kesariya chalao", "kesariya")]
+    [InlineData("lagao kesariya", "kesariya")]
+    [InlineData("tum hi ho song chala do", "tum hi ho")]
+    [InlineData("kesariya sunao na", "kesariya")]
+    public void Music_needs_a_play_intent(string text, string expected)
     {
-        Assert.Equal(expected, PaletteQuery.MusicQuery(text, strong));
+        Assert.Equal(expected, PaletteQuery.MusicQuery(text));
     }
 
     [Theory]
-    [InlineData("arijit singh", true)]
-    [InlineData("how to cook rice", false)]
-    [InlineData("what is love", false)]
-    [InlineData("2+2", false)]
-    [InlineData("ab", false)]
-    [InlineData("store hours", false)]
-    [InlineData("one two three four five six seven", false)]
-    [InlineData("weather in delhi", false)]
-    public void Not_music(string text, bool strong)
+    [InlineData("arijit singh")]
+    [InlineData("Bohemian Rhapsody")]
+    [InlineData("how to cook rice")]
+    [InlineData("play store")]
+    [InlineData("bajao")]
+    [InlineData("2+2")]
+    public void Not_music(string text)
     {
-        Assert.Null(PaletteQuery.MusicQuery(text, strong));
+        Assert.Null(PaletteQuery.MusicQuery(text));
     }
 
     [Theory]

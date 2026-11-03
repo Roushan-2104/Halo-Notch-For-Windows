@@ -29,15 +29,15 @@ public sealed record RankedPalette(IReadOnlyList<PaletteItem> Items, int Selecte
 }
 
 /// <summary>
-/// Merges every source into one list: an exact app match first, then commands, settings, apps, files,
-/// music, and "Search Google" always last. Learning (frecency) nudges rows within and across nearby
+/// Merges every source into one list: commands first, then apps and settings, files, music, and
+/// "Search Google" always last (see <see cref="Band"/>). Learning (frecency) nudges rows within and across nearby
 /// bands but is capped, so a habit never buries a command the user is typing right now.
 /// </summary>
 public static class PaletteRanker
 {
     public const int MaxRows = 7;
 
-    /// <summary>"spotify" for Spotify (or its exe name): outranks commands.</summary>
+    /// <summary>"spotify" for Spotify (or its exe name): outranks everything but commands.</summary>
     public const int ExactAppMatch = 95;
 
     /// <summary>A prefix of the app's name ("spot"): good enough for Enter to launch it.</summary>
@@ -48,10 +48,18 @@ public static class PaletteRanker
 
     public const int MaxBoost = 150;
 
+    /// <summary>
+    /// Shammy's own commands always come first (so "weather" runs Shammy's weather even with a Weather app),
+    /// far enough ahead that no learned boost reaches them. Then exact apps, an exact settings word, strong
+    /// (prefix) apps, other settings, other apps, files, media, music.
+    /// </summary>
     public static int Band(PaletteItem item) => item.Kind switch
     {
-        PaletteKind.App when item.Match >= ExactAppMatch => 1000,
-        PaletteKind.Command => 900,
+        PaletteKind.Command => 1400,
+        PaletteKind.App when item.Match >= ExactAppMatch => 950,
+        // "sound" means the volume row, not "Sound Recorder", but "spot" still means Spotify.
+        PaletteKind.Setting when item.Match >= 99 => 900,
+        PaletteKind.App when item.Match >= ConfidentAppMatch => 850,
         PaletteKind.Setting => 800,
         PaletteKind.App => 700,
         PaletteKind.File => 600,
