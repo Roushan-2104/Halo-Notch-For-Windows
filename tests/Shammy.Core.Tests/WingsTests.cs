@@ -331,6 +331,28 @@ public class WingsTests
         Assert.Equal(WingAction.None, WingClick.Decide(w, 1, canLaunch: false, newInstance: true).Action);
     }
 
+    // ---- Drag-over and default ------------------------------------------------------------------
+
+    [Fact]
+    public void Drag_over_brings_the_most_recently_used_window_else_the_newest()
+    {
+        Assert.Null(WingDrag.Target(Array.Empty<WindowInfo>()));
+        var used = new[] { Win(1, Notepad) with { LastActive = 9 }, Win(2, Notepad) with { LastActive = 4 }, Win(3, Notepad) };
+        Assert.Equal(1, WingDrag.Target(used));
+        Assert.Equal(3, WingDrag.Target(new[] { Win(1, Notepad), Win(3, Notepad), Win(2, Notepad) }));
+    }
+
+    [Fact]
+    public void Wings_follow_auto_hide_until_the_user_chooses()
+    {
+        Assert.True(WingsDefault.IsOn(null, taskbarAutoHides: true));
+        Assert.False(WingsDefault.IsOn(null, taskbarAutoHides: false));
+        Assert.True(WingsDefault.IsOn(true, taskbarAutoHides: false));
+        Assert.False(WingsDefault.IsOn(false, taskbarAutoHides: true));
+        Assert.Equal("auto(on)", WingsDefault.Describe(null, true));
+        Assert.Equal("explicit(off)", WingsDefault.Describe(false, true));
+    }
+
     // ---- Fullscreen -----------------------------------------------------------------------------
 
     [Fact]

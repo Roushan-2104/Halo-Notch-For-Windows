@@ -28,7 +28,8 @@ internal sealed class WindowTracker : IDisposable
     readonly HashSet<IntPtr> _flashing = new();
     readonly Dictionary<uint, (string? Path, string? PackagedId)> _processes = new();
     readonly Dictionary<IntPtr, (string? Id, DateTime At)> _appIds = new();
-    long _sequence;
+    readonly Dictionary<IntPtr, long> _lastActive = new();
+    long _sequence, _activeSequence;
     bool _disposed;
 
     public WindowTracker(Dispatcher ui)
@@ -118,7 +119,7 @@ internal sealed class WindowTracker : IDisposable
         if (_disposed || idObject != 0) return;
         if (evt == Native.EVENT_SYSTEM_FOREGROUND)
         {
-            Foreground = Native.GetForegroundWindow();
+            SetForeground(Native.GetForegroundWindow());
             _flashing.Remove(Foreground);
             ForegroundChanged?.Invoke();
         }
@@ -131,7 +132,7 @@ internal sealed class WindowTracker : IDisposable
         _debounce.Stop();
         try
         {
-            Foreground = Native.GetForegroundWindow();
+            SetForeground(Native.GetForegroundWindow());
             var found = new List<IntPtr>();
             EnumWindowsProc proc = (hwnd, _) =>
             {
@@ -145,6 +146,7 @@ internal sealed class WindowTracker : IDisposable
             foreach (var gone in _firstSeen.Keys.Where(h => !alive.Contains(h)).ToList()) _firstSeen.Remove(gone);
             _flashing.RemoveWhere(h => !alive.Contains(h));
             foreach (var gone in _appIds.Keys.Where(h => !alive.Contains(h)).ToList()) _appIds.Remove(gone);
+            foreach (var gone in _lastActive.Keys.Where(h => !alive.Contains(h)).ToList()) _lastActive.Remove(gone);
 
             var pids = new HashSet<uint>();
             var windows = new List<WindowInfo>(found.Count);
@@ -171,7 +173,8 @@ internal sealed class WindowTracker : IDisposable
                     Native.MonitorFromWindow(hwnd, Native.MONITOR_DEFAULTTONEAREST).ToInt64(),
                     _firstSeen[hwnd],
                     launch,
-                    _flashing.Contains(hwnd)));
+                    _flashing.Contains(hwnd),
+                    _lastActive.GetValueOrDefault(hwnd)));
             }
             foreach (var gone in _processes.Keys.Where(p => !pids.Contains(p)).ToList()) _processes.Remove(gone);
             Windows = windows.OrderBy(w => w.Order).ToList();
@@ -181,6 +184,13 @@ internal sealed class WindowTracker : IDisposable
             Log("enumerating windows failed: " + ex.Message);
         }
         Changed?.Invoke();
+    }
+
+    /// <summary>Remembers when each window was last in front (for drag-over, which brings the latest one).</summary>
+    void SetForeground(IntPtr hwnd)
+    {
+        if (hwnd != Foreground && hwnd != IntPtr.Zero) _lastActive[hwnd] = ++_activeSequence;
+        Foreground = hwnd;
     }
 
     /// <summary>Re-read now and then: Chrome and others set their app ID a moment after the window appears.</summary>

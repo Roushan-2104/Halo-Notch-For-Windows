@@ -60,9 +60,10 @@ internal sealed class AppSettings
 
     /// <summary>
     /// App wings: a strip along the top of every monitor, reserved like a taskbar, with pinned apps left of
-    /// the notch and open apps right of it (for people who hide the Windows taskbar).
+    /// the notch and open apps right of it (for people who hide the Windows taskbar). null = automatic: on
+    /// while the taskbar is set to auto-hide; true/false = the user chose in the tray, and that always wins.
     /// </summary>
-    public bool AppWings { get; set; } = true;
+    public bool? AppWings { get; set; }
 
     /// <summary>The wings' pinned apps, in order. Seeded once from the taskbar's pins, then Shammy's own.</summary>
     public List<Shammy.Core.Wings.PinnedApp> PinnedApps { get; set; } = new();

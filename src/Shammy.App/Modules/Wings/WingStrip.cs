@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -20,6 +20,7 @@ internal interface IWingsHost
     void ShowMenu(WingItem item, FrameworkElement anchor);
     void ShowOverflow(IReadOnlyList<WingItem> items, FrameworkElement anchor);
     void MovePin(int from, int to);
+    void DragActivate(WingItem item);
     void StripPlaced(WingStrip strip);
 }
 
@@ -51,6 +52,10 @@ internal sealed class WingStrip : Window
     double _pressX, _pressLeft;
     bool _dragging;
 
+    // A file (or anything) being dragged over the strip from another app, and the icon it rests on.
+    readonly DispatcherTimer _dragHover, _dragGone;
+    string? _dragKey;
+
     public WingStrip(IWingsHost host, IntPtr monitor, bool primary)
     {
         _host = host;
@@ -73,6 +78,64 @@ internal sealed class WingStrip : Window
         Content = _canvas;
         SizeChanged += (_, _) => Render(force: true);
         DpiChanged += (_, _) => Dispatcher.BeginInvoke(Place, DispatcherPriority.Background);
+
+        _dragHover = new DispatcherTimer(TimeSpan.FromSeconds(WingDrag.HoverSeconds), DispatcherPriority.Input, (_, _) => OnDragHovered(), Dispatcher) { IsEnabled = false };
+        // DragLeave also fires when the pointer crosses from one icon to the next; only a leave that isn't
+        // followed by another DragOver soon really means the drag left the strip.
+        _dragGone = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Input, (_, _) => EndDragHover(), Dispatcher) { IsEnabled = false };
+        AllowDrop = true;
+        _canvas.AllowDrop = true;
+        _canvas.DragEnter += OnDragOver;
+        _canvas.DragOver += OnDragOver;
+        _canvas.DragLeave += (_, _) => _dragGone.Start();
+        _canvas.Drop += (_, e) =>
+        {
+            // Nothing is dropped on the strip itself (drop into the app it brought forward, or the notch).
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            EndDragHover();
+        };
+    }
+
+    /// <summary>
+    /// Like the taskbar: rest a drag on an open app's icon and its window comes forward so you can drop
+    /// into it. The strip never accepts the drop; the notch is its own window above, so its shelf is unaffected.
+    /// </summary>
+    void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = DragDropEffects.None;
+        e.Handled = true;
+        _dragGone.Stop();
+        var key = ItemAt(e.GetPosition(_canvas).X) is { IsRunning: true } item ? item.Key : null;
+        if (key == _dragKey) return;
+        _dragKey = key;
+        _dragHover.Stop();
+        if (key is not null) _dragHover.Start();
+    }
+
+    void OnDragHovered()
+    {
+        _dragHover.Stop();
+        var item = _content.Pinned.Concat(_content.Open).FirstOrDefault(i => i.Key == _dragKey);
+        if (item is { IsRunning: true }) _host.DragActivate(item);
+    }
+
+    void EndDragHover()
+    {
+        _dragGone.Stop();
+        _dragHover.Stop();
+        _dragKey = null;
+    }
+
+    /// <summary>The shown icon under an x on the strip (not "+N").</summary>
+    WingItem? ItemAt(double x)
+    {
+        if (_layout is not { } l) return null;
+        for (int i = 0; i < l.Left.Shown && i < _content.Pinned.Count; i++)
+            if (x >= l.Left.ItemX[i] && x < l.Left.ItemX[i] + WingLayoutMath.Slot) return _content.Pinned[i];
+        for (int i = 0; i < l.Right.Shown && i < _content.Open.Count; i++)
+            if (x >= l.Right.ItemX[i] && x < l.Right.ItemX[i] + WingLayoutMath.Slot) return _content.Open[i];
+        return null;
     }
 
     public IntPtr Monitor { get; }
@@ -423,6 +486,7 @@ internal sealed class WingStrip : Window
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
+        EndDragHover();
         _bar?.Remove();
         base.OnClosed(e);
     }

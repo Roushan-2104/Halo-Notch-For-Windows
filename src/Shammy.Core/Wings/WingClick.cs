@@ -26,6 +26,28 @@ public static class WingClick
         w.Handle == foreground && !w.Minimized ? WingAction.Minimize : WingAction.Activate;
 }
 
+/// <summary>Dragging a file over an icon, like the taskbar: after a short hover the app comes forward to drop into.</summary>
+public static class WingDrag
+{
+    public const double HoverSeconds = 0.7;
+
+    /// <summary>
+    /// The window to bring forward: the one used most recently (else the newest), or null for a pin that
+    /// isn't running, which does nothing on drag-over.
+    /// </summary>
+    public static long? Target(IReadOnlyList<WindowInfo> windows) =>
+        windows.Count == 0 ? null : windows.OrderByDescending(w => w.LastActive).ThenByDescending(w => w.Order).First().Handle;
+}
+
+/// <summary>Whether the wings are on: the user's explicit choice, else follow the taskbar's auto-hide.</summary>
+public static class WingsDefault
+{
+    public static bool IsOn(bool? explicitChoice, bool taskbarAutoHides) => explicitChoice ?? taskbarAutoHides;
+
+    public static string Describe(bool? explicitChoice, bool taskbarAutoHides) =>
+        explicitChoice is { } on ? $"explicit({(on ? "on" : "off")})" : $"auto({(taskbarAutoHides ? "on" : "off")})";
+}
+
 /// <summary>When a strip should get out of the way of a fullscreen game, video or presentation.</summary>
 public static class StripFullscreen
 {

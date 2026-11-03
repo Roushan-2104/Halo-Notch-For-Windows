@@ -16,7 +16,10 @@ public sealed class PinnedApp
     public string Key => AppIdentity.Key(Aumid, ExePath, Launch);
 }
 
-/// <summary>A top-level app window as the tracker saw it. <see cref="Order"/> is when it was first seen.</summary>
+/// <summary>
+/// A top-level app window as the tracker saw it. <see cref="Order"/> is when it was first seen,
+/// <see cref="LastActive"/> when it was last in front (0 = not since Shammy started); both only increase.
+/// </summary>
 public sealed record WindowInfo(
     long Handle,
     string Title,
@@ -25,7 +28,8 @@ public sealed record WindowInfo(
     long Monitor,
     long Order,
     string? Launch = null,
-    bool Flashing = false);
+    bool Flashing = false,
+    long LastActive = 0);
 
 /// <summary>An icon on a wing: a pin (maybe running) or an unpinned app with its windows on this monitor.</summary>
 public sealed record WingItem(string Key, PinnedApp? Pin, IReadOnlyList<WindowInfo> Windows)

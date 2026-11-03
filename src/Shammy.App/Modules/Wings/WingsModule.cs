@@ -42,7 +42,7 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
     {
         _ctx = ctx;
         WindowTracker.Logger = ctx.Info;
-        ctx.AddTrayToggle("App wings (apps beside the notch)", () => ctx.Settings.AppWings, SetEnabled);
+        ctx.AddTrayToggle("App wings (apps beside the notch)", () => WantedOn, SetEnabled);
         ctx.AddPipeCommand("wings", Command);
         ctx.AddPipeCommand("wings-state", _ => State());
         // The reserved strips must never outlive Shammy: give them back on the way down, however it goes.
@@ -63,7 +63,33 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
             }
         }, ctx.Ui) { IsEnabled = false };
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
-        if (ctx.Settings.AppWings) Enable();
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        // Turning the taskbar's auto-hide on or off broadcasts a settings change, but not reliably one with
+        // a category we can tell apart, so a cheap poll backs it up (one message to the shell).
+        _autoCheck = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, (_, _) => FollowAuto(), ctx.Ui);
+        _lastAutoHide = TaskbarAutoHides();
+        if (WantedOn) Enable();
+    }
+
+    DispatcherTimer? _autoCheck;
+    bool? _lastAutoHide;
+
+    /// <summary>The user's choice from the tray, or (until they make one) whether the taskbar auto-hides.</summary>
+    bool WantedOn => WingsDefault.IsOn(_ctx.Settings.AppWings, TaskbarAutoHides());
+
+    void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e) => _ctx.Ui.BeginInvoke(FollowAuto, DispatcherPriority.Background);
+
+    void FollowAuto()
+    {
+        if (_ctx.Settings.AppWings is not null) return;
+        bool want = TaskbarAutoHides();
+        // Act on changes of the taskbar setting only, so wings that failed to start aren't retried every poll.
+        if (want == _lastAutoHide) return;
+        _lastAutoHide = want;
+        if (want == Enabled) return;
+        _ctx.Info($"taskbar auto-hide {(want ? "on" : "off")}: wings {(want ? "on" : "off")} (automatic)");
+        if (want) Enable();
+        else Disable();
     }
 
     void OnFatal(object? sender, UnhandledExceptionEventArgs e) => AppBar.RemoveAll();
@@ -76,6 +102,7 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
         _displayDebounce?.Start();
     });
 
+    /// <summary>An explicit choice (tray or pipe): from now on it wins over the taskbar's auto-hide.</summary>
     void SetEnabled(bool on)
     {
         _ctx.Settings.AppWings = on;
@@ -293,6 +320,12 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
         _tracker?.RefreshSoon();
     }
 
+    /// <summary>A drag rested on an open app's icon: bring its latest window forward to drop into.</summary>
+    public void DragActivate(WingItem item)
+    {
+        if (WingDrag.Target(item.Windows) is { } hwnd && IsWindow(new IntPtr(hwnd))) Activate(new IntPtr(hwnd));
+    }
+
     void CloseWindows(WingItem item)
     {
         foreach (var w in item.Windows) PostMessage(new IntPtr(w.Handle), WM_SYSCOMMAND, new IntPtr(SC_CLOSE), IntPtr.Zero);
@@ -409,7 +442,7 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
 
     // ---- Test pipe ------------------------------------------------------------------------------
 
-    /// <summary>"wings on|off|import|refresh|rebuild|click &lt;name&gt;".</summary>
+    /// <summary>"wings on|off|auto|import|refresh|rebuild|click &lt;name&gt;".</summary>
     string Command(string arg)
     {
         var parts = arg.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
@@ -421,6 +454,13 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
             case "off":
                 SetEnabled(false);
                 return "off";
+            case "auto":
+                // Forget the explicit choice: follow the taskbar's auto-hide again.
+                _ctx.Settings.AppWings = null;
+                _ctx.Settings.Save();
+                _lastAutoHide = null;
+                FollowAuto();
+                return WingsDefault.Describe(null, TaskbarAutoHides()) + (Enabled ? " on" : " off");
             case "import":
             {
                 int added = PinImporter.Import(Pins, _ctx.Info);
@@ -444,7 +484,7 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
                 return item is null ? "error: no such app" : Act(item, strip, newInstance: false);
             }
             default:
-                return "usage: wings on|off|import|refresh|rebuild|click <name>";
+                return "usage: wings on|off|auto|import|refresh|rebuild|click <name>";
         }
     }
 
@@ -452,7 +492,8 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
     {
         static string R(Native.RECT r) => $"{r.Left},{r.Top},{r.Right},{r.Bottom}";
         var sb = new StringBuilder();
-        sb.Append($"enabled={Enabled} setting={_ctx.Settings.AppWings} imported={_ctx.Settings.WingsPinsImported} pins={Pins.Count} " +
+        bool autoHide = TaskbarAutoHides();
+        sb.Append($"enabled={Enabled} setting={WingsDefault.Describe(_ctx.Settings.AppWings, autoHide)} taskbarAutoHide={autoHide} imported={_ctx.Settings.WingsPinsImported} pins={Pins.Count} " +
                   $"strips={_strips.Count} appbars={AppBar.Count} windows={_tracker?.Windows.Count ?? 0} notchTop={_ctx.Notch.StripTopPx?.ToString(CultureInfo.InvariantCulture) ?? "-"}");
         sb.Append(" pinned=[").Append(string.Join(", ", Pins.Select(p => p.Name))).Append(']');
         int i = 0;
@@ -473,6 +514,8 @@ internal sealed class WingsModule : IShammyModule, IWingsHost
     public void Dispose()
     {
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        _autoCheck?.Stop();
         _displayDebounce?.Stop();
         // Shammy is quitting: the notch is going too, so only the strips and their reserved space matter.
         Disable(placeNotch: false);

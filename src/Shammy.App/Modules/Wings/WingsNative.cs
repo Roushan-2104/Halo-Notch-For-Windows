@@ -10,7 +10,8 @@ internal static class WingsNative
 {
     // ---- App bars -------------------------------------------------------------------------------
 
-    public const uint ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABM_WINDOWPOSCHANGED = 9;
+    public const uint ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABM_GETSTATE = 4, ABM_WINDOWPOSCHANGED = 9;
+    public const uint ABS_AUTOHIDE = 1;
     public const uint ABE_TOP = 1;
     public const int ABN_POSCHANGED = 1, ABN_FULLSCREENAPP = 2;
 
@@ -27,6 +28,13 @@ internal static class WingsNative
     }
 
     [DllImport("shell32.dll")] public static extern UIntPtr SHAppBarMessage(uint message, ref APPBARDATA data);
+
+    /// <summary>Whether the Windows taskbar is set to auto-hide (a cheap call to the shell).</summary>
+    public static bool TaskbarAutoHides()
+    {
+        var abd = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>() };
+        return (SHAppBarMessage(ABM_GETSTATE, ref abd).ToUInt64() & ABS_AUTOHIDE) != 0;
+    }
 
     // ---- Windows --------------------------------------------------------------------------------
 
