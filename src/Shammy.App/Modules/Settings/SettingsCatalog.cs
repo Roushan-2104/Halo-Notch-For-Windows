@@ -18,35 +18,43 @@ internal sealed record SettingInfo(string Name, string Section, string Label, Pr
 /// </summary>
 internal static class SettingsCatalog
 {
-    public static readonly string[] Sections = { "General", "Notch", "Sounds", "Productivity", "Notifications", "Clipboard", "Voice", "Modules" };
+    /// <summary>The Settings screen's tabs, in order (the designed seven).</summary>
+    public static readonly string[] Sections = { "General", "Notch & pet", "Voice", "Notifications", "Time & units", "Clipboard & privacy", "Calendar" };
 
     static readonly (string Name, string Section, string Label, int Step)[] Shown =
     {
-        ("DefaultSearchMode", "General", "Search answers with", 1),
-        ("Use24Hour", "General", "24-hour clock", 1),
-        ("TemperatureUnit", "General", "Temperature", 1),
-        ("HomeCurrency", "General", "Home currency", 1),
-        ("TranslateTarget", "General", "Translate English to", 1),
-        ("HoverSpeed", "Notch", "Hover speed", 1),
-        ("PeekEnabled", "Notch", "Peek on hover", 1),
-        ("GesturesEnabled", "Notch", "Wheel and swipe gestures", 1),
-        ("NotchSounds", "Sounds", "Ping and chime", 1),
-        ("NotchSoundVolume", "Sounds", "Volume (also alarms)", 10),
-        ("PomodoroWorkMinutes", "Productivity", "Pomodoro focus (min)", 5),
-        ("PomodoroShortBreakMinutes", "Productivity", "Short break (min)", 1),
-        ("PomodoroLongBreakMinutes", "Productivity", "Long break (min)", 5),
-        ("SnoozeMinutes", "Productivity", "Snooze (min)", 1),
-        ("ReminderCardSeconds", "Productivity", "Reminder card stays (s)", 5),
-        ("ShowNotifications", "Notifications", "Show notifications", 1),
-        ("NotificationPopupSeconds", "Notifications", "Pop-up time (s)", 1),
-        ("AlwaysHideNotificationText", "Notifications", "Always hide the text", 1),
+        ("DefaultSearchMode", "General", "Default search", 1),
+        ("GesturesEnabled", "General", "Gestures", 1),
+        ("NotchSounds", "General", "Notch sounds", 1),
+        ("NotchSoundVolume", "General", "Sound volume", 10),
+        ("DisabledModules", "General", "Features turned off (on next start)", 1),
+        ("HoverSpeed", "Notch & pet", "Hover speed", 1),
+        ("PeekEnabled", "Notch & pet", "Peek", 1),
+        ("PetEnabled", "Notch & pet", "Pet", 1),
+        ("PetEyeStyle", "Notch & pet", "Eye style", 1),
+        ("PetEyeColor", "Notch & pet", "Eye colour", 1),
+        ("PetName", "Notch & pet", "Name", 1),
+        ("MicrophoneDeviceId", "Voice", "Microphone", 1),
+        ("VoiceMode", "Voice", "Hinglish voice", 1),
+        ("ShowNotifications", "Notifications", "Show notifications in the notch", 1),
+        ("NotificationPopupSeconds", "Notifications", "Show for (s)", 1),
         ("SystemAlertsEnabled", "Notifications", "Battery and Bluetooth alerts", 1),
         ("MutedNotificationApps", "Notifications", "Muted apps", 1),
-        ("ClipboardHistoryEnabled", "Clipboard", "Clipboard history", 1),
-        ("ClipboardRetentionHours", "Clipboard", "Keep history (hours)", 6),
-        ("CopyPreviewEnabled", "Clipboard", "“Copied” preview", 1),
-        ("MicrophoneDeviceId", "Voice", "Microphone", 1),
-        ("DisabledModules", "Modules", "Turned off (on next start)", 1),
+        ("Use24Hour", "Time & units", "Clock", 1),
+        ("TemperatureUnit", "Time & units", "Temperature", 1),
+        ("HomeCurrency", "Time & units", "Home currency", 1),
+        ("TranslateTarget", "Time & units", "Translate English to", 1),
+        ("PomodoroWorkMinutes", "Time & units", "Pomodoro focus (min)", 5),
+        ("PomodoroShortBreakMinutes", "Time & units", "Short break (min)", 1),
+        ("PomodoroLongBreakMinutes", "Time & units", "Long break (min)", 5),
+        ("SnoozeMinutes", "Time & units", "Default snooze (min)", 5),
+        ("ReminderCardSeconds", "Time & units", "Reminder card stays (s)", 5),
+        ("AlarmGentleWake", "Time & units", "Gentle wake", 1),
+        ("AlarmBreaksFullscreen", "Time & units", "Alarms break through fullscreen", 1),
+        ("ClipboardHistoryEnabled", "Clipboard & privacy", "Clipboard history", 1),
+        ("ClipboardRetentionHours", "Clipboard & privacy", "Keep history (hours)", 6),
+        ("CopyPreviewEnabled", "Clipboard & privacy", "Copy preview", 1),
+        ("AlwaysHideNotificationText", "Clipboard & privacy", "Always hide message text", 1),
     };
 
     static readonly Lazy<List<SettingInfo>> All = new(() =>

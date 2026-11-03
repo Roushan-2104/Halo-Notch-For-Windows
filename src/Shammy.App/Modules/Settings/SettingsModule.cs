@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Text;
 using Shammy.Infrastructure;
 using Shammy.Search;
@@ -5,8 +6,9 @@ using Shammy.Search;
 namespace Shammy.Modules.Settings;
 
 /// <summary>
-/// The Settings card (a chip in the open notch) and the settings pipe commands: "settings-get [name]",
-/// "settings-set &lt;name&gt; &lt;value&gt;", "settings-open", "notifications-unmute &lt;appId|all&gt;" and "mic-devices".
+/// The Settings card (a chip in the open notch; its detail is the designed <see cref="SettingsView"/>) and the
+/// settings pipe commands: "settings-get [name]", "settings-set &lt;name&gt; &lt;value&gt;", "settings-open [tab]",
+/// "settings-tab &lt;tab&gt;", "settings-state", "notifications-unmute &lt;appId|all&gt;" and "mic-devices".
 /// Never disabled by DisabledModules, since it's how modules are turned back on.
 /// </summary>
 internal sealed class SettingsModule : IShammyModule
@@ -15,6 +17,7 @@ internal sealed class SettingsModule : IShammyModule
 
     ModuleContext _ctx = null!;
     SettingsCard _card = null!;
+    SettingsView? _view;
 
     public string Name => ModuleName;
 
@@ -31,18 +34,28 @@ internal sealed class SettingsModule : IShammyModule
             Chip = true,
             IsRelevant = () => false,
             Compact = _card.Compact,
-            Detail = _card.BuildDetail,
+            Detail = BuildDetail,
         });
         // A change from the pipe shows on the card if it's open.
         ctx.Settings.Changed += OnChanged;
 
         ctx.AddPipeCommand("settings-get", Get);
         ctx.AddPipeCommand("settings-set", SetFromPipe);
-        ctx.AddPipeCommand("settings-open", _ =>
+        ctx.AddPipeCommand("settings-open", arg =>
         {
+            if (arg.Trim().Length > 0) SettingsView.Tab = Tab(arg);
             ctx.OpenCard("settings");
-            return "ok";
+            return "ok tab=" + SettingsView.Tab;
         });
+        ctx.AddPipeCommand("settings-tab", arg =>
+        {
+            var tab = Tab(arg);
+            if (!SettingsCatalog.Sections.Contains(tab)) return "error: tabs are " + string.Join(", ", SettingsCatalog.Sections);
+            if (_view is { IsVisible: true } v) v.ShowTab(tab);
+            else SettingsView.Tab = tab;
+            return "ok tab=" + tab;
+        });
+        ctx.AddPipeCommand("settings-state", _ => _view is { IsVisible: true } v ? v.Describe() : $"closed tab={SettingsView.Tab}");
         ctx.AddPipeCommand("notifications-unmute", Unmute);
         ctx.AddPipeCommand("notifications-muted", _ => $"muted={string.Join(",", ctx.Settings.MutedNotificationApps)}");
         ctx.AddPipeCommand("mic-devices", _ =>
@@ -59,7 +72,27 @@ internal sealed class SettingsModule : IShammyModule
         if (_ctx is not null) _ctx.Settings.Changed -= OnChanged;
     }
 
-    void OnChanged(string name) => _ctx.Ui.BeginInvoke(_card.Refresh);
+    void OnChanged(string name)
+    {
+        _ctx.Ui.BeginInvoke(_card.Refresh);
+        // The pet switch acts through the notch (it hides the face at once); from the pipe too.
+        if (name == nameof(AppSettings.PetEnabled)) _ctx.Ui.BeginInvoke(() => _ctx.Notch.SetPetEnabled(_ctx.Settings.PetEnabled));
+    }
+
+    FrameworkElement BuildDetail()
+    {
+        _view = new SettingsView(_ctx.Settings, () => _ctx.ModuleNames, () => _ctx.OpenCard("home"), _ctx.Notch.SetPetEnabled);
+        return _view;
+    }
+
+    /// <summary>"pet", "time", "Notch & pet" → the tab's name (by its first word, any case).</summary>
+    static string Tab(string arg)
+    {
+        var a = arg.Trim();
+        return SettingsCatalog.Sections.FirstOrDefault(t => string.Equals(t, a, StringComparison.OrdinalIgnoreCase))
+               ?? SettingsCatalog.Sections.FirstOrDefault(t => t.Split(' ').Any(w => string.Equals(w, a, StringComparison.OrdinalIgnoreCase)))
+               ?? a;
+    }
 
     /// <summary>"settings-get" lists every setting as Name=value by section; "settings-get HoverSpeed" just that one.</summary>
     string Get(string arg)

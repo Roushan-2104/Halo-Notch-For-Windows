@@ -1,0 +1,43 @@
+using Shammy.Infrastructure;
+
+namespace Shammy.Modules;
+
+/// <summary>
+/// The few host services the designed screens reach for (the tour opens the palette, Settings shows the version
+/// and checks for updates, the alarm reads the weather glance). Set by ShammyHost at start-up; null in tests and
+/// before the host is up, so every caller copes without them.
+/// </summary>
+internal static class HostLinks
+{
+    /// <summary>Opens the typing palette (as a tap of Right Alt does), with its empty-state suggestions.</summary>
+    public static Action? OpenPalette { get; set; }
+
+    /// <summary>Whether this PC can run the Hinglish voice (it needs the graphics-card engine).</summary>
+    public static Func<bool>? HinglishAvailable { get; set; }
+
+    /// <summary>The running version ("0.4.0").</summary>
+    public static Func<string>? Version { get; set; }
+
+    /// <summary>The update checker's last result ("up to date", "ready 0.4.1", "not checked") and whether it's an installed copy.</summary>
+    public static Func<(string Result, bool Installed)>? UpdateStatus { get; set; }
+
+    /// <summary>Checks for an update now; the result reads like <see cref="UpdateStatus"/>.</summary>
+    public static Func<Task<string>>? CheckForUpdates { get; set; }
+
+    /// <summary>Every module's glance provider, by id ("weather", "calendar"…).</summary>
+    public static IReadOnlyDictionary<string, Func<GlanceItem?>>? Glances { get; set; }
+
+    /// <summary>The weather glance's text right now ("24° Bhubaneswar"), or null.</summary>
+    public static string? WeatherGlance()
+    {
+        try
+        {
+            return Glances is not null && Glances.TryGetValue("weather", out var provider) ? provider()?.Text : null;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Reading the weather glance failed", ex);
+            return null;
+        }
+    }
+}
