@@ -9,7 +9,8 @@ using Shammy.Playback;
 namespace Shammy.Modules.Music;
 
 /// <summary>
-/// The Lyrics tab: synced lines scroll on a spring so the current one sits a little above centre,
+/// The synced lyrics in the music detail (Focus Wall: Schibsted Grotesk, white on the ground, the current line
+/// bright and the rest fading — no accent): synced lines scroll on a spring so the current one sits a little above centre,
 /// bright, with its neighbours fading by distance. Plain lyrics get a scrollable text block instead.
 /// Frames only run while the tab is on screen and the track is playing.
 /// </summary>
@@ -41,13 +42,14 @@ internal sealed class LyricsPanel : Grid
         _media = media;
         Margin = new Thickness(0, 6, 0, 0);
         ClipToBounds = true;
+        System.Windows.Documents.TextElement.SetFontFamily(this, Shammy.Views.Cards.CardKit.Font);
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         _track = new TextBlock
         {
             FontSize = 11,
-            Foreground = Brush("Fg3"),
+            Foreground = Shammy.Views.Cards.CardKit.Ink2,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Margin = new Thickness(0, 0, 0, 2),
         };
@@ -73,7 +75,7 @@ internal sealed class LyricsPanel : Grid
         {
             FontSize = 13.5,
             LineHeight = 20,
-            Foreground = Brush("Fg2"),
+            Foreground = Shammy.Views.Cards.CardKit.Ink2,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 4, 8, 12),
         };
@@ -88,8 +90,8 @@ internal sealed class LyricsPanel : Grid
         SetRow(_plainScroll, 1);
         Children.Add(_plainScroll);
 
-        _statusGlyph = new TextBlock { FontFamily = (FontFamily)Application.Current.Resources["IconFont"], FontSize = 20, Foreground = Brush("Fg3"), HorizontalAlignment = HorizontalAlignment.Center };
-        _statusText = new TextBlock { FontSize = 12.5, Foreground = Brush("Fg2"), Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
+        _statusGlyph = new TextBlock { FontFamily = (FontFamily)Application.Current.Resources["IconFont"], FontSize = 20, Foreground = Shammy.Views.Cards.CardKit.Ink2, HorizontalAlignment = HorizontalAlignment.Center };
+        _statusText = new TextBlock { FontSize = 12.5, Foreground = Shammy.Views.Cards.CardKit.Ink2, Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
         _status = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 14) };
         _status.Children.Add(_statusGlyph);
         _status.Children.Add(_statusText);
@@ -101,7 +103,7 @@ internal sealed class LyricsPanel : Grid
         {
             Text = Shammy.Core.Connect.PrivacyText.Hidden,
             FontSize = 12.5,
-            Foreground = Brush("Fg2"),
+            Foreground = Shammy.Views.Cards.CardKit.Ink2,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Visibility = Visibility.Collapsed,
@@ -195,8 +197,8 @@ internal sealed class LyricsPanel : Grid
 
         _plainScroll.Visibility = Visibility.Collapsed;
         _viewport.Visibility = Visibility.Visible;
-        var fg = Brush("Fg");
-        var display = (FontFamily)Application.Current.Resources["ShammyDisplayFont"];
+        var fg = Shammy.Views.Cards.CardKit.Ink;
+        var display = Shammy.Views.Cards.CardKit.Font;
         foreach (var line in lyrics.Lines)
         {
             var tb = new TextBlock
@@ -204,7 +206,7 @@ internal sealed class LyricsPanel : Grid
                 // An empty timed line is an instrumental break.
                 Text = line.Text.Length > 0 ? line.Text : "\u266A",
                 FontFamily = display,
-                FontSize = 18,
+                FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = fg,
                 TextWrapping = TextWrapping.Wrap,
@@ -319,7 +321,7 @@ internal sealed class LyricsPanel : Grid
         double y = _y.Value;
         _scroll.Y = y;
         double focus = _viewport.ActualHeight * FocusFraction;
-        const double lineHeight = 30;
+        const double lineHeight = 26;
         for (int i = 0; i < _centers.Length; i++)
         {
             var el = (FrameworkElement)_lines.Children[i];

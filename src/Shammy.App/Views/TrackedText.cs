@@ -59,6 +59,19 @@ internal sealed class TrackedText : FrameworkElement
     public double Tracking { get => (double)GetValue(TrackingProperty); set => SetValue(TrackingProperty, value); }
     public bool Uppercase { get => (bool)GetValue(UppercaseProperty); set => SetValue(UppercaseProperty, value); }
 
+    /// <summary>Line height as a multiple of the size (about 1 for the Wall's tight posters); 0 keeps the face's own
+    /// spacing. Set, the caps are centred in the line, as CSS does with a tight line-height.</summary>
+    public static readonly DependencyProperty LineFactorProperty = DependencyProperty.Register(nameof(LineFactor), typeof(double), typeof(TrackedText),
+        new FrameworkPropertyMetadata(0.0, Layout, (d, _) => ((TrackedText)d)._dirty = true));
+
+    /// <summary>Every digit gets the widest digit's advance, so a live number doesn't jiggle (only digits: this
+    /// face's own tabular set also widens . , :).</summary>
+    public static readonly DependencyProperty TabularDigitsProperty = DependencyProperty.Register(nameof(TabularDigits), typeof(bool), typeof(TrackedText),
+        new FrameworkPropertyMetadata(false, Layout, (d, _) => ((TrackedText)d)._dirty = true));
+
+    public double LineFactor { get => (double)GetValue(LineFactorProperty); set => SetValue(LineFactorProperty, value); }
+    public bool TabularDigits { get => (bool)GetValue(TabularDigitsProperty); set => SetValue(TabularDigitsProperty, value); }
+
     protected override Size MeasureOverride(Size available)
     {
         double max = double.IsInfinity(available.Width) ? double.PositiveInfinity : available.Width;
@@ -102,7 +115,7 @@ internal sealed class TrackedText : FrameworkElement
         var family = FontFamily ?? new FontFamily("Segoe UI");
         var typeface = new Typeface(family, FontStyles.Normal, FontWeight, FontStretches.Normal);
         double ppd = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        double lineHeight = Math.Ceiling(family.LineSpacing * size);
+        double lineHeight = Math.Ceiling((LineFactor > 0 ? LineFactor : family.LineSpacing) * size);
         if (text.Length == 0)
         {
             _size = new Size(0, lineHeight);
@@ -125,12 +138,20 @@ internal sealed class TrackedText : FrameworkElement
         double track = Tracking * size;
         var indices = new List<ushort>(text.Length + 1);
         var advances = new List<double>(text.Length + 1);
+        var offsets = new List<Point>(text.Length + 1);
+        double digit = 0;
+        if (TabularDigits)
+            foreach (char d in "0123456789")
+                if (glyphs.CharacterToGlyphMap.TryGetValue(d, out var dg)) digit = Math.Max(digit, glyphs.AdvanceWidths[dg] * size);
         double width = 0;
         foreach (char c in text)
         {
             ushort g = glyphs.CharacterToGlyphMap[c];
             indices.Add(g);
-            double a = glyphs.AdvanceWidths[g] * size + track;
+            double own = glyphs.AdvanceWidths[g] * size;
+            bool cell = digit > 0 && c is >= '0' and <= '9';
+            offsets.Add(new Point(cell ? (digit - own) / 2 : 0, 0));
+            double a = (cell ? digit : own) + track;
             advances.Add(a);
             width += a;
         }
@@ -144,17 +165,21 @@ internal sealed class TrackedText : FrameworkElement
                 width -= advances[^1];
                 indices.RemoveAt(indices.Count - 1);
                 advances.RemoveAt(advances.Count - 1);
+                offsets.RemoveAt(offsets.Count - 1);
             }
             indices.Add(ellipsis);
             advances.Add(ellipsisWidth);
+            offsets.Add(new Point(0, 0));
             width += ellipsisWidth;
         }
 
         double baseline = glyphs.Baseline * size;
         // Centre the caps in the line box rather than sitting them on the font's tall ascender space.
-        double top = Math.Max(0, (lineHeight - glyphs.Height * size) / 2);
+        double top = LineFactor > 0
+            ? lineHeight / 2 + glyphs.CapsHeight * size / 2 - baseline
+            : Math.Max(0, (lineHeight - glyphs.Height * size) / 2);
         _run = new GlyphRun(glyphs, 0, false, size, (float)ppd, indices, new Point(0, top + baseline), advances,
-            null, null, null, null, null, null);
+            offsets, null, null, null, null, null);
         _size = new Size(Math.Ceiling(Math.Max(0, width)), lineHeight);
     }
 

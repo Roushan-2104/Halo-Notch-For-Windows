@@ -79,9 +79,11 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             Id = "notes",
             Title = "Notes",
             Width = 176,
-            Order = 50,
+            Order = 45,
             Chip = true,
             IsRelevant = ReminderDueToday,
+            Live = () => _notes.Live,
+            Peek = _notes.Peek,
             Compact = _notes.Compact,
             Detail = _notes.BuildDetail,
         });
@@ -98,10 +100,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             Width = 176,
             Compact = _timerCard.Compact,
             Detail = _timerCard.BuildDetail,
-            Order = 20,
+            Order = 25,
             // The quick-start chips live in the detail, so it must open with no timer running (off the home row).
             Chip = true,
             IsRelevant = () => _timerCard.IsRelevant,
+            Live = () => _timerCard.Live,
+            Peek = _timerCard.Peek,
         });
         ctx.AddGlance("timer", _timerCard.Glance);
         Views.Cards.CardPipes.Register(ctx, "timer", _timerCard.DescribeCompact, _timerCard.DescribeDetail);

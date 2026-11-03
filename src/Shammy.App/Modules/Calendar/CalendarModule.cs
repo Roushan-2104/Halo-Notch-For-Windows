@@ -86,6 +86,8 @@ internal sealed class CalendarModule : IShammyModule, Connect.ICalendarLink
             Compact = _card.Compact,
             Detail = _card.BuildDetail,
             IsRelevant = () => Connected && CalendarAgenda.IsRelevant(_store.Cache, DateTime.Now),
+            Live = () => _card.Live,
+            Peek = _card.Peek,
         };
         ctx.AddCard(_notchCard);
         Connect.Links.Calendar = this;

@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
 using Shammy.Core.Cards;
-using Shammy.Modules.Kit;
+using Shammy.Views.Cards;
 
 namespace Shammy.Modules.Mirror;
 
@@ -95,35 +95,7 @@ internal sealed class MirrorModule : IShammyModule
 
     internal void Info(string message) => _ctx.Info(message);
 
-    static FrameworkElement BuildCompact()
-    {
-        var root = new Grid { Margin = new Thickness(8) };
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(124) });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-
-        var tile = new Border
-        {
-            CornerRadius = new CornerRadius(14),
-            Background = new LinearGradientBrush(new GradientStopCollection
-            {
-                new GradientStop((Color)ColorConverter.ConvertFromString("#2B2622"), 0),
-                new GradientStop((Color)ColorConverter.ConvertFromString("#16141A"), 0.55),
-                new GradientStop((Color)ColorConverter.ConvertFromString("#0B0B0E"), 1),
-            }, new Point(0, 0), new Point(0.6, 1)),
-            Child = CardKit.Glyph("", 34, CardKit.Brush("#99F5F5F7")),
-        };
-        root.Children.Add(tile);
-
-        var row = new DockPanel { Margin = new Thickness(6, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
-        var hint = CardKit.Label("Tap to open", 11, FontWeights.Medium, CardKit.Text2);
-        DockPanel.SetDock(hint, Dock.Right);
-        row.Children.Add(hint);
-        row.Children.Add(CardKit.Row(7, CardKit.Dot(8, CardKit.Text2), CardKit.Label("Mirror", 13, FontWeights.Bold)));
-        Grid.SetRow(row, 1);
-        root.Children.Add(row);
-        CardKit.AutomationName(root, "Mirror, camera preview. Open mirror");
-        return root;
-    }
+    FrameworkElement BuildCompact() => MirrorTile.Build(() => _ctx.OpenCard("mirror"));
 
     string State()
     {

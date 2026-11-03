@@ -43,7 +43,7 @@ public class ChipFitTests
                 new ChipCard("music", "Music", true), new ChipCard("notes", "Notes", true),
                 new ChipCard("timer", "Timers", true), new ChipCard("battery", "System", true),
             });
-        Assert.Equal(new[] { "Clipboard", "Shelf", "Notes", "Alerts", "System", "Mirror", "Calendar", "Timers", "Music", "Weather", "Snippets" },
+        Assert.Equal(new[] { "Clipboard", "Shelf", "Notes", "Alerts", "System", "Mirror", "Calendar", "Snippets", "Timers", "Music", "Weather" },
             chips.Select(c => c.Label));
     }
 }

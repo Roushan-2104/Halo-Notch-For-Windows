@@ -87,9 +87,11 @@ internal sealed class MusicModule : IShammyModule
             Width = 340,
             Compact = _card.Compact,
             Detail = _card.BuildDetail,
-            Order = 10,
+            Order = 20,
             Chip = true,
             IsRelevant = () => _card.IsRelevant,
+            Live = () => _card.Live,
+            Peek = _card.Peek,
         });
         // No glance of its own: the resting notch's built-in song glance (with the music bars) already shows it.
         Views.Cards.CardPipes.Register(ctx, "music", _card.DescribeCompact, _card.DescribeDetail);

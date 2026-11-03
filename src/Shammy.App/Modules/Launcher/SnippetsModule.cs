@@ -43,7 +43,7 @@ internal sealed class SnippetsModule : IShammyModule, ITextCommand
     Data _data = new();
     Dictionary<string, string> _snippets = new(StringComparer.OrdinalIgnoreCase);
     volatile Dictionary<string, string> _live = new(StringComparer.OrdinalIgnoreCase);
-    SnippetsPanel _panel = null!;
+    SnippetsCard _card = null!;
     SnippetKeyHook? _hook;
     SnippetTyper? _typer;
 
@@ -66,13 +66,22 @@ internal sealed class SnippetsModule : IShammyModule, ITextCommand
             if (SnippetText.IsValidTrigger(trigger)) _snippets[trigger.ToLowerInvariant()] = text;
         Publish();
 
-        _panel = new SnippetsPanel();
-        _panel.DeleteRequested += trigger =>
+        // A chip-only card (opened on purpose, never pushed onto the rail by itself).
+        _card = new SnippetsCard(() => _snippets, AddFromCard, trigger =>
         {
             if (_snippets.Remove(trigger)) Changed();
-        };
-        ctx.AddTab("", "Snippets", _panel);
-        _panel.Show(_snippets);
+        });
+        ctx.AddCard(new NotchCard
+        {
+            Id = "snippets",
+            Title = "Snippets",
+            Width = 176,
+            Order = 80,
+            Chip = true,
+            IsRelevant = () => false,
+            Compact = _card.Compact,
+            Detail = _card.BuildDetail,
+        });
 
         ctx.AddCommand(this);
         ctx.AddTrayToggle("Text snippets", () => _data.Enabled, on =>
@@ -126,18 +135,24 @@ internal sealed class SnippetsModule : IShammyModule, ITextCommand
         return Task.FromResult(result);
     }
 
-    void ShowPanel()
+    // OpenCard waits for the command's confirmation card to close by itself.
+    void ShowPanel() => _ctx.OpenCard("snippets");
+
+    /// <summary>The card's add box: the same rules as "snippet ;sig …" (no clashing prefixes).</summary>
+    string? AddFromCard(string trigger, string expansion)
     {
-        _panel.Show(_snippets);
-        // OpenTab waits for the command's confirmation card to close by itself.
-        _ctx.OpenTab(_panel);
+        if (!_snippets.ContainsKey(trigger) && SnippetText.Clash(trigger, _snippets.Keys) is { } clash)
+            return $"{trigger} clashes with {clash}: one starts with the other";
+        _snippets[trigger] = expansion;
+        Changed();
+        return null;
     }
 
     void Changed()
     {
         Publish();
         Save();
-        _panel.Show(_snippets);
+        _card.Refresh();
     }
 
     void Publish() => Current = _live = new Dictionary<string, string>(_snippets, StringComparer.OrdinalIgnoreCase);

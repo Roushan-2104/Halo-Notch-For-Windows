@@ -35,6 +35,7 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
     readonly DispatcherTimer _wake = new(DispatcherPriority.Normal);
     readonly AlarmSound _sound = new();
     readonly AlarmsCard _card;
+    readonly AlarmTile _tile;
     AlarmRingView? _ringCard;
     SnoozedPill? _snoozedPill;
     StoppedPill? _stoppedPill;
@@ -49,6 +50,7 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
         _save = save;
         _wake.Tick += (_, _) => Check();
         _card = new AlarmsCard(this);
+        _tile = new AlarmTile(this);
     }
 
     List<Alarm> List => _store().Alarms;
@@ -67,7 +69,9 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
             Order = 55,
             Chip = true,
             IsRelevant = IsRelevant,
-            Compact = _card.Compact,
+            Compact = _tile.View,
+            Live = () => _tile.Live,
+            Peek = _tile.Peek,
             Detail = OpenDetail,
         });
         _ctx.AddGlance("alarm", Glance);
@@ -575,6 +579,7 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
     {
         SyncSnoozedPill();
         _card.Refresh();
+        _tile.Refresh();
         bool relevant = IsRelevant();
         if (relevant == _relevant) return;
         _relevant = relevant;

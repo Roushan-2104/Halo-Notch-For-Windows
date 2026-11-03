@@ -2,13 +2,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Wall = Shammy.Views.Cards.CardKit;
 
 namespace Shammy.Modules.Kit;
 
 /// <summary>
-/// Small builders for the v2 cards (calendar, mirror, clipboard, notes), so each card reads like the
-/// mockup: text in the design's sizes and colours, round buttons, pills and tiles. Code-built rather
-/// than XAML because each card is a handful of elements that change with live data.
+/// The older card-builder call shapes, kept as a thin facade over the one Focus Wall kit
+/// (<see cref="Shammy.Views.Cards.CardKit"/>): same tokens, same font, same quiet controls. The cards moved
+/// to the Wall kit; a few smaller views (setup forms, pills, cards drawn by other modules) still use these
+/// names and pick up the Focus Wall look through them. New code uses the Wall kit directly.
 /// </summary>
 internal static class CardKit
 {
@@ -24,72 +26,43 @@ internal static class CardKit
         return b;
     }
 
-    /// <summary>The accent at an alpha (0–1), e.g. the 12 % purple behind a pill.</summary>
+    /// <summary>A colour at an alpha (0–1).</summary>
     public static SolidColorBrush Tint(string hex, double alpha)
     {
         var c = (Color)ColorConverter.ConvertFromString(hex);
         return Brush(Color.FromArgb((byte)Math.Round(alpha * 255), c.R, c.G, c.B).ToString());
     }
 
-    public static readonly SolidColorBrush Text = Brush(Modules.NotchPalette.Text);
-    public static readonly SolidColorBrush Text2 = Brush(Modules.NotchPalette.Text2);
-    public static readonly SolidColorBrush Raised = Brush("#1A1A1D");
-    public static readonly SolidColorBrush RaisedStroke = Brush("#26262B");
-    public static readonly SolidColorBrush Round = Brush("#232326");
-    public static readonly SolidColorBrush RoundHover = Brush("#2E2E33");
-    public static readonly SolidColorBrush Track = Brush("#232326");
+    public static readonly SolidColorBrush Text = (SolidColorBrush)Wall.Ink;
+    public static readonly SolidColorBrush Text2 = (SolidColorBrush)Wall.Ink2;
+    public static readonly SolidColorBrush Raised = (SolidColorBrush)Wall.PillBg;
+    public static readonly SolidColorBrush RaisedStroke = (SolidColorBrush)Wall.Hairline;
+    public static readonly SolidColorBrush Round = (SolidColorBrush)Wall.PillBg;
+    public static readonly SolidColorBrush RoundHover = (SolidColorBrush)Wall.PillHover;
+    public static readonly SolidColorBrush Track = (SolidColorBrush)Wall.TrackBg;
 
-    public static FontFamily Font => (FontFamily)Application.Current.Resources["ShammyFont"];
-    public static FontFamily DisplayFont => (FontFamily)Application.Current.Resources["ShammyDisplayFont"];
+    public static FontFamily Font => Wall.Font;
+    public static FontFamily DisplayFont => Wall.Font;
     public static FontFamily IconFont => (FontFamily)Application.Current.Resources["IconFont"];
 
-    public static TextBlock Label(string text, double size = 13, FontWeight? weight = null, Brush? brush = null) => new()
+    public static TextBlock Label(string text, double size = 13, FontWeight? weight = null, Brush? brush = null)
     {
-        Text = text,
-        FontFamily = Font,
-        FontSize = size,
-        FontWeight = weight ?? FontWeights.SemiBold,
-        Foreground = brush ?? Text,
-        TextTrimming = TextTrimming.CharacterEllipsis,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-
-    /// <summary>The design's tiny uppercase caption ("NEXT", "CLIPBOARD").</summary>
-    public static TextBlock Caption(string text, Brush? brush = null)
-    {
-        var t = Label(text.ToUpperInvariant(), 11, FontWeights.SemiBold, brush ?? Text2);
-        // WPF has no letter-spacing; a hair of tracking comes from the display font's metrics instead.
-        t.FontFamily = DisplayFont;
+        var t = Wall.Text(text, size, weight ?? FontWeights.SemiBold);
+        if (brush is not null) t.Foreground = brush;
         return t;
     }
 
+    /// <summary>The tiny uppercase caption ("NEXT", "CLIPBOARD"): bold and secondary grey.</summary>
+    public static TextBlock Caption(string text, Brush? brush = null) => Label(text.ToUpperInvariant(), 11, FontWeights.Bold, brush ?? Text2);
+
     /// <summary>A big bold number ("10:30", "30°").</summary>
-    public static TextBlock Big(string text, double size = 30) => new()
-    {
-        Text = text,
-        FontFamily = DisplayFont,
-        FontSize = size,
-        FontWeight = FontWeights.Bold,
-        Foreground = Text,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
+    public static TextBlock Big(string text, double size = 30) => Label(text, size, FontWeights.ExtraBold, Text);
 
-    public static TextBlock Glyph(string glyph, double size, Brush? brush = null) => new()
-    {
-        Text = glyph,
-        FontFamily = IconFont,
-        FontSize = size,
-        Foreground = brush ?? Text,
-        HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
+    public static TextBlock Glyph(string glyph, double size, Brush? brush = null) => Wall.FluentGlyph(glyph, size, brush);
 
-    public static System.Windows.Shapes.Ellipse Dot(double size, Brush fill) => new() { Width = size, Height = size, Fill = fill, VerticalAlignment = VerticalAlignment.Center };
+    public static System.Windows.Shapes.Ellipse Dot(double size, Brush fill) => Wall.Dot(size, fill);
 
-    /// <summary>
-    /// A clickable rounded element with a hover colour. Mouse-up runs <paramref name="onClick"/> and marks the
-    /// event handled, so a button inside a card doesn't also open the card.
-    /// </summary>
+    /// <summary>A clickable rounded element with a hover colour; the click doesn't also open the card under it.</summary>
     public static Border Button(UIElement content, Action onClick, Brush background, Brush hover, double height,
         double? width = null, double radius = -1, string? tip = null)
     {
@@ -116,11 +89,9 @@ internal static class CardKit
         return b;
     }
 
-    /// <summary>A round icon button (36 px Back-style, 28 px −/+).</summary>
     public static Border RoundButton(string glyph, Action onClick, double size = 36, string? tip = null, double glyphSize = 13) =>
         Button(Glyph(glyph, glyphSize), onClick, Round, RoundHover, size, size, tip: tip);
 
-    /// <summary>A text pill button ("Copy", "Close").</summary>
     public static Border PillButton(string text, Action onClick, double height = 26, string? glyph = null, Brush? background = null,
         Brush? hover = null, Brush? foreground = null, double fontSize = 11, string? tip = null)
     {
@@ -131,54 +102,29 @@ internal static class CardKit
             g.Margin = new Thickness(0, 0, 6, 0);
             row.Children.Add(g);
         }
-        var label = Label(text, fontSize, FontWeights.SemiBold, foreground ?? Text);
-        row.Children.Add(label);
+        row.Children.Add(Label(text, fontSize, FontWeights.SemiBold, foreground ?? Text));
         var b = Button(row, onClick, background ?? Round, hover ?? RoundHover, height, tip: tip ?? text);
-        b.Padding = new Thickness(glyph is null ? 10 : 11, 0, glyph is null ? 10 : 14, 0);
+        b.Padding = new Thickness(glyph is null ? 12 : 11, 0, glyph is null ? 12 : 14, 0);
         return b;
     }
 
-    /// <summary>A soft accent-tinted chip ("Pinned · 2").</summary>
+    /// <summary>A quiet chip (no tint: Focus Wall keeps colour for artwork and meaning).</summary>
     public static Border Chip(UIElement content, string accentHex, double height = 26) => new()
     {
         Height = height,
         CornerRadius = new CornerRadius(height / 2),
-        Background = Tint(accentHex, 0.12),
-        BorderBrush = Tint(accentHex, 0.35),
+        Background = Raised,
+        BorderBrush = RaisedStroke,
         BorderThickness = new Thickness(1),
         Padding = new Thickness(10, 0, 10, 0),
         Child = content,
     };
 
-    /// <summary>A thin progress bar (track + fill), <paramref name="fraction"/> 0–1.</summary>
-    public static Grid Progress(double fraction, Brush fill, double height = 4)
-    {
-        var g = new Grid { Height = height, VerticalAlignment = VerticalAlignment.Center };
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Clamp(fraction, 0, 1), GridUnitType.Star) });
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - Math.Clamp(fraction, 0, 1), GridUnitType.Star) });
-        var track = new Border { CornerRadius = new CornerRadius(height / 2), Background = Track };
-        Grid.SetColumnSpan(track, 2);
-        g.Children.Add(track);
-        if (fraction > 0) g.Children.Add(new Border { CornerRadius = new CornerRadius(height / 2), Background = fill });
-        return g;
-    }
+    public static Grid Progress(double fraction, Brush fill, double height = 4) => Wall.Progress(fraction, fill, height);
 
-    public static StackPanel Row(double gap, params UIElement[] children)
-    {
-        var p = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        for (int i = 0; i < children.Length; i++)
-        {
-            if (i > 0 && children[i] is FrameworkElement f && gap > 0) f.Margin = new Thickness(gap, f.Margin.Top, f.Margin.Right, f.Margin.Bottom);
-            p.Children.Add(children[i]);
-        }
-        return p;
-    }
+    public static StackPanel Row(double gap, params UIElement[] children) => Wall.Row(gap, children);
 
-    /// <summary>Whether to write times on a 24-hour clock ("14:30"): the Use24Hour setting, else the Windows region (ClockPreference).</summary>
-    public static bool H24 => Shammy.Core.Productivity.ClockPreference.Is24Hour;
+    public static bool H24 => Wall.H24;
 
-    public static void AutomationName(DependencyObject d, string? name)
-    {
-        if (!string.IsNullOrEmpty(name)) System.Windows.Automation.AutomationProperties.SetName(d, name);
-    }
+    public static void AutomationName(DependencyObject d, string? name) => Wall.Name(d, name);
 }

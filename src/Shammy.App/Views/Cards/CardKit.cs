@@ -11,100 +11,149 @@ using System.Windows.Shapes;
 namespace Shammy.Views.Cards;
 
 /// <summary>
-/// Building blocks shared by the v2 notch cards (see the mockup's BRIEF: #121214 surfaces, one accent per
-/// activity, big bold numbers under tiny uppercase labels, 36 px round controls). Everything is plain WPF
-/// drawn from code, so the cards cost nothing while they aren't on screen.
+/// The one card kit: Focus Wall (see FOCUSWALL / Wall.dc.html). A deep neutral ground, tiles that are artwork
+/// fields, white type in Schibsted Grotesk (big tight posters, small tracked uppercase labels, tabular figures)
+/// and ONE accent, used only for focus and the single primary control. Every card, tile and detail is built
+/// from these pieces in code, so nothing costs anything while it isn't on screen. (Shammy.Modules.Kit.CardKit
+/// is a thin older facade over the same tokens for views that haven't moved yet.)
 /// </summary>
 internal static class CardKit
 {
-    /// <summary>Compact cards are 176 tall; the content keeps the mockup's 14 px padding inside the notch's frame.</summary>
-    public static readonly Thickness CompactPadding = new(14);
-
-    /// <summary>
-    /// The notch frames a detail with its own Back/title band and inner padding, so details add none.
-    /// </summary>
-    public static readonly Thickness DetailPadding = new(0);
-
-    public static Brush Res(string key) => (Brush)Application.Current.Resources[key];
+    // ---- Tokens ----------------------------------------------------------------------------------
 
     public static Brush Hex(string hex)
     {
-        var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        var b = new SolidColorBrush(Color(hex));
         b.Freeze();
         return b;
     }
 
     public static Color Color(string hex) => (Color)ColorConverter.ConvertFromString(hex);
 
-    public static readonly Brush ControlBg = Hex("#232326"), ControlHover = Hex("#2E2E33"), TrackBg = Hex("#2A2A2E"),
-        RingTrack = Hex("#232326"), RowBg = Hex("#18181B"), Divider = Hex("#1F1F23");
+    public static Brush Res(string key) => (Brush)Application.Current.Resources[key];
 
-    static FontFamily Font => (FontFamily)Application.Current.Resources["ShammyFont"];
-    static FontFamily Display => (FontFamily)Application.Current.Resources["ShammyDisplayFont"];
+    /// <summary>The notch ground, a tile's surface, the hairline, the two text colours and the accent.</summary>
+    public static readonly Brush Ground = Hex("#0B0B0D"), Surface = Hex("#16161A"), Hairline = Hex("#26282E"),
+        Ink = Hex("#F5F5F7"), Ink2 = Hex("#A3A3AB"), Accent = Hex("#FF8A3D"), AccentHover = Hex("#FFA466"), OnAccent = Hex("#0B0B0D");
 
-    /// <summary>Body text in the card colours (CardText / CardText2).</summary>
-    public static TextBlock Text(string text, double size, FontWeight weight, bool secondary = false)
+    /// <summary>Meaning colours (never decoration): red for recording, muted, alarms and anything wrong.</summary>
+    public static readonly Brush Alarm = Hex("#FF453A");
+
+    /// <summary>Quiet controls: a translucent white circle over artwork (Wall's .ib) and a dark pill with a hairline (.qb).</summary>
+    public static readonly Brush QuietBg = Hex("#29F5F5F7"), QuietHover = Hex("#42F5F5F7"), PillBg = Hex("#1E1E23"), PillHover = Hex("#26262C");
+
+    /// <summary>Tracks under meters, rings and scrubbers, and the hairline between list rows.</summary>
+    public static readonly Brush TrackBg = Hex("#2A2A31"), RingTrack = Hex("#2E2F36"), Divider = Hairline;
+
+    /// <summary>Older names some views still use.</summary>
+    public static readonly Brush ControlBg = PillBg, ControlHover = PillHover, RowBg = Hex("#1A1A1F");
+
+    public static readonly Thickness CompactPadding = new(12), DetailPadding = new(0);
+
+    // ---- Type ------------------------------------------------------------------------------------
+
+    /// <summary>Schibsted Grotesk at Regular/Bold. Medium, SemiBold and ExtraBold are their own embedded families:
+    /// use <see cref="Face"/> (asking this family for SemiBold renders Regular).</summary>
+    public static FontFamily Font => (FontFamily)Application.Current.Resources["WallFont"];
+
+    /// <summary>The embedded cut for a weight (see <see cref="WallParts.Family"/>).</summary>
+    public static FontFamily Face(FontWeight weight) => WallParts.Family(weight);
+
+    static FontFamily IconFont => (FontFamily)Application.Current.Resources["IconFont"];
+
+    /// <summary>
+    /// Body text: white, or the secondary grey (≥ 4.5:1 on tiles). Proportional figures (this face's tabular set
+    /// widens ":" and "."); live numbers that tick use <see cref="Big"/>, which keeps only the digits even.
+    /// </summary>
+    public static TextBlock Text(string text, double size, FontWeight weight, bool secondary = false) => new()
     {
-        var t = new TextBlock
-        {
-            Text = text,
-            FontFamily = Font,
-            FontSize = size,
-            FontWeight = weight,
-            Foreground = Res(secondary ? "CardText2" : "CardText"),
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
-        return t;
-    }
-
-    /// <summary>The tiny uppercase label (11 px SemiBold) that sits above a big number.</summary>
-    public static TextBlock Label(string text, Brush? brush = null)
-    {
-        var t = Text(text.ToUpperInvariant(), 11, FontWeights.SemiBold, secondary: true);
-        if (brush is not null) t.Foreground = brush;
-        return t;
-    }
-
-    /// <summary>A big confident number ("31°", "4:32", "81%").</summary>
-    public static TextBlock Big(string text, double size)
-    {
-        var t = Text(text, size, FontWeights.Bold);
-        t.FontFamily = Display;
-        t.TextTrimming = TextTrimming.None;
-        // Tight like the mockup's line-height 1: digits and ° have no descenders to clip, and the default
-        // line box would make a 48 px number take ~64 px.
-        t.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
-        t.LineHeight = Math.Round(size * 1.15);
-        return t;
-    }
-
-    /// <summary>A rounded #121214 panel inside a detail view (the mockup's 16 px-radius sections).</summary>
-    public static Border Section(UIElement child, double padding = 14) => new()
-    {
-        Background = Res("CardBg"),
-        BorderBrush = Res("CardStroke"),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(16),
-        Padding = new Thickness(padding),
-        Child = child,
+        Text = text,
+        FontFamily = Face(weight),
+        FontSize = size,
+        FontWeight = weight,
+        Foreground = secondary ? Ink2 : Ink,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        VerticalAlignment = VerticalAlignment.Center,
     };
 
-    /// <summary>A whole detail (timer, system): fills the area the notch's frame gives it, which draws the card itself.</summary>
-    public static Border DetailPanel(UIElement child) => new() { Padding = DetailPadding, Child = child };
+    /// <summary>A run inside a mixed TextBlock, on the right cut for its weight.</summary>
+    public static System.Windows.Documents.Run Run(string text, FontWeight weight, Brush brush) =>
+        new(text) { FontFamily = Face(weight), FontWeight = weight, Foreground = brush };
 
-    /// <summary>A hairline column divider with the mockup's 18 px gutter after it.</summary>
-    public static Border VerticalDivider() => new() { Width = 1, Background = Divider, Margin = new Thickness(18, 0, 18, 0) };
-
-    /// <summary>A rounded bar (charts, meters).</summary>
-    public static Border Bar(Brush fill, double width, double height, double radius) => new()
+    /// <summary>The small tracked uppercase label (11 px Bold, +0.12 em), white unless given a brush.</summary>
+    public static TrackedText Label(string text, Brush? brush = null, double size = 11) => new()
     {
-        Width = width,
-        Height = height,
-        CornerRadius = new CornerRadius(radius),
-        Background = fill,
+        Text = text,
+        Uppercase = true,
+        FontSize = size,
+        FontFamily = Face(FontWeights.Bold),
+        FontWeight = FontWeights.Bold,
+        Tracking = 0.12,
+        LineFactor = 1.25,
+        Foreground = brush ?? Ink,
     };
+
+    /// <summary>A poster: the big tight ExtraBold title or number (−0.035 em, line-height about 1), even digits.</summary>
+    public static TrackedText Poster(string text, double size) => new()
+    {
+        Text = text,
+        Uppercase = false,
+        FontSize = size,
+        FontFamily = Face(FontWeights.ExtraBold),
+        FontWeight = FontWeights.ExtraBold,
+        Tracking = -0.035,
+        LineFactor = 1.0,
+        TabularDigits = true,
+        Foreground = Ink,
+    };
+
+    /// <summary>A big number that isn't a poster (ring centres, meters): ExtraBold, a little less tight.</summary>
+    public static TrackedText Big(string text, double size)
+    {
+        var t = Poster(text, size);
+        t.Tracking = -0.02;
+        t.LineFactor = 1.15;
+        return t;
+    }
+
+    /// <summary>A tile or detail title: 15–17 px Bold, a hair tight.</summary>
+    public static TextBlock Title(string text, double size = 15) => Text(text, size, FontWeights.Bold);
+
+    // ---- Icons -----------------------------------------------------------------------------------
+
+    /// <summary>The mockup's icons (24×24 viewBox). Filled glyphs for media, stroked ones for everything else.</summary>
+    public static class Paths
+    {
+        public const string Play = "M7 4 20 12 7 20Z";
+        public const string Pause = "M6.5 4h3a1.5 1.5 0 0 1 1.5 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 5 18.5v-13A1.5 1.5 0 0 1 6.5 4Z M15.5 4h3a1.5 1.5 0 0 1 1.5 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1-1.5-1.5v-13A1.5 1.5 0 0 1 15.5 4Z";
+        public const string Next = "M5 5 15 12 5 19Z M17 5h1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z";
+        public const string Previous = "M6 5h1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z M19 5 9 12 19 19Z";
+        public const string Stop = "M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z";
+        // Stroked.
+        public const string Open = "M7 17 17 7 M9 7h8v8";
+        public const string Back = "M15 5l-7 7 7 7";
+        public const string Search = "M11 4a7 7 0 1 1 0 14a7 7 0 1 1 0-14z M20 20l-3.5-3.5";
+        public const string Plus = "M12 5v14 M5 12h14";
+        public const string Close = "M6 6l12 12 M18 6 6 18";
+        public const string Check = "M5 12.5l4.5 4.5L19 7.5";
+        public const string Volume = "M11 5 6 9H3v6h3l5 4V5z M16 9.5a3.5 3.5 0 0 1 0 5";
+        public const string Bolt = "M13 2L4 14h7l-1 8 9-12h-7z";
+        public const string Laptop = "M4 5h16v11H4z M2 19h20";
+        public const string Bluetooth = "M7 7l10 10-5 5V2l5 5L7 17";
+        public const string Stopwatch = "M12 7a7 7 0 1 1 0 14a7 7 0 1 1 0-14z M12 11v3 M10 3h4 M18 6l1.5-1.5";
+        public const string Timer = "M12 5a8 8 0 1 1 0 16a8 8 0 1 1 0-16z M12 9v4l2.5 2 M9 2h6";
+        public const string Chip = "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z M12 8.5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 1 1 0-7z";
+        public const string Pin = "M9 4h6l-1 6 3 3v2H7v-2l3-3z M12 15v5";
+        public const string Copy = "M9 9h10v10H9z M5 15V5h10";
+        public const string Link = "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1";
+        public const string Note = "M6 4h9l3 3v13H6z M9 11h6 M9 15h6";
+        public const string Flip = "M12 3v18 M8 7 4 12l4 5 M16 7l4 5-4 5";
+        public const string Minus = "M5 12h14";
+        public const string Camera = "M4 7h3l2-2h6l2 2h3v12H4z M12 10a3 3 0 1 1 0 6a3 3 0 1 1 0-6z";
+        public const string Video = "M3 7h12v10H3z M15 10l6-3v10l-6-3";
+        public const string Folder = "M3 6h6l2 2h10v11H3z";
+        public const string Bell = "M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 20h4";
+    }
 
     /// <summary>A stroked 24×24 icon (the mockup's inline SVGs), scaled to <paramref name="size"/>.</summary>
     public static FrameworkElement Icon(string data, Brush stroke, double size = 16, double strokeWidth = 2, Brush? fill = null)
@@ -124,44 +173,101 @@ internal static class CardKit
         return new Viewbox { Width = size, Height = size, Child = canvas, IsHitTestVisible = false };
     }
 
-    /// <summary>The mockup's icon paths (24×24 viewBox).</summary>
-    public static class Paths
+    /// <summary>A filled 24×24 glyph (play, pause, next…).</summary>
+    public static FrameworkElement Glyph(string data, Brush fill, double size = 14) => Icon(data, Brushes.Transparent, size, 0, fill);
+
+    /// <summary>A Segoe Fluent glyph, for the few places the system's own symbols read best (weather kinds come from WeatherIcon).</summary>
+    public static TextBlock FluentGlyph(string glyph, double size, Brush? brush = null) => new()
     {
-        public const string Previous = "M19 5 9 12l10 7V5z M5 5v14";
-        public const string Next = "M5 5l10 7-10 7V5z M19 5v14";
-        public const string Play = "M8 5.5v13l11-6.5-11-6.5z";
-        public const string Pause = "M9 5v14 M15 5v14";
-        public const string Stop = "M8 5h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z";
-        public const string Plus = "M12 5v14 M5 12h14";
-        public const string Volume = "M11 5 6 9H3v6h3l5 4V5z M16 9.5a3.5 3.5 0 0 1 0 5";
-        public const string Bolt = "M13 2L4 14h7l-1 8 9-12h-7z";
-        public const string Laptop = "M4 5h16v11H4z M2 19h20";
-        public const string Bluetooth = "M7 7l10 10-5 5V2l5 5L7 17";
-        public const string Stopwatch = "M12 7a7 7 0 1 1 0 14a7 7 0 1 1 0-14z M12 11v3 M10 3h4 M18 6l1.5-1.5";
-        public const string Timer = "M12 5a8 8 0 1 1 0 16a8 8 0 1 1 0-16z M12 9v4l2.5 2 M9 2h6";
-        public const string Chip = "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z M12 8.5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 1 1 0-7z";
-    }
+        Text = glyph,
+        FontFamily = IconFont,
+        FontSize = size,
+        Foreground = brush ?? Ink,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>The play/pause glyph for a primary control.</summary>
+    public static FrameworkElement PlayPause(bool playing, double size) => Glyph(playing ? Paths.Pause : Paths.Play, OnAccent, size);
+
+    // ---- Controls --------------------------------------------------------------------------------
 
     /// <summary>
-    /// A 36 px round control: #232326 with a lighter hover, or the activity's accent for the primary one
-    /// (play, resume) with a black glyph. Real buttons, named for screen readers.
+    /// THE primary control (one per tile, peek or detail): an accent circle with a dark glyph. Real buttons,
+    /// named for screen readers, that don't open the tile they sit on.
     /// </summary>
-    public static Button RoundButton(string name, FrameworkElement icon, Action onClick, Brush? accent = null, double size = 36)
+    public static Button Primary(string name, FrameworkElement icon, Action onClick, double size = 28) =>
+        Make(name, icon, onClick, size, size, size / 2, Accent, AccentHover, null);
+
+    /// <summary>A primary text control ("Join", "Pause"): an accent pill.</summary>
+    public static Button PrimaryPill(string text, string name, Action onClick, double height = 28, double fontSize = 12)
     {
-        var bg = accent ?? ControlBg;
+        var label = Text(text, fontSize, FontWeights.Bold);
+        label.Foreground = OnAccent;
+        label.HorizontalAlignment = HorizontalAlignment.Center;
+        var b = Make(name, label, onClick, double.NaN, height, height / 2, Accent, AccentHover, null);
+        ((Border)b.Content).Padding = new Thickness(Math.Round(height * 0.46), 0, Math.Round(height * 0.46), 0);
+        return b;
+    }
+
+    /// <summary>A quiet round control (Wall's .ib): translucent white, for secondary actions on artwork or a detail.</summary>
+    public static Button Quiet(string name, FrameworkElement icon, Action onClick, double size = 28) =>
+        Make(name, icon, onClick, size, size, size / 2, QuietBg, QuietHover, null);
+
+    /// <summary>A quiet text pill (Wall's .qb): "+1 min", "Lyrics", "Clear".</summary>
+    public static Button Pill(string text, string name, Action onClick, double height = 32, double fontSize = 12)
+    {
+        var label = Text(text, fontSize, FontWeights.SemiBold);
+        label.HorizontalAlignment = HorizontalAlignment.Center;
+        var b = Make(name, label, onClick, double.NaN, height, height / 2, PillBg, PillHover, Hairline);
+        ((Border)b.Content).Padding = new Thickness(13, 0, 13, 0);
+        return b;
+    }
+
+    /// <summary>The detail's Back control: a dark translucent circle over the artwork with a chevron.</summary>
+    public static Button BackButton(Action onClick) =>
+        Make("Back", Icon(Paths.Back, Ink, 16, 2.4), onClick, 36, 36, 18, Hex("#9E0B0B0D"), Hex("#C40B0B0D"), null);
+
+    /// <summary>Older call shape: a 36 px round control; with an accent it is the primary one.</summary>
+    public static Button RoundButton(string name, FrameworkElement icon, Action onClick, Brush? accent = null, double size = 36) =>
+        accent is null ? Quiet(name, icon, onClick, size) : Primary(name, Recolour(icon, OnAccent), onClick, size);
+
+    /// <summary>Older call shape: a text chip in the quiet-pill style.</summary>
+    public static Button Chip(string text, string name, Action onClick, double height = 32, double fontSize = 12, double radius = 16) =>
+        Pill(text, name, onClick, height, fontSize);
+
+    static FrameworkElement Recolour(FrameworkElement icon, Brush brush)
+    {
+        if (icon is Viewbox { Child: Canvas { Children.Count: > 0 } c } && c.Children[0] is System.Windows.Shapes.Path p)
+        {
+            if (p.Fill is not null && p.Fill != Brushes.Transparent) p.Fill = brush;
+            if (p.StrokeThickness > 0) p.Stroke = brush;
+        }
+        return icon;
+    }
+
+    static Button Make(string name, UIElement content, Action onClick, double width, double height, double radius, Brush bg, Brush hover, Brush? stroke)
+    {
         var face = new Border
         {
-            Width = size,
-            Height = size,
-            CornerRadius = new CornerRadius(size / 2),
+            Height = height,
+            CornerRadius = new CornerRadius(radius),
             Background = bg,
-            Child = icon,
+            BorderBrush = stroke,
+            BorderThickness = new Thickness(stroke is null ? 0 : 1),
+            Child = content,
+            SnapsToDevicePixels = true,
         };
+        if (!double.IsNaN(width)) face.Width = width;
+        if (content is FrameworkElement fe)
+        {
+            fe.HorizontalAlignment = HorizontalAlignment.Center;
+            fe.VerticalAlignment = VerticalAlignment.Center;
+        }
         var button = new Button
         {
             Content = face,
-            Width = size,
-            Height = size,
+            Height = height,
             Focusable = false,
             Cursor = Cursors.Hand,
             Template = BareTemplate,
@@ -169,53 +275,23 @@ internal static class CardKit
             RenderTransform = new ScaleTransform(1, 1),
             ToolTip = name,
         };
+        if (!double.IsNaN(width)) button.Width = width;
         AutomationProperties.SetName(button, name);
-        button.MouseEnter += (_, _) => face.Background = accent is null ? ControlHover : Lighter(accent);
-        button.MouseLeave += (_, _) => face.Background = bg;
-        button.PreviewMouseLeftButtonDown += (_, _) => ((ScaleTransform)button.RenderTransform).ScaleX = ((ScaleTransform)button.RenderTransform).ScaleY = 0.94;
-        button.PreviewMouseLeftButtonUp += (_, _) => ((ScaleTransform)button.RenderTransform).ScaleX = ((ScaleTransform)button.RenderTransform).ScaleY = 1;
-        button.MouseLeave += (_, _) => ((ScaleTransform)button.RenderTransform).ScaleX = ((ScaleTransform)button.RenderTransform).ScaleY = 1;
+        var scale = (ScaleTransform)button.RenderTransform;
+        button.MouseEnter += (_, _) => face.Background = hover;
+        button.MouseLeave += (_, _) =>
+        {
+            face.Background = bg;
+            scale.ScaleX = scale.ScaleY = 1;
+        };
+        button.PreviewMouseLeftButtonDown += (_, _) => scale.ScaleX = scale.ScaleY = 0.94;
+        button.PreviewMouseLeftButtonUp += (_, _) => scale.ScaleX = scale.ScaleY = 1;
         button.Click += (_, e) =>
         {
             onClick();
             e.Handled = true;
         };
         return button;
-    }
-
-    /// <summary>A text chip ("5m", "+1 min") in the round-control style.</summary>
-    public static Button Chip(string text, string name, Action onClick, double height = 40, double fontSize = 15, double radius = 14)
-    {
-        var label = Text(text, fontSize, FontWeights.Bold);
-        label.HorizontalAlignment = HorizontalAlignment.Center;
-        var face = new Border
-        {
-            Height = height,
-            CornerRadius = new CornerRadius(radius),
-            Background = ControlBg,
-            Padding = new Thickness(12, 0, 12, 0),
-            Child = label,
-        };
-        var button = new Button { Content = face, Focusable = false, Cursor = Cursors.Hand, Template = BareTemplate, ToolTip = name };
-        AutomationProperties.SetName(button, name);
-        button.MouseEnter += (_, _) => face.Background = ControlHover;
-        button.MouseLeave += (_, _) => face.Background = ControlBg;
-        button.Click += (_, e) =>
-        {
-            onClick();
-            e.Handled = true;
-        };
-        return button;
-    }
-
-    static Brush Lighter(Brush accent)
-    {
-        if (accent is not SolidColorBrush s) return accent;
-        var c = s.Color;
-        static byte Up(byte v) => (byte)Math.Min(255, v + (255 - v) * 0.18);
-        var b = new SolidColorBrush(System.Windows.Media.Color.FromArgb(c.A, Up(c.R), Up(c.G), Up(c.B)));
-        b.Freeze();
-        return b;
     }
 
     /// <summary>A button template that is just its content (the face draws hover itself).</summary>
@@ -224,26 +300,91 @@ internal static class CardKit
     static ControlTemplate MakeBareTemplate()
     {
         var t = new ControlTemplate(typeof(ButtonBase));
-        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
-        t.VisualTree = presenter;
+        t.VisualTree = new FrameworkElementFactory(typeof(ContentPresenter));
         t.Seal();
         return t;
     }
 
-    /// <summary>A soft, static glow in a colour (album art, rings): a radial gradient, no blur effect to render.</summary>
+    // ---- Shapes ----------------------------------------------------------------------------------
+
+    /// <summary>A rounded bar (charts, meters).</summary>
+    public static Border Bar(Brush fill, double width, double height, double radius) => new()
+    {
+        Width = width,
+        Height = height,
+        CornerRadius = new CornerRadius(radius),
+        Background = fill,
+    };
+
+    /// <summary>A tall meter (the system tile's battery and earbuds): a translucent well filled from the bottom.</summary>
+    public static Grid Meter(double fraction, double width, double height, double radius)
+    {
+        var g = new Grid { Width = width, Height = height, ClipToBounds = true };
+        g.Clip = new RectangleGeometry(new Rect(0, 0, width, height), radius, radius);
+        g.Children.Add(new Border { Background = Hex("#1FF5F5F7") });
+        g.Children.Add(new Border
+        {
+            Height = Math.Round(height * Math.Clamp(fraction, 0, 1)),
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Background = Hex("#D1F5F5F7"),
+        });
+        return g;
+    }
+
+    /// <summary>A thin progress line (scrubbers, quiet progress): track + white fill.</summary>
+    public static Grid Progress(double fraction, Brush? fill = null, double height = 3, Brush? track = null)
+    {
+        var g = new Grid { Height = height, VerticalAlignment = VerticalAlignment.Center };
+        double f = double.IsNaN(fraction) ? 0 : Math.Clamp(fraction, 0, 1);
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(f, GridUnitType.Star) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - f, GridUnitType.Star) });
+        var t = new Border { CornerRadius = new CornerRadius(height / 2), Background = track ?? TrackBg };
+        Grid.SetColumnSpan(t, 2);
+        g.Children.Add(t);
+        if (f > 0) g.Children.Add(new Border { CornerRadius = new CornerRadius(height / 2), Background = fill ?? Ink });
+        return g;
+    }
+
+    public static Ellipse Dot(double size, Brush fill) => new() { Width = size, Height = size, Fill = fill, VerticalAlignment = VerticalAlignment.Center };
+
+    /// <summary>A hairline between list rows.</summary>
+    public static Border Rule() => new() { Height = 1, Background = Hairline, SnapsToDevicePixels = true };
+
+    /// <summary>A rounded #16161A panel with a hairline (a section inside a detail).</summary>
+    public static Border Section(UIElement child, double padding = 14) => new()
+    {
+        Background = Surface,
+        BorderBrush = Hairline,
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(14),
+        Padding = new Thickness(padding),
+        Child = child,
+    };
+
+    /// <summary>A whole detail that isn't a <see cref="WallDetail"/> (it fills what the notch gives it).</summary>
+    public static Border DetailPanel(UIElement child) => new() { Padding = DetailPadding, Child = child };
+
+    /// <summary>A hairline column divider with an 18 px gutter after it.</summary>
+    public static Border VerticalDivider() => new() { Width = 1, Background = Hairline, Margin = new Thickness(18, 0, 18, 0) };
+
+    /// <summary>A soft static glow in a colour: a radial gradient, no blur effect to render.</summary>
     public static Ellipse Glow(Color color, double size, double strength)
     {
         var brush = new RadialGradientBrush();
         brush.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb((byte)(255 * strength), color.R, color.G, color.B), 0));
-        brush.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb((byte)(255 * strength * 0.33), color.R, color.G, color.B), 0.45));
-        brush.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb(0, color.R, color.G, color.B), 0.7));
+        brush.GradientStops.Add(new GradientStop(System.Windows.Media.Color.FromArgb(0, color.R, color.G, color.B), 1));
         brush.Freeze();
         return new Ellipse { Width = size, Height = size, Fill = brush, IsHitTestVisible = false };
     }
 
-    /// <summary>A gentle glow under a ring or art tile in its accent colour (static; not animated).</summary>
-    public static Effect Shadow(Color color, double blur, double opacity) =>
-        new DropShadowEffect { Color = color, BlurRadius = blur, ShadowDepth = 0, Opacity = opacity, RenderingBias = RenderingBias.Performance };
+    /// <summary>Depth with an offset and a soft blur (never a zero-offset halo).</summary>
+    public static Effect Shadow(double blur = 24, double depth = 8, double opacity = 0.45) =>
+        new DropShadowEffect { Color = Colors.Black, BlurRadius = blur, ShadowDepth = depth, Direction = 270, Opacity = opacity, RenderingBias = RenderingBias.Performance };
+
+    /// <summary>Older call shape; the colour is ignored (Focus Wall has no coloured glows outside artwork).</summary>
+    public static Effect Shadow(Color color, double blur, double opacity) => Shadow(blur, blur / 3, opacity * 0.8);
+
+    // ---- Layout ----------------------------------------------------------------------------------
 
     /// <summary>Lays children out left to right with a fixed gap.</summary>
     public static StackPanel Row(double gap, params UIElement[] children) => Stack(Orientation.Horizontal, gap, children);
@@ -266,6 +407,15 @@ internal static class CardKit
         return panel;
     }
 
+    /// <summary>Places <paramref name="child"/> in a corner of a Grid cell with a margin (the mockup's absolute positions).</summary>
+    public static T At<T>(T child, HorizontalAlignment h, VerticalAlignment v, double left = 0, double top = 0, double right = 0, double bottom = 0) where T : FrameworkElement
+    {
+        child.HorizontalAlignment = h;
+        child.VerticalAlignment = v;
+        child.Margin = new Thickness(left, top, right, bottom);
+        return child;
+    }
+
     /// <summary>Calls <paramref name="tick"/> every <paramref name="interval"/> while <paramref name="element"/> is on screen, and never otherwise.</summary>
     public static void TickWhileVisible(FrameworkElement element, TimeSpan interval, Action tick)
     {
@@ -282,17 +432,36 @@ internal static class CardKit
         };
         element.Unloaded += (_, _) => timer.Stop();
     }
+
+    /// <summary>Whether to write times on a 24-hour clock (the Use24Hour setting, else the Windows region).</summary>
+    public static bool H24 => Shammy.Core.Productivity.ClockPreference.Is24Hour;
+
+    public static void Name(DependencyObject d, string? name)
+    {
+        if (!string.IsNullOrEmpty(name)) AutomationProperties.SetName(d, name);
+    }
+
+    /// <summary>Takes an element out of whatever it was in, so it can be shown somewhere else.</summary>
+    public static void Detach(FrameworkElement element)
+    {
+        switch (element.Parent)
+        {
+            case Panel p: p.Children.Remove(element); break;
+            case Decorator d: d.Child = null; break;
+            case ContentControl c: c.Content = null; break;
+        }
+    }
 }
 
 /// <summary>
-/// A progress ring: a #232326 track and a round-capped arc from 12 o'clock, clockwise. Drawn directly, so a
-/// change of <see cref="Value"/> is one cheap re-render.
+/// A progress ring: a quiet track and a round-capped arc from 12 o'clock, clockwise (white by default: on the
+/// Focus Wall the ring is the timer's artwork, not an accent). Drawn directly, so a new value is one cheap re-render.
 /// </summary>
 internal sealed class Ring : FrameworkElement
 {
     double _value;
-    Brush _fill = Brushes.White;
-    double _thickness = 7;
+    Brush _fill = CardKit.Ink;
+    double _thickness = 6;
 
     public double Value
     {
@@ -326,7 +495,7 @@ internal sealed class Ring : FrameworkElement
         }
     }
 
-    public Brush Track { get; set; } = CardKit.RingTrack;
+    public Brush Track { get; set; } = CardKit.Hex("#2EF5F5F7");
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -355,8 +524,8 @@ internal sealed class Ring : FrameworkElement
 }
 
 /// <summary>
-/// A progress track with a fill and a white knob (the music scrubber, the volume slider). Click or drag to
-/// set; <see cref="Changed"/> reports the new fraction.
+/// A progress track with a white fill and an optional knob (the music scrubber, the volume slider). Click or
+/// drag to set; <see cref="Changed"/> reports the new fraction.
 /// </summary>
 internal sealed class CardTrack : FrameworkElement
 {
@@ -371,7 +540,8 @@ internal sealed class CardTrack : FrameworkElement
 
     public double TrackHeight { get; init; } = 4;
     public double KnobSize { get; init; } = 8;
-    public Brush Fill { get; set; } = Brushes.White;
+    public Brush Fill { get; set; } = CardKit.Ink;
+    public Brush Track { get; set; } = CardKit.TrackBg;
     public Brush KnobHalo { get; set; } = Brushes.Transparent;
     public bool Interactive { get; init; } = true;
 
@@ -405,14 +575,14 @@ internal sealed class CardTrack : FrameworkElement
         // Transparent hit area over the full height, so the thin track is easy to grab.
         dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
         double y = (h - TrackHeight) / 2, rad = TrackHeight / 2;
-        dc.DrawRoundedRectangle(CardKit.TrackBg, null, new Rect(0, y, w, TrackHeight), rad, rad);
+        dc.DrawRoundedRectangle(Track, null, new Rect(0, y, w, TrackHeight), rad, rad);
         double x = w * _value;
         if (x > 0) dc.DrawRoundedRectangle(Fill, null, new Rect(0, y, Math.Max(TrackHeight, x), TrackHeight), rad, rad);
         if (KnobSize > 0)
         {
             var c = new Point(Math.Clamp(x, KnobSize / 2, w - KnobSize / 2), h / 2);
             if (KnobHalo != Brushes.Transparent) dc.DrawEllipse(KnobHalo, null, c, KnobSize / 2 + 3, KnobSize / 2 + 3);
-            dc.DrawEllipse(CardKit.Res("CardText"), null, c, KnobSize / 2, KnobSize / 2);
+            dc.DrawEllipse(CardKit.Ink, null, c, KnobSize / 2, KnobSize / 2);
         }
     }
 

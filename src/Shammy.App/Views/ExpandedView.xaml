@@ -2,318 +2,144 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:Shammy.Views"
-             Width="1012" Height="248" Focusable="True" FocusVisualStyle="{x:Null}">
-    <!-- The v2 open notch (Home.dc.html): a top row of eyes / chips / search, then either the home row of
-         cards or one view opened in place (a card's detail, a chip's view). -->
-    <Grid Margin="18,12,18,18">
+             Width="1012" Height="278" Focusable="True" FocusVisualStyle="{x:Null}">
+    <!-- The open notch as a Focus Wall (Wall.dc.html): pet-eyes home, tracked chips and search on top; below, one
+         rail of artwork tiles with the focused one grown, or one card opened in place out of its tile. -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="WallSurfaceHover" Color="#FF1E1E24" />
+
+        <!-- A chip: tracked uppercase text, quiet; the open view's chip is white with a 1 px underline, not a pill. -->
+        <Style x:Key="NotchChip" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource WallText2}" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent">
+                            <ContentPresenter Margin="7,0" VerticalAlignment="Center" />
+                            <Border x:Name="Underline" Height="1" Margin="7,0,7,3" VerticalAlignment="Bottom" SnapsToDevicePixels="True"
+                                    Background="{StaticResource WallText}" Visibility="Hidden" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="views:TabHover.Armed" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Foreground" Value="{StaticResource WallText}" />
+                            </MultiTrigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource WallText}" />
+                                <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="Body" Margin="20,12,20,18">
         <Grid.RowDefinitions>
-            <RowDefinition Height="30" />
-            <RowDefinition Height="12" />
+            <RowDefinition Height="36" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top row -->
+        <!-- Top row: the pet's eyes (home), chips, search -->
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="HomeButton" Width="44" Height="30" Cursor="Hand" Focusable="False" ToolTip="Home" Click="OnHomeClicked">
+            <Button x:Name="HomeButton" Width="54" Height="32" Margin="0,0,12,0" Cursor="Hand" Focusable="False" ToolTip="Home"
+                    AutomationProperties.Name="Home, Shammy" Click="OnHomeClicked">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" Background="{StaticResource CardBg}" CornerRadius="15">
+                        <Border x:Name="Bg" Background="{StaticResource WallTile}" CornerRadius="16">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Border Width="6" Height="9" CornerRadius="3" Background="{StaticResource CardText}" />
-                                <Border Width="6" Height="9" CornerRadius="3" Background="{StaticResource CardText}" Margin="5,0,0,0" />
+                                <Border Width="9" Height="14" CornerRadius="4.5" Background="{StaticResource WallText}" />
+                                <Border Width="9" Height="14" CornerRadius="4.5" Background="{StaticResource WallText}" Margin="9,0,0,0" />
                             </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource RoundBg}" />
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource WallSurfaceHover}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Button.Template>
             </Button>
-            <views:ChipPanel x:Name="ChipStrip" Grid.Column="1" Margin="8,0,8,0" />
-            <Border x:Name="SearchPill" Grid.Column="2" Width="260" Height="30" CornerRadius="15" BorderThickness="1"
-                    Cursor="Hand" MouseLeftButtonUp="OnSearchClicked">
+            <views:ChipPanel x:Name="ChipStrip" Grid.Column="1" Gap="2" Margin="0,0,12,0" />
+            <Border x:Name="SearchPill" Grid.Column="2" Width="212" Height="32" CornerRadius="10" Cursor="IBeam"
+                    MouseLeftButtonUp="OnSearchClicked" AutomationProperties.Name="Search Shammy">
                 <Border.Style>
                     <Style TargetType="Border">
-                        <Setter Property="Background" Value="{StaticResource CardBg}" />
-                        <Setter Property="BorderBrush" Value="{StaticResource CardStroke}" />
+                        <Setter Property="Background" Value="{StaticResource WallTile}" />
                         <Style.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="BorderBrush" Value="{StaticResource RoundHoverBg}" />
-                                <Setter Property="Background" Value="#FF151518" />
+                                <Setter Property="Background" Value="{StaticResource WallSurfaceHover}" />
                             </Trigger>
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
                 <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="13" Foreground="{StaticResource CardText2}" />
-                    <TextBlock Text="Search or hold Right Alt" FontSize="13" Foreground="{StaticResource CardText2}" Margin="8,0,0,0"
-                               VerticalAlignment="Center" />
+                    <Viewbox Width="15" Height="15" IsHitTestVisible="False">
+                        <Canvas Width="24" Height="24">
+                            <Path Data="M11 4a7 7 0 1 1 0 14a7 7 0 1 1 0-14z M20 20l-3.5-3.5" Stroke="{StaticResource WallText2}" StrokeThickness="2.2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </Canvas>
+                    </Viewbox>
+                    <TextBlock Text="Search or hold Right Alt" FontFamily="{StaticResource WallFontMedium}" FontWeight="Medium" FontSize="13"
+                               Foreground="{StaticResource WallText2}" Margin="8,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
         </Grid>
 
-        <!-- Home row: framed cards, built in code from the registered cards -->
-        <StackPanel x:Name="HomeRow" Grid.Row="2" Orientation="Horizontal" Height="176" VerticalAlignment="Top" />
-        <TextBlock x:Name="EmptyText" Grid.Row="2" Text="Nothing going on · press Right Alt to search" FontSize="13"
-                   Foreground="{StaticResource CardText2}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+        <!-- The rail: tiles are placed in code (Rail.cs); the strip moves to keep the focused tile in view -->
+        <Canvas x:Name="Rail" Grid.Row="1" Height="204" Margin="0,8,0,0" VerticalAlignment="Top" AutomationProperties.Name="Widgets">
+            <Canvas x:Name="RailStrip" />
+        </Canvas>
+        <TextBlock x:Name="EmptyText" Grid.Row="1" Text="Nothing going on · press Right Alt to search" FontFamily="{StaticResource WallFontMedium}"
+                   FontSize="13" FontWeight="Medium" Foreground="{StaticResource WallText2}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="Collapsed" />
 
-        <!-- One view opened in place: 924×248, framed, with Back and the title at the top-left -->
-        <Grid x:Name="DetailFrame" Grid.Row="2" Width="924" Height="248" HorizontalAlignment="Center" VerticalAlignment="Top"
+        <!-- One card opened in place -->
+        <Grid x:Name="DetailFrame" Grid.Row="1" Width="924" Height="248" Margin="0,12,0,0" HorizontalAlignment="Center" VerticalAlignment="Top"
               Visibility="Collapsed">
-            <Grid.Clip>
-                <RectangleGeometry Rect="0,0,924,248" RadiusX="20" RadiusY="20" />
-            </Grid.Clip>
-            <Border Background="{StaticResource CardBg}" BorderBrush="{StaticResource CardStroke}" BorderThickness="1" CornerRadius="20" />
-
-            <!-- A card's detail (content only; the frame above and the header below are the notch's) -->
-            <ContentControl x:Name="DetailContent" Focusable="False" Width="924" Height="248" />
-
-            <!-- An older module tab's panel (about 436×150), centred below the header until it becomes a card -->
-            <Grid x:Name="LegacyHost" Width="436" Height="150" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,64,0,0"
-                  Visibility="Collapsed" />
-
-            <!-- Shelf -->
-            <Grid x:Name="ShelfView" Margin="18,16" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="36" />
-                    <RowDefinition Height="12" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="ShelfSummary" Margin="48,15,0,0" VerticalAlignment="Top" FontSize="15" FontWeight="Bold"
-                           Foreground="{StaticResource CardText}" TextTrimming="CharacterEllipsis" MaxWidth="560" HorizontalAlignment="Left">
-                    <Run x:Name="ShelfCountRun" /><Run x:Name="ShelfHintRun" FontSize="12" FontWeight="Medium" Foreground="{StaticResource CardText2}" />
-                </TextBlock>
-                <Button x:Name="ShelfClear" Style="{StaticResource V2Pill}" Content="Clear" HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Click="OnClearShelf" />
-                <Grid Grid.Row="2">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <ScrollViewer x:Name="ShelfScroll" MaxWidth="686" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
-                                  PreviewMouseWheel="OnShelfWheel" Focusable="False">
-                        <ItemsControl x:Name="ShelfItems">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid x:Name="Tile" Width="186" Margin="0,0,10,0" Background="Transparent" Cursor="Hand"
-                                          ToolTip="{Binding Path}"
-                                          MouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove" MouseLeftButtonUp="OnTileUp"
-                                          MouseRightButtonUp="OnTileRightClick">
-                                        <Border x:Name="TileBg" CornerRadius="14" Background="{StaticResource TileBg}"
-                                                BorderBrush="{StaticResource TileStroke}" BorderThickness="1" />
-                                        <Grid Margin="12">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="*" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <Image Source="{Binding Icon}" Width="54" Height="54" HorizontalAlignment="Left"
-                                                   RenderOptions.BitmapScalingMode="HighQuality" />
-                                            <TextBlock Grid.Row="1" Text="{Binding Name, Mode=OneWay}" FontSize="13" FontWeight="SemiBold" Margin="0,10,0,0"
-                                                       Foreground="{StaticResource CardText}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.Row="3" Text="{Binding Details, Mode=OneWay}" FontSize="11" Foreground="{StaticResource CardText2}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </Grid>
-                                        <Border x:Name="RemoveButton" Width="22" Height="22" CornerRadius="11" Background="{StaticResource RoundBg}"
-                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="Hidden"
-                                                MouseLeftButtonDown="OnRemoveDown" ToolTip="Remove from shelf">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="9" Foreground="{StaticResource CardText}" />
-                                        </Border>
-                                    </Grid>
-                                    <DataTemplate.Triggers>
-                                        <Trigger SourceName="Tile" Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="TileBg" Property="BorderBrush" Value="{StaticResource TileHoverStroke}" />
-                                            <Setter TargetName="RemoveButton" Property="Visibility" Value="Visible" />
-                                        </Trigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                    <Border x:Name="ShelfDrop" Grid.Column="1" MinWidth="180" CornerRadius="14" BorderThickness="2" Background="#0DB48CFF">
-                        <Border.BorderBrush>
-                            <DrawingBrush Viewport="0,0,12,12" ViewportUnits="Absolute" TileMode="Tile">
-                                <DrawingBrush.Drawing>
-                                    <GeometryDrawing Brush="#73B48CFF">
-                                        <GeometryDrawing.Geometry>
-                                            <GeometryGroup>
-                                                <RectangleGeometry Rect="0,0,6,6" />
-                                                <RectangleGeometry Rect="6,6,6,6" />
-                                            </GeometryGroup>
-                                        </GeometryDrawing.Geometry>
-                                    </GeometryDrawing>
-                                </DrawingBrush.Drawing>
-                            </DrawingBrush>
-                        </Border.BorderBrush>
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource Icon}" Text="&#xE896;" FontSize="22" Foreground="{StaticResource PurpleAccent}" />
-                            <TextBlock Text="Drop files here" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource CardText}"
-                                       HorizontalAlignment="Center" Margin="0,8,0,0" />
-                            <TextBlock Text="Kept on the shelf until you drag them out" FontSize="11" Foreground="{StaticResource CardText2}"
-                                       HorizontalAlignment="Center" Margin="0,4,0,0" />
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </Grid>
-
-            <!-- Notifications -->
-            <Grid x:Name="AlertsView" Margin="18,16" Visibility="Collapsed">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="18" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="36" />
-                        <RowDefinition Height="12" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal">
-                        <TextBlock x:Name="AlertsCount" FontSize="32" FontWeight="Bold" Foreground="{StaticResource CardText}" />
-                        <TextBlock Text="new" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource CardText2}" Margin="6,0,0,5"
-                                   VerticalAlignment="Bottom" />
-                    </StackPanel>
-                    <TextBlock x:Name="AlertsNote" Grid.Row="3" FontSize="11" Foreground="{StaticResource CardText2}" TextWrapping="Wrap"
-                               Margin="0,10,0,0" LineHeight="15" />
-                    <Button x:Name="AlertsClear" Grid.Row="5" Style="{StaticResource V2Pill}" Content="Clear all" HorizontalAlignment="Left"
-                            Click="OnClearAlerts" />
-                </Grid>
-                <Border x:Name="AlertsEmpty" Grid.Column="2" CornerRadius="14" BorderThickness="1">
-                    <Border.BorderBrush>
-                        <DrawingBrush Viewport="0,0,8,8" ViewportUnits="Absolute" TileMode="Tile">
-                            <DrawingBrush.Drawing>
-                                <GeometryDrawing Brush="#FF2E2E33">
-                                    <GeometryDrawing.Geometry>
-                                        <GeometryGroup>
-                                            <RectangleGeometry Rect="0,0,4,4" />
-                                            <RectangleGeometry Rect="4,4,4,4" />
-                                        </GeometryGroup>
-                                    </GeometryDrawing.Geometry>
-                                </GeometryDrawing>
-                            </DrawingBrush.Drawing>
-                        </DrawingBrush>
-                    </Border.BorderBrush>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock x:Name="AlertsEmptyIcon" Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="14"
-                                   Foreground="{StaticResource BatteryAccent}" Margin="0,0,8,0" />
-                        <TextBlock x:Name="AlertsEmptyText" Text="All caught up" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource CardText}" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Border>
-                <ScrollViewer x:Name="AlertsScroll" Grid.Column="2" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
-                              Focusable="False">
-                    <ItemsControl x:Name="AlertItems">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid x:Name="Row" Height="64" Margin="0,0,0,6" Background="Transparent" Cursor="Hand" MouseLeftButtonUp="OnAlertClicked"
-                                      MouseRightButtonUp="OnAlertRightClick">
-                                    <Border x:Name="RowBg" CornerRadius="14" Background="{StaticResource TileBg}"
-                                            BorderBrush="{StaticResource TileStroke}" BorderThickness="1" />
-                                    <Grid Margin="12,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="40" />
-                                            <ColumnDefinition Width="12" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid Width="40" Height="40">
-                                            <Ellipse Fill="{StaticResource RoundBg}" />
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xEA8F;" FontSize="15" Foreground="{StaticResource CardText2}" />
-                                            <Image Source="{Binding Icon}" Width="24" Height="24" RenderOptions.BitmapScalingMode="HighQuality" />
-                                        </Grid>
-                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <TextBlock TextTrimming="CharacterEllipsis">
-                                                <Run Text="{Binding ListTitle, Mode=OneWay}" FontSize="13" FontWeight="Bold" Foreground="{StaticResource CardText}" />
-                                                <Run Text="  " FontSize="11" /><Run Text="{Binding TimeText, Mode=OneWay}" FontSize="11" Foreground="{StaticResource CardText2}" />
-                                            </TextBlock>
-                                            <TextBlock FontSize="12" Foreground="{StaticResource CardText2}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0">
-                                                <Run Text="{Binding ListDetail, Mode=OneWay}" />
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <Button Grid.Column="3" Style="{StaticResource V2Round}" Width="30" Height="30" FontSize="10" Content="&#xE711;"
-                                                Margin="12,0,0,0" ToolTip="Dismiss" Click="OnDismissAlert" />
-                                    </Grid>
-                                </Grid>
-                                <DataTemplate.Triggers>
-                                    <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="RowBg" Property="Background" Value="#FF1E1E22" />
-                                    </Trigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-
-            <!-- The header the notch adds to every view: round Back + the title -->
-            <Button x:Name="BackButton" Style="{StaticResource V2Round}" Content="&#xE76B;" HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Margin="18,16,0,0" ToolTip="Back (Esc)" Click="OnBackClicked" />
-            <TextBlock x:Name="DetailTitle" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="66,16,0,0" FontSize="11"
-                       FontWeight="SemiBold" Foreground="{StaticResource CardText2}" IsHitTestVisible="False" />
-        </Grid>
-
-        <!-- Built-in fallback card while no module provides a music card: what's playing, with the visualiser. -->
-        <Grid x:Name="Stash" Grid.Row="2" Visibility="Collapsed">
-            <Grid x:Name="MediaPanel" Margin="14">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="92" />
-                    <ColumnDefinition Width="14" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border x:Name="ArtFrame" Width="92" Height="92" CornerRadius="16" VerticalAlignment="Top" Cursor="Hand"
-                        MouseLeftButtonUp="OnArtClicked" ToolTip="Play / pause" />
-                <Grid Grid.Column="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock x:Name="TitleText" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource CardText}"
-                               TextTrimming="CharacterEllipsis" Margin="0,0,30,0" />
-                    <views:VisualizerBars x:Name="Bars" BarCount="4" Height="14" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                    <TextBlock x:Name="ArtistText" Grid.Row="1" FontSize="12" Foreground="{StaticResource CardText2}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
-                    <Grid Grid.Row="3" Margin="0,0,0,2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="34" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="38" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="ElapsedText" FontSize="10.5" Foreground="{StaticResource CardText2}" VerticalAlignment="Center" />
-                        <Grid x:Name="Track" Grid.Column="1" Height="16" Background="Transparent" Cursor="Hand"
-                              MouseLeftButtonDown="OnTrackDown" MouseMove="OnTrackMove" MouseLeftButtonUp="OnTrackUp">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource Fill2}" VerticalAlignment="Center" />
-                            <Border x:Name="TrackFill" Height="4" CornerRadius="2" Background="{StaticResource MusicAccent}"
-                                    HorizontalAlignment="Left" VerticalAlignment="Center" Width="0" />
-                        </Grid>
-                        <TextBlock x:Name="RemainingText" Grid.Column="2" FontSize="10.5" Foreground="{StaticResource CardText2}"
-                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
-                    </Grid>
-                    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button x:Name="PrevButton" Style="{StaticResource IconButton}" Content="&#xE892;" FontSize="15" Width="36" Height="32" Click="OnPrev" />
-                        <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Content="&#xE768;" FontSize="20" Width="42" Height="32" Margin="8,0" Click="OnPlayPause" />
-                        <Button x:Name="NextButton" Style="{StaticResource IconButton}" Content="&#xE893;" FontSize="15" Width="36" Height="32" Click="OnNext" />
-                    </StackPanel>
-                </Grid>
-            </Grid>
+            <ContentControl x:Name="DetailContent" Focusable="False" />
+            <!-- A Wall detail's frame line and Back (on its art panel) -->
+            <Border x:Name="DetailLine" CornerRadius="18" BorderThickness="1" BorderBrush="{StaticResource WallHairline}" IsHitTestVisible="False" />
+            <!-- Other details: a Back + title row above them -->
+            <StackPanel x:Name="DetailHeader" Orientation="Horizontal" Height="32" VerticalAlignment="Top" HorizontalAlignment="Left" Visibility="Collapsed">
+                <Button x:Name="HeaderBack" Width="32" Height="32" Cursor="Hand" Focusable="False" ToolTip="Back (Esc)"
+                        AutomationProperties.Name="Back" Click="OnBackClicked">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bg" Background="{StaticResource WallTile}" BorderBrush="{StaticResource WallHairline}" BorderThickness="1" CornerRadius="16">
+                                <Viewbox Width="14" Height="14">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M15 5l-7 7 7 7" Stroke="{StaticResource WallText}" StrokeThickness="2.4" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bg" Property="Background" Value="{StaticResource WallSurfaceHover}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <TextBlock x:Name="DetailTitle" Margin="12,0,0,0" VerticalAlignment="Center" FontFamily="{StaticResource WallFontExtraBold}" FontSize="20"
+                           FontWeight="ExtraBold" Foreground="{StaticResource WallText}" />
+            </StackPanel>
+            <!-- An older module's tab panel, under the header until it becomes a card -->
+            <Grid x:Name="LegacyHost" Margin="0,44,0,0" Visibility="Collapsed" />
         </Grid>
     </Grid>
 </UserControl>

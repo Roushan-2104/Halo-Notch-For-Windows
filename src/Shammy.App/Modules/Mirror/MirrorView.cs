@@ -1,160 +1,86 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Shammy.Core.Calendar;
 using Shammy.Modules.Calendar;
-using Shammy.Modules.Kit;
+using Shammy.Views.Cards;
 
 namespace Shammy.Modules.Mirror;
 
 /// <summary>
-/// The mirror's detail (924×248): status and the next-meeting hint on the left, the live 16:9 preview in the
-/// middle, Flip and brightness on the right. Owns the camera: a 150 ms check while this view is visible starts
-/// it when the view is really on screen and stops it as soon as the notch fades it, closes it or the PC locks.
+/// The mirror's detail on the Focus Wall: the live camera picture IS the art panel (300×248, the notch's Back on
+/// it, a "live · not recording" mark at its foot); on the right, the state, a line about the next meeting or the
+/// privacy promise, and Flip and brightness. Owns the camera: a 150 ms check while this view is visible starts it
+/// when the view is really on screen and stops it as soon as the notch fades it, closes it or the PC locks.
 /// </summary>
-internal sealed class MirrorView : Grid
+internal sealed class MirrorView : WallDetail
 {
     readonly MirrorModule _module;
     readonly MirrorCamera _camera;
     readonly DispatcherTimer _watch;
-    readonly Border _preview;
     readonly ImageBrush _brush = new() { Stretch = Stretch.UniformToFill, AlignmentX = AlignmentX.Center, AlignmentY = AlignmentY.Center };
     readonly ScaleTransform _flip = new(1, 1, 0.5, 0.5);
     readonly StackPanel _message;
     readonly TextBlock _messageText;
-    readonly Border _settingsButton;
-    readonly TextBlock _status;
+    readonly Button _settingsButton;
     readonly Border _liveChip;
-    readonly Border _flipButton;
     readonly TextBlock _flipText, _levelText;
-    readonly Grid _levelBar = new() { Height = 16, VerticalAlignment = VerticalAlignment.Center };
+    readonly ContentControl _flipSlot = new() { Focusable = false };
+    readonly Grid _levelBar = new() { Width = 180, Height = 16, VerticalAlignment = VerticalAlignment.Center };
     bool _starting, _wantRunning;
 
-    public MirrorView(MirrorModule module, Dispatcher ui)
+    public MirrorView(MirrorModule module, Dispatcher ui) : base(Fields.Mirror(), "Mirror · starting", "Mirror")
     {
         _module = module;
         _camera = new MirrorCamera(ui);
         _camera.BitmapChanged += bmp => _brush.ImageSource = bmp;
         _brush.RelativeTransform = _flip;
 
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
-        MinHeight = NotchPalette.DetailHeight;
+        Line.Text = MeetingHint() ?? "Camera stays on your PC; nothing is recorded";
 
-        // Left: status, the next meeting, the privacy note.
-        var left = new DockPanel { LastChildFill = false };
-        var head = new StackPanel();
-        head.Children.Add(CardKit.Caption("Mirror"));
-        _status = CardKit.Label("Starting…", 15, FontWeights.Bold);
-        head.Children.Add(CardKit.Row(6, CardKit.Dot(8, CardKit.Brush(NotchPalette.Alarm)), _status));
-        DockPanel.SetDock(head, Dock.Top);
-        left.Children.Add(head);
-        if (MeetingHint() is { } hint)
-        {
-            hint.Margin = new Thickness(0, 12, 0, 0);
-            DockPanel.SetDock(hint, Dock.Top);
-            left.Children.Add(hint);
-        }
-        var note = new DockPanel();
-        var lockGlyph = CardKit.Glyph("", 12, CardKit.Text2);
-        lockGlyph.VerticalAlignment = VerticalAlignment.Top;
-        lockGlyph.Margin = new Thickness(0, 1, 7, 0);
-        note.Children.Add(lockGlyph);
-        var noteText = CardKit.Label("Camera stays on your PC; nothing is recorded.", 11, FontWeights.Normal, CardKit.Text2);
-        noteText.TextWrapping = TextWrapping.Wrap;
-        noteText.TextTrimming = TextTrimming.None;
-        note.Children.Add(noteText);
-        DockPanel.SetDock(note, Dock.Bottom);
-        left.Children.Add(note);
-        Children.Add(left);
-
-        // Middle: the preview, its live chip, and a message when there's no picture.
-        _preview = new Border
-        {
-            CornerRadius = new CornerRadius(24),
-            Background = new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#2B2622"), (Color)ColorConverter.ConvertFromString("#0B0B0E"), 60),
-            BorderBrush = CardKit.Brush(NotchPalette.CardStroke),
-            BorderThickness = new Thickness(1),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var picture = new Border { CornerRadius = new CornerRadius(23), Background = _brush };
+        // The art panel: the picture, its live mark, a message when there's no picture.
+        Art.Children.Add(new Border { Background = _brush });
         _liveChip = new Border
         {
-            CornerRadius = new CornerRadius(11),
-            Background = CardKit.Brush("#99000000"),
-            Padding = new Thickness(9, 4, 9, 4),
-            Margin = new Thickness(12),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
+            CornerRadius = new CornerRadius(999),
+            Background = CardKit.Hex("#A60B0B0D"),
+            Padding = new Thickness(9, 5, 9, 5),
             Visibility = Visibility.Collapsed,
-            Child = CardKit.Row(6, CardKit.Dot(6, CardKit.Brush(NotchPalette.Alarm)), CardKit.Label("LIVE · NOT RECORDING", 10, FontWeights.SemiBold)),
+            Child = CardKit.Row(6, CardKit.Dot(6, CardKit.Alarm), CardKit.Label("Live · not recording", null, 10)),
         };
-        _messageText = CardKit.Label("", 12.5, FontWeights.SemiBold);
+        Art.Children.Add(CardKit.At(_liveChip, HorizontalAlignment.Left, VerticalAlignment.Bottom, 14, 0, 0, 14));
+        _messageText = CardKit.Text("", 13, FontWeights.SemiBold);
         _messageText.TextWrapping = TextWrapping.Wrap;
         _messageText.TextTrimming = TextTrimming.None;
         _messageText.TextAlignment = TextAlignment.Center;
-        _messageText.MaxWidth = 280;
-        _settingsButton = CardKit.PillButton("Open camera settings", _module.OpenSettings, height: 28, fontSize: 12);
+        _messageText.MaxWidth = 240;
+        _settingsButton = CardKit.Pill("Open camera settings", "Open camera settings", _module.OpenSettings, 30);
         _settingsButton.HorizontalAlignment = HorizontalAlignment.Center;
         _settingsButton.Margin = new Thickness(0, 10, 0, 0);
+        var cam = CardKit.Icon(CardKit.Paths.Camera, CardKit.Ink2, 26, 1.8);
+        cam.Margin = new Thickness(0, 0, 0, 10);
         _message = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
-        var camGlyph = CardKit.Glyph("", 22, CardKit.Text2);
-        camGlyph.Margin = new Thickness(0, 0, 0, 8);
-        _message.Children.Add(camGlyph);
+        _message.Children.Add(cam);
         _message.Children.Add(_messageText);
         _message.Children.Add(_settingsButton);
-        _preview.Child = new Grid { Children = { picture, _liveChip, _message } };
-        var middle = new Grid();
-        middle.Children.Add(_preview);
-        middle.SizeChanged += (_, e) =>
-        {
-            // Centred 16:9, as big as the design's 368×207 and never taller than the area.
-            double w = Math.Min(368, Math.Max(160, e.NewSize.Width - 8));
-            double h = w * 9 / 16;
-            if (h > e.NewSize.Height - 8)
-            {
-                h = Math.Max(90, e.NewSize.Height - 8);
-                w = h * 16 / 9;
-            }
-            _preview.Width = w;
-            _preview.Height = h;
-        };
-        SetColumn(middle, 1);
-        Children.Add(middle);
+        Art.Children.Add(_message);
 
-        // Right: Flip and brightness.
-        var right = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        _flipButton = CardKit.RoundButton("", ToggleFlip, 36, "Flip");
-        _flipText = CardKit.Label("", 11, FontWeights.Normal, CardKit.Text2);
-        var flipRow = new DockPanel();
-        DockPanel.SetDock(_flipText, Dock.Right);
-        flipRow.Children.Add(_flipText);
-        flipRow.Children.Add(CardKit.Row(10, _flipButton, CardKit.Label("Flip", 12, FontWeights.SemiBold)));
-        right.Children.Add(flipRow);
+        // Controls: Flip, then brightness.
+        _flipText = CardKit.Text("", 12, FontWeights.Medium, secondary: true);
+        var flipLabel = CardKit.Text("Flip", 13.5, FontWeights.SemiBold);
+        var flipRow = CardKit.Row(12, _flipSlot, flipLabel, _flipText);
 
-        var levelHead = new DockPanel { Margin = new Thickness(0, 18, 0, 8) };
-        _levelText = CardKit.Label("", 12, FontWeights.Bold);
-        DockPanel.SetDock(_levelText, Dock.Right);
-        levelHead.Children.Add(_levelText);
-        levelHead.Children.Add(CardKit.Caption("Brightness"));
-        right.Children.Add(levelHead);
-        var levelRow = new DockPanel();
-        var minus = CardKit.RoundButton("", () => Step(-10), 28, "Decrease brightness", 10);
-        var plus = CardKit.RoundButton("", () => Step(10), 28, "Increase brightness", 10);
-        DockPanel.SetDock(minus, Dock.Left);
-        DockPanel.SetDock(plus, Dock.Right);
-        _levelBar.Margin = new Thickness(8, 0, 8, 0);
-        _levelBar.SizeChanged += (_, _) => PlaceKnob();
-        levelRow.Children.Add(minus);
-        levelRow.Children.Add(plus);
-        levelRow.Children.Add(_levelBar);
-        right.Children.Add(levelRow);
-        SetColumn(right, 2);
-        Children.Add(right);
+        _levelText = CardKit.Text("", 13, FontWeights.Bold);
+        _levelText.Width = 44;
+        var minus = CardKit.Quiet("Decrease brightness", CardKit.Icon(CardKit.Paths.Minus, CardKit.Ink, 12, 2.4), () => Step(-10), 28);
+        var plus = CardKit.Quiet("Increase brightness", CardKit.Icon(CardKit.Paths.Plus, CardKit.Ink, 12, 2.4), () => Step(10), 28);
+        var brightness = CardKit.Label("Brightness", CardKit.Ink2);
+        brightness.Width = 96;
+        _levelBar.Margin = new Thickness(0, 0, 0, 0);
+        var levelRow = CardKit.Row(10, brightness, minus, _levelBar, plus, _levelText);
+        levelRow.Margin = new Thickness(0, 14, 0, 0);
+        Body.Children.Add(CardKit.Column(0, flipRow, levelRow));
 
         ApplyFlip();
         ApplyLevel();
@@ -199,7 +125,7 @@ internal sealed class MirrorView : Grid
     {
         if (_starting) return;
         _starting = true;
-        _status.Text = "Starting…";
+        Kicker.Text = "Mirror · starting";
         ShowMessage(null);
         var problem = await _camera.StartAsync();
         _starting = false;
@@ -243,7 +169,7 @@ internal sealed class MirrorView : Grid
     void UpdateStatus()
     {
         bool live = _camera.Running;
-        _status.Text = live ? "Live" : Problem != MirrorProblem.None ? "Off" : _starting ? "Starting…" : "Paused";
+        Kicker.Text = "Mirror · " + (live ? "camera on" : Problem != MirrorProblem.None ? "camera off" : _starting ? "starting" : "paused");
         _liveChip.Visibility = live ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -266,8 +192,12 @@ internal sealed class MirrorView : Grid
         bool mirrored = _module.Store.Mirrored;
         _flip.ScaleX = mirrored ? -1 : 1;
         _flipText.Text = mirrored ? "Mirrored" : "As others see you";
-        _flipButton.Background = CardKit.Brush(mirrored ? "#3A3A40" : "#232326");
-        _flipButton.ToolTip = mirrored ? "Flip off (show what others see)" : "Flip on (mirrored view)";
+        // On = the white-filled control; off = the quiet one (no accent: Flip isn't the primary action).
+        var b = mirrored
+            ? CardKit.Pill("On", "Flip off (show what others see)", ToggleFlip, 30)
+            : CardKit.Pill("Off", "Flip on (mirrored view)", ToggleFlip, 30);
+        b.Width = 52;
+        _flipSlot.Content = b;
     }
 
     void Step(int delta)
@@ -284,38 +214,30 @@ internal sealed class MirrorView : Grid
         _camera.Brightness = 0.6 + level / 100.0 * 0.8;
         _levelText.Text = $"{level}%";
         _levelBar.Children.Clear();
-        _levelBar.Children.Add(CardKit.Progress(level / 100.0, CardKit.Text, 6));
-        _levelBar.Children.Add(_knob);
-        PlaceKnob();
+        _levelBar.Children.Add(CardKit.Progress(level / 100.0, CardKit.Ink, 4));
     }
 
-    readonly System.Windows.Shapes.Ellipse _knob = new() { Width = 16, Height = 16, Fill = CardKit.Text, HorizontalAlignment = HorizontalAlignment.Left };
-
-    void PlaceKnob() =>
-        _knob.Margin = new Thickness(Math.Clamp(_levelBar.ActualWidth * _module.Store.Level / 100.0 - 8, 0, Math.Max(0, _levelBar.ActualWidth - 16)), 0, 0, 0);
-
-    /// <summary>"Ready for your 10:30 Standup" when a meeting starts within the hour.</summary>
-    static Border? MeetingHint()
+    /// <summary>"A quick look before your 10:30 Standup" when a meeting starts within the hour.</summary>
+    static string? MeetingHint()
     {
         var now = DateTime.Now;
         if (CalendarAgenda.Next(CalendarModule.Agenda, now) is not { } next || next.Start - now > TimeSpan.FromMinutes(60)) return null;
-        var text = CardKit.Label($"Ready for your {CalendarText.Clock(next.Start, CardKit.H24)} {next.Title}", 12, FontWeights.SemiBold);
-        text.TextWrapping = TextWrapping.Wrap;
-        text.TextTrimming = TextTrimming.CharacterEllipsis;
-        text.MaxHeight = 34;
-        var row = new DockPanel();
-        var glyph = CardKit.Glyph("", 14, CardKit.Brush(NotchPalette.Calendar));
-        glyph.Margin = new Thickness(0, 0, 8, 0);
-        row.Children.Add(glyph);
-        row.Children.Add(text);
-        return new Border
-        {
-            CornerRadius = new CornerRadius(12),
-            Background = CardKit.Tint(NotchPalette.Calendar, 0.12),
-            BorderBrush = CardKit.Tint(NotchPalette.Calendar, 0.35),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 8, 10, 8),
-            Child = row,
-        };
+        return $"A quick look before {next.Title} at {CalendarText.Clock(next.Start, CardKit.H24)} · nothing is recorded";
+    }
+}
+
+/// <summary>The Mirror tile: warm dark glass with the camera mark; the camera itself only runs in the detail.</summary>
+internal static class MirrorTile
+{
+    public static FrameworkElement Build(Action open)
+    {
+        var tile = new WallTile { Field = Fields.Mirror() };
+        tile.Art.Children.Add(CardKit.At(CardKit.Icon(CardKit.Paths.Camera, CardKit.Ink, 30, 1.8), HorizontalAlignment.Left, VerticalAlignment.Top, 14, 14));
+        tile.Rest.Children.Add(WallTile.BottomLeft(CardKit.Poster("Mirror", 26)));
+        var words = WallTile.Words("Mirror", "A quick look before a call", out _, out _);
+        tile.Lit.Children.Add(CardKit.At(words, HorizontalAlignment.Stretch, VerticalAlignment.Bottom, WallTile.Pad, 0, WallTile.Pad, 10));
+        tile.Lit.Children.Add(WallTile.OpenButton("Open the mirror", open));
+        CardKit.Name(tile, "Mirror, camera preview. Open mirror");
+        return tile;
     }
 }

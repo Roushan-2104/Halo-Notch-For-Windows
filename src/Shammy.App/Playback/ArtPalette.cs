@@ -6,6 +6,34 @@ namespace Shammy.Playback;
 /// <summary>Picks a tint from album art for the visualizer bars, like Apple's Now Playing does.</summary>
 internal static class ArtPalette
 {
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ImageSource, object> Fields = new();
+
+    /// <summary>
+    /// The Focus Wall music field for a cover (two glows and a deep base in its own colours, see
+    /// <see cref="Shammy.Core.Music.ArtField"/>); the mockup's plum and rust when there's no cover. Worked out once per cover.
+    /// </summary>
+    public static Shammy.Core.Music.ArtFieldColors Field(ImageSource? art)
+    {
+        if (art is not BitmapSource source) return Shammy.Core.Music.ArtFieldColors.Default;
+        if (Fields.TryGetValue(art, out var cached)) return (Shammy.Core.Music.ArtFieldColors)cached;
+        var field = Shammy.Core.Music.ArtFieldColors.Default;
+        try
+        {
+            const int size = 16;
+            var small = new TransformedBitmap(new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0),
+                new ScaleTransform((double)size / source.PixelWidth, (double)size / source.PixelHeight));
+            var px = new byte[small.PixelWidth * small.PixelHeight * 4];
+            small.CopyPixels(px, small.PixelWidth * 4, 0);
+            field = Shammy.Core.Music.ArtField.Pick(px);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException)
+        {
+            // An odd image format: keep the default field.
+        }
+        Fields.AddOrUpdate(art, field);
+        return field;
+    }
+
     public static Color Vibrant(BitmapSource source)
     {
         const int size = 16;
