@@ -5,7 +5,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Shammy.Core.Connect;
 using Shammy.Core.Productivity;
+using Shammy.Infrastructure;
 using Shammy.Modules.Kit;
 
 namespace Shammy.Modules.Productivity;
@@ -41,8 +43,12 @@ internal sealed class NotesCard
         {
             if (_compact.IsVisible) Refresh();
         };
+        // A screen share starting or ending hides or reveals the items in place.
+        PrivacyState.Changed += _ => _compact.Dispatcher.BeginInvoke(Refresh);
         Refresh();
     }
+
+    static bool Private => PrivacyState.Presenting;
 
     public FrameworkElement Compact => _compact;
 
@@ -93,14 +99,25 @@ internal sealed class NotesCard
         _compact.Children.Add(head);
 
         var items = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
-        if (open.Count == 0)
+        if (Private)
+        {
+            // Counts only: what the notes say stays off a shared screen.
+            items.Children.Add(CardKit.Label(PrivacyText.NotesSummary(store.Notes.Count(n => !n.Done), store.Reminders.Count(r => !r.Done)),
+                13, FontWeights.SemiBold));
+            var hidden = CardKit.Label(PrivacyText.Hidden, 11, FontWeights.Medium, CardKit.Text2);
+            hidden.TextWrapping = TextWrapping.Wrap;
+            hidden.TextTrimming = TextTrimming.None;
+            hidden.Margin = new Thickness(0, 4, 0, 0);
+            items.Children.Add(hidden);
+        }
+        else if (open.Count == 0)
         {
             var empty = CardKit.Label(lines.Count == 0 ? "Try “note: buy milk”" : "Nothing left to do", 12, FontWeights.Medium, CardKit.Text2);
             empty.TextWrapping = TextWrapping.Wrap;
             empty.TextTrimming = TextTrimming.None;
             items.Children.Add(empty);
         }
-        for (int i = 0; i < Math.Min(2, open.Count); i++)
+        for (int i = 0; i < (Private ? 0 : Math.Min(2, open.Count)); i++)
         {
             if (i > 0) items.Children.Add(new Border { Height = 1, Background = CardKit.Brush(NotchPalette.CardStroke), Margin = new Thickness(0, 8, 0, 8) });
             items.Children.Add(CompactItem(open[i], now));
@@ -118,7 +135,7 @@ internal sealed class NotesCard
         _compact.Children.Add(foot);
 
         CardKit.AutomationName(_compact, $"Notes, {open.Count} open items" +
-            (open.Count > 0 ? ": " + string.Join("; ", open.Take(2).Select(l => l.Text)) : "") + ". Open notes");
+            (open.Count > 0 && !Private ? ": " + string.Join("; ", open.Take(2).Select(l => l.Text)) : "") + ". Open notes");
     }
 
     FrameworkElement CompactItem(NoteLine line, DateTime now)
@@ -242,6 +259,9 @@ internal sealed class NotesCard
             _empty.HorizontalAlignment = HorizontalAlignment.Center;
             _empty.VerticalAlignment = VerticalAlignment.Center;
             Children.Add(new Grid { Children = { scroll, _empty } });
+            Action<bool> privacy = _ => Dispatcher.BeginInvoke(Refresh, DispatcherPriority.Background);
+            Loaded += (_, _) => PrivacyState.Changed += privacy;
+            Unloaded += (_, _) => PrivacyState.Changed -= privacy;
             Refresh();
         }
 
@@ -255,7 +275,14 @@ internal sealed class NotesCard
             var (doneToday, total) = Progress(store, now);
             _bar.Content = CardKit.Progress(total == 0 ? 0 : doneToday / (double)total, CardKit.Brush(Accent), 6);
             _grid.Children.Clear();
+            if (Private)
+            {
+                _empty.Text = PrivacyText.Hidden;
+                _empty.Visibility = Visibility.Visible;
+                return;
+            }
             foreach (var line in lines) _grid.Children.Add(Item(line, now));
+            _empty.Text = "No notes or reminders yet";
             _empty.Visibility = lines.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 

@@ -96,8 +96,40 @@ internal sealed class LyricsPanel : Grid
         SetRow(_status, 1);
         Children.Add(_status);
 
+        // While the screen is shared the words stay off it (a cover on top; the lines keep their place).
+        _hidden = new TextBlock
+        {
+            Text = Shammy.Core.Connect.PrivacyText.Hidden,
+            FontSize = 12.5,
+            Foreground = Brush("Fg2"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+        SetRow(_hidden, 0);
+        SetRowSpan(_hidden, 2);
+        Children.Add(_hidden);
+        Action<bool> privacy = _ => Dispatcher.BeginInvoke(ApplyPrivacy);
+        Loaded += (_, _) =>
+        {
+            Infrastructure.PrivacyState.Changed += privacy;
+            ApplyPrivacy();
+        };
+        Unloaded += (_, _) => Infrastructure.PrivacyState.Changed -= privacy;
+
         IsVisibleChanged += (_, _) => UpdateTicking();
         ShowStatus("\uE8D6", "Nothing playing", "");
+    }
+
+    readonly TextBlock _hidden;
+
+    void ApplyPrivacy()
+    {
+        bool hide = Infrastructure.PrivacyState.Presenting;
+        _hidden.Visibility = hide ? Visibility.Visible : Visibility.Collapsed;
+        double shown = hide ? 0 : 1;
+        _track.Opacity = _viewport.Opacity = _plainScroll.Opacity = _status.Opacity = shown;
+        _viewport.IsHitTestVisible = _plainScroll.IsHitTestVisible = !hide;
     }
 
     public LyricsKind Kind => _lyrics.Kind;

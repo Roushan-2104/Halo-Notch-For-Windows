@@ -301,7 +301,8 @@ internal sealed class CalendarModule : IShammyModule
     void ShowPill(CalendarOccurrence meeting, DateTime now)
     {
         var key = $"{meeting.Uid}|{meeting.Start:o}";
-        var text = CalendarText.Pill(meeting, now);
+        // While the screen is shared: "Meeting in 2 min", not the meeting's title.
+        var text = Shammy.Core.Connect.PrivacyText.MeetingPill(meeting, now, Infrastructure.PrivacyState.Presenting);
         if (_pill is not null && _pillKey == key && _ctx.Get(PillId) is not null)
         {
             _pill.Set(text);
@@ -335,7 +336,8 @@ internal sealed class CalendarModule : IShammyModule
     {
         if (CalendarAgenda.Glance(_store.Cache, DateTime.Now) is not { } g) return null;
         var item = g.Item;
-        return new GlanceItem(g.Text, NotchPalette.Calendar, g.Priority, item.HasLink ? () => Join(item) : null);
+        var text = Shammy.Core.Connect.PrivacyText.CalendarGlance(item.Title, item.Start, Infrastructure.PrivacyState.Presenting);
+        return new GlanceItem(text, NotchPalette.Calendar, g.Priority, item.HasLink ? () => Join(item) : null);
     }
 
     // ---- Test pipe -------------------------------------------------------------------------------
@@ -384,7 +386,7 @@ internal sealed class CalendarModule : IShammyModule
         var fake = new CalendarOccurrence("pill-test", "Test meeting", "", start, start.AddMinutes(15), false,
             "https://meet.google.com/", "Google Meet");
         _pillKey = "pill-test";
-        _pill = new MeetingPill(CalendarText.Pill(fake, now), () => HidePill());
+        _pill = new MeetingPill(Shammy.Core.Connect.PrivacyText.MeetingPill(fake, now, Infrastructure.PrivacyState.Presenting), () => HidePill());
         _ctx.Post(new Activity(PillId, ActivityKind.Custom, PillPriority, _pill, DateTime.UtcNow.AddSeconds(20))
         {
             Click = HidePill,

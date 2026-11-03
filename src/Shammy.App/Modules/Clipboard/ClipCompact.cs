@@ -5,7 +5,10 @@ using Shammy.Views;
 
 namespace Shammy.Modules.ClipboardHistory;
 
-/// <summary>"Just copied" preview: a copy glyph (or thumbnail) on the left, the text or image size on the right.</summary>
+/// <summary>
+/// "Just copied" preview: a copy glyph (or thumbnail) on the left, the text or image size on the right. While the
+/// screen is shared it only says "Copied", with no thumbnail.
+/// </summary>
 internal sealed class CopyPreview : ICompactContent
 {
     const double MaxEar = 160;
@@ -21,10 +24,14 @@ internal sealed class CopyPreview : ICompactContent
         _thumb = thumb;
     }
 
+    static bool Private => Infrastructure.PrivacyState.Presenting;
+
+    string Shown => Shammy.Core.Connect.PrivacyText.CopyPreview(_text, Private);
+
     public double Build(ContentControl left, ContentControl right)
     {
         _left = left;
-        _label = ClipUi.Label(_text, 12, FontWeights.SemiBold, ClipUi.Brush("Fg"));
+        _label = ClipUi.Label(Shown, 12, FontWeights.SemiBold, ClipUi.Brush("Fg"));
         _label.MaxWidth = MaxEar;
         right.Content = _label;
         SetLeft();
@@ -39,14 +46,14 @@ internal sealed class CopyPreview : ICompactContent
     {
         _text = text;
         _thumb = thumb;
-        if (_label is not null) _label.Text = text;
+        if (_label is not null) _label.Text = Shown;
         SetLeft();
     }
 
     void SetLeft()
     {
         if (_left is null) return;
-        _left.Content = _thumb is not null
+        _left.Content = _thumb is not null && !Private
             ? ClipImages.Tile(_thumb, 20, 20, 6)
             : CompactView.Glyph("", 15, ClipUi.Brush("AccentBrush"));
     }
