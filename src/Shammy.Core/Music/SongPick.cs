@@ -55,6 +55,8 @@ public static class SongPick
     /// <summary>
     /// The result to play: among the results that carry the most of the variants the query asked for, the
     /// first with no variant it didn't ask for; when every one is a variant, the first of them. Null for no results.
+    /// A clean result only wins when it is the same song as the top one (same title without the decoration):
+    /// "play kesariya" topped by a Diwali edit must not jump to "Kesariya Balamva", a different song.
     /// </summary>
     public static T? Choose<T>(IReadOnlyList<T> results, Func<T, string> title, string query) where T : class
     {
@@ -67,8 +69,15 @@ public static class SongPick
         }).ToList();
         int best = scored.Max(s => s.Wanted);
         var candidates = scored.Where(s => s.Wanted == best).ToList();
-        return candidates.FirstOrDefault(s => s.Unwanted == 0).Result ?? candidates[0].Result;
+        var top = candidates[0];
+        if (top.Unwanted == 0) return top.Result;
+        var song = Core(title(top.Result));
+        return candidates.FirstOrDefault(s => s.Unwanted == 0 && Core(title(s.Result)) == song).Result ?? top.Result;
     }
+
+    /// <summary>The title without its decoration, lowercased letters and digits only ("Kesariya (Remix)" → "kesariya").</summary>
+    static string Core(string title) =>
+        new string(Decoration.Replace(title ?? "", " ").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     public static YouTubeMusicSong? Choose(IReadOnlyList<YouTubeMusicSong> results, string query) =>
         Choose(results, s => s.Title, query);

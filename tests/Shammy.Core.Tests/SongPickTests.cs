@@ -49,6 +49,19 @@ public class SongPickTests
     }
 
     [Fact]
+    public void Never_swaps_to_a_different_song()
+    {
+        // The real "kesariya" results: the top hit is a Diwali edit of the right song, the first clean one is another song.
+        var results = new[]
+        {
+            "Kesariya (From \"Brahmastra\") (Tu Fuljhadiyo Wale Tyohaaro Jesi - Happy Diwali)",
+            "Kesariya Rajasthani Mashup",
+            "Kesariya Balamva",
+        };
+        Assert.Equal(results[0], SongPick.Choose(results, t => t, "kesariya"));
+    }
+
+    [Fact]
     public void All_variants_falls_back_to_the_first()
     {
         var results = new[] { S("Kesariya (Remix)"), S("Kesariya Lofi"), S("Kesariya (Cover)") };
