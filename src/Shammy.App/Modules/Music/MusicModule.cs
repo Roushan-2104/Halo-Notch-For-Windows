@@ -19,7 +19,7 @@ public sealed class MusicSettings
 }
 
 /// <summary>
-/// Music: "play ..." on YouTube Music (or Spotify), transport commands, a synced-lyrics tab, wheel for
+/// Music: "play ..." on YouTube Music (or Spotify), transport commands, a music card (synced lyrics in its detail), wheel for
 /// volume and swipe for next/previous over the notch, and an album-colour outline while playing.
 /// </summary>
 internal sealed class MusicModule : IShammyModule
@@ -29,6 +29,8 @@ internal sealed class MusicModule : IShammyModule
     YouTubeMusicPlayer _player = null!;
     LyricsSource _lyrics = null!;
     LyricsPanel _panel = null!;
+    MusicCard _card = null!;
+    bool _cardRelevant;
 
     readonly SwipeDetector _swipe = new();
     readonly WheelStepper _wheel = new();
@@ -76,7 +78,20 @@ internal sealed class MusicModule : IShammyModule
             if (!on) _heardTimer?.Stop();
         });
         ctx.AddTrayItem("Clear song history", ClearHistory);
-        ctx.AddTab("\uE8D6", "Lyrics", _panel);
+        // v2: the music card replaces the Lyrics tab; its detail hosts the same synced lyrics panel.
+        _card = new MusicCard(ctx.Services, _panel);
+        ctx.AddCard(new NotchCard
+        {
+            Id = "music",
+            Title = "Music",
+            Width = 340,
+            Compact = _card.Compact,
+            Detail = _card.BuildDetail,
+            Order = 10,
+            IsRelevant = () => _card.IsRelevant,
+        });
+        ctx.AddGlance("music", _card.Glance);
+        Views.Cards.CardPipes.Register(ctx, "music", _card.DescribeCompact, _card.DescribeDetail);
         ctx.AddTrayToggle("Flash album colour on new songs", () => _settings.AlbumGlow, on =>
         {
             _settings.AlbumGlow = on;
@@ -151,7 +166,7 @@ internal sealed class MusicModule : IShammyModule
 
             case MusicAction.ShowLyrics:
                 LoadLyricsForCurrentTrack(debounce: false);
-                // OpenTab waits for the command's confirmation card to close by itself.
+                // Opens the notch (the music card's detail holds the lyrics now); OpenTab waits for the confirmation card.
                 _ctx.OpenTab(_panel);
                 return new CommandResult("\uE8D6", "Lyrics", m.HasSession ? NowPlaying() : "Nothing playing");
         }
@@ -219,6 +234,11 @@ internal sealed class MusicModule : IShammyModule
         }
         _panel.OnMediaChanged();
         WatchForHeard();
+        if (_card.IsRelevant != _cardRelevant)
+        {
+            _cardRelevant = _card.IsRelevant;
+            _ctx.CardsChanged();
+        }
     }
 
     /// <summary>Restarts the "heard it" countdown when a new track starts playing.</summary>

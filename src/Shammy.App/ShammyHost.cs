@@ -83,6 +83,7 @@ internal sealed class ShammyHost : IDisposable
             _volume.Changed += (level, muted) => PostHud(HudKind.Volume, level, muted);
             _volume.DefaultDeviceChanged += () => _visualizer.Restart();
             _volume.Start();
+            services.Volume = _volume;
         });
 
         Safe("brightness", () =>
@@ -107,7 +108,15 @@ internal sealed class ShammyHost : IDisposable
             var bt = Own(new BluetoothService(_ui));
             bt.AudioDeviceChanged += (name, connected) => Post(new Activity("bluetooth", ActivityKind.Bluetooth, PriorityBluetooth,
                 new BluetoothPayload(name, connected, true), In(3.5)));
+            // The level arrives a moment after the connect pill (the headset reports it once attached):
+            // update the pill in place while it's still showing that device.
+            bt.BatteryRead += (name, percent) =>
+            {
+                if (_activities.Get("bluetooth") is { Payload: BluetoothPayload { Connected: true } p } a && p.Name == name)
+                    Post(a with { Payload = p with { Battery = percent }, ExpiresAt = In(3.5) });
+            };
             bt.Start();
+            services.Bluetooth = bt;
         });
 
         Safe("downloads", () =>
@@ -581,7 +590,12 @@ internal sealed class ShammyHost : IDisposable
             }
             case "charging": Post(new Activity("battery", ActivityKind.Charging, PriorityCharging, new BatteryPayload((int)Num(arg), true), In(3.2))); return "ok";
             case "lowbattery": Post(new Activity("battery", ActivityKind.LowBattery, PriorityBatteryLow, new BatteryPayload((int)Num(arg), false), In(5))); return "ok";
-            case "bluetooth": Post(new Activity("bluetooth", ActivityKind.Bluetooth, PriorityBluetooth, new BluetoothPayload(arg, true, true), In(3.5))); return "ok";
+            case "bluetooth":
+                // "bluetooth Airdopes 311 Pro|80" previews the pill with a battery level.
+                var btParts = arg.Split('|', 2);
+                Post(new Activity("bluetooth", ActivityKind.Bluetooth, PriorityBluetooth, new BluetoothPayload(btParts[0].Trim(), true, true,
+                    btParts.Length > 1 && int.TryParse(btParts[1], out var btLevel) ? btLevel : null), In(3.5)));
+                return "ok";
             case "downloading": Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading, new DownloadPayload(arg, null, 12_400_000, 1))); return "ok";
             case "downloaded":
                 _activities.Remove("download");

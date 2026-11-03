@@ -6,7 +6,8 @@ public sealed record HudPayload(HudKind Kind, double Level, bool Muted = false);
 
 public sealed record BatteryPayload(int Percent, bool Charging);
 
-public sealed record BluetoothPayload(string Name, bool Connected, bool IsAudio);
+/// <param name="Battery">The headset's battery level once Windows has it ("Airdopes 311 Pro · 80%"); null until then.</param>
+public sealed record BluetoothPayload(string Name, bool Connected, bool IsAudio, int? Battery = null);
 
 public sealed record DownloadPayload(string Name, string? Path, long Bytes, int Count);
 

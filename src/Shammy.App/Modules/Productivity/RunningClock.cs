@@ -65,6 +65,12 @@ internal sealed class RunningClock
         _since = DateTime.UtcNow;
     }
 
+    /// <summary>"+1 min" on the timer card: a longer countdown, same progress so far.</summary>
+    public void Extend(TimeSpan more) => Total += more;
+
+    /// <summary>When a running countdown ends, in local time (null for a stopwatch).</summary>
+    public DateTime? EndsLocal(DateTime utcNow) => IsCountdown ? DateTime.Now + Remaining(utcNow) : null;
+
     /// <summary>How long until the shown text changes, so ticks land right on the second.</summary>
     public TimeSpan UntilNextSecond(DateTime utcNow)
     {

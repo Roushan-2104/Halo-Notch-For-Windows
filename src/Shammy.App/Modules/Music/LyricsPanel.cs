@@ -106,6 +106,15 @@ internal sealed class LyricsPanel : Grid
     public string CurrentLine => CurrentIndex >= 0 && CurrentIndex < _lyrics.Lines.Count ? _lyrics.Lines[CurrentIndex].Text : "";
     public bool IsTicking => _ticking is not null;
 
+    /// <summary>The track line above the lyrics; the music card's detail already shows the title, so it hides it.</summary>
+    public bool ShowTrack
+    {
+        set => _track.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Raised when the lyrics shown change (new track, found, not found), so a "Synced" badge can follow.</summary>
+    public event Action? LyricsChanged;
+
     public void ShowStatus(string glyph, string text, string track)
     {
         _lyrics = TrackLyrics.None;
@@ -119,6 +128,7 @@ internal sealed class LyricsPanel : Grid
         _viewport.Visibility = Visibility.Collapsed;
         _plainScroll.Visibility = Visibility.Collapsed;
         UpdateTicking();
+        LyricsChanged?.Invoke();
     }
 
     public void ShowLyrics(TrackLyrics lyrics, string track)
@@ -147,6 +157,7 @@ internal sealed class LyricsPanel : Grid
             _plainScroll.Visibility = Visibility.Visible;
             _viewport.Visibility = Visibility.Collapsed;
             UpdateTicking();
+            LyricsChanged?.Invoke();
             return;
         }
 
@@ -181,6 +192,7 @@ internal sealed class LyricsPanel : Grid
         // positions, and the lyrics would sit there frozen and dim.
         Dispatcher.BeginInvoke(MeasureLines, System.Windows.Threading.DispatcherPriority.Loaded);
         UpdateTicking();
+        LyricsChanged?.Invoke();
     }
 
     void OnLineClicked(object sender, MouseButtonEventArgs e)

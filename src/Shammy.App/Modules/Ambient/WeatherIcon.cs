@@ -1,138 +1,9 @@
 using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Shammy.Core.Ambient;
 
 namespace Shammy.Modules.Ambient;
-
-/// <summary>The Weather tab (~436×150): now on the left, the next six hours on the right.</summary>
-internal sealed class WeatherPanel : Grid
-{
-    const int HourCount = 6;
-
-    readonly TextBlock _city = Text(12, "Fg2");
-    readonly TextBlock _temp = new()
-    {
-        FontSize = 44,
-        FontWeight = FontWeights.Light,
-        Foreground = Brush("Fg"),
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-    readonly WeatherIcon _icon = new() { Width = 30, Height = 30, Margin = new Thickness(10, 4, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-    readonly TextBlock _condition = Text(13, "Fg", FontWeights.SemiBold);
-    readonly TextBlock _details = Text(11.5, "Fg2");
-    readonly TextBlock _status = Text(12.5, "Fg2");
-    readonly UniformGrid _hours = new() { Rows = 1, Columns = HourCount, VerticalAlignment = VerticalAlignment.Center };
-    readonly Grid _content = new();
-
-    public WeatherPanel()
-    {
-        Margin = new Thickness(0, 8, 0, 0);
-        _temp.FontFamily = (FontFamily)Application.Current.Resources["ShammyDisplayFont"];
-        _status.HorizontalAlignment = HorizontalAlignment.Center;
-        _status.VerticalAlignment = VerticalAlignment.Center;
-        _status.TextAlignment = TextAlignment.Center;
-        _status.TextWrapping = TextWrapping.Wrap;
-
-        _content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
-        _content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
-        _content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        var now = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        now.Children.Add(_city);
-        var tempRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(-2, -4, 0, -2) };
-        tempRow.Children.Add(_temp);
-        tempRow.Children.Add(_icon);
-        now.Children.Add(tempRow);
-        now.Children.Add(_condition);
-        _details.Margin = new Thickness(0, 2, 0, 0);
-        now.Children.Add(_details);
-        _content.Children.Add(now);
-
-        // A hairline between "now" and the hourly strip, like the media card's separators.
-        var divider = new Border { Width = 1, Background = Brush("Fill2"), Margin = new Thickness(0, 14, 0, 14), HorizontalAlignment = HorizontalAlignment.Center };
-        SetColumn(divider, 1);
-        _content.Children.Add(divider);
-        SetColumn(_hours, 2);
-        _content.Children.Add(_hours);
-        for (int i = 0; i < HourCount; i++) _hours.Children.Add(new HourCell());
-
-        Children.Add(_content);
-        Children.Add(_status);
-        ShowStatus("");
-    }
-
-    public void ShowStatus(string text)
-    {
-        _status.Text = text;
-        _status.Visibility = Visibility.Visible;
-        _content.Visibility = Visibility.Collapsed;
-    }
-
-    public void Show(WeatherReport r, string city, DateTime nowUtc)
-    {
-        _status.Visibility = Visibility.Collapsed;
-        _content.Visibility = Visibility.Visible;
-        _city.Text = city;
-        _temp.Text = WeatherText.Temp(r.Temperature);
-        _icon.Set(r.Code, r.IsDay);
-        _condition.Text = WeatherCodes.Describe(r.Code);
-        _details.Text = $"Feels {WeatherText.Temp(r.FeelsLike)} \u00B7 H {WeatherText.Temp(r.TodayHigh)}  L {WeatherText.Temp(r.TodayLow)}";
-        ToolTip = $"Updated {DateTime.Now.ToString("t", CultureInfo.CurrentCulture)} \u00B7 Open-Meteo";
-
-        var next = r.NextHours(r.LocalNow(nowUtc), HourCount);
-        for (int i = 0; i < HourCount; i++)
-        {
-            var cell = (HourCell)_hours.Children[i];
-            if (i < next.Count) cell.Set(next[i]);
-            else cell.Visibility = Visibility.Hidden;
-        }
-    }
-
-    static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
-
-    static TextBlock Text(double size, string brush, FontWeight? weight = null) => new()
-    {
-        FontSize = size,
-        FontWeight = weight ?? FontWeights.Normal,
-        Foreground = Brush(brush),
-        TextTrimming = TextTrimming.CharacterEllipsis,
-    };
-
-    /// <summary>Time, icon, temperature and rain chance for one hour.</summary>
-    sealed class HourCell : StackPanel
-    {
-        readonly TextBlock _time = Text(10.5, "Fg2");
-        readonly WeatherIcon _icon = new() { Width = 22, Height = 22, Margin = new Thickness(0, 6, 0, 6) };
-        readonly TextBlock _temp = Text(12.5, "Fg", FontWeights.SemiBold);
-        readonly TextBlock _rain = Text(10.5, "Fg3");
-
-        public HourCell()
-        {
-            VerticalAlignment = VerticalAlignment.Center;
-            foreach (var t in new[] { _time, _temp, _rain }) t.HorizontalAlignment = HorizontalAlignment.Center;
-            _rain.Margin = new Thickness(0, 2, 0, 0);
-            Children.Add(_time);
-            Children.Add(_icon);
-            Children.Add(_temp);
-            Children.Add(_rain);
-        }
-
-        public void Set(HourForecast h)
-        {
-            Visibility = Visibility.Visible;
-            _time.Text = WeatherText.HourLabel(h.Time);
-            // Hourly is_day isn't requested; 6 am to 6 pm is close enough for an icon.
-            _icon.Set(h.Code, h.Time.Hour is >= 6 and < 18);
-            _temp.Text = WeatherText.Temp(h.Temperature);
-            int chance = h.RainChance ?? 0;
-            _rain.Text = h.RainChance is null ? " " : $"{chance}%";
-            _rain.Foreground = Brush(chance >= 30 ? "AccentBrush" : "Fg3");
-        }
-    }
-}
 
 /// <summary>
 /// A weather icon composed from Segoe Fluent glyphs (sun, moon, cloud, bolt, fog, snow) plus drawn
@@ -146,6 +17,12 @@ internal sealed class WeatherIcon : FrameworkElement
     int _code;
     bool _isDay = true;
     bool _set;
+
+    /// <summary>What hides the sun behind a cloud: the surface the icon sits on (black notch, #121214 card).</summary>
+    public Brush Backing { get; init; } = Brushes.Black;
+
+    /// <summary>The sun's colour; the v2 cards use the weather accent instead of the theme's amber.</summary>
+    public Brush? Sun { get; init; }
 
     public void Set(int code, bool isDay)
     {
@@ -162,7 +39,7 @@ internal sealed class WeatherIcon : FrameworkElement
         double s = Math.Min(ActualWidth, ActualHeight);
         if (s <= 0) return;
         var fg = (Brush)Application.Current.Resources["Fg"];
-        var amber = (Brush)Application.Current.Resources["Amber"];
+        var amber = Sun ?? (Brush)Application.Current.Resources["Amber"];
         var accent = (Brush)Application.Current.Resources["AccentBrush"];
         var sky = _isDay ? WeatherCodes.SunGlyph : WeatherCodes.MoonGlyph;
         var skyBrush = _isDay ? amber : fg;
@@ -234,7 +111,7 @@ internal sealed class WeatherIcon : FrameworkElement
         if (backing)
         {
             // Slightly fattened so whatever sits behind doesn't touch the outline.
-            dc.DrawGeometry(Brushes.Black, new Pen(Brushes.Black, 2.2 / k), back);
+            dc.DrawGeometry(Backing, new Pen(Backing, 2.2 / k), back);
         }
         dc.DrawGeometry(brush, null, shape);
         dc.Pop();
