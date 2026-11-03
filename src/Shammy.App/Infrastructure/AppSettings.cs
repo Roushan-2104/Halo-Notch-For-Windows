@@ -58,6 +58,18 @@ internal sealed class AppSettings
     /// <summary>App IDs the user muted from the notch.</summary>
     public List<string> MutedNotificationApps { get; set; } = new();
 
+    /// <summary>
+    /// App wings: a strip along the top of every monitor, reserved like a taskbar, with pinned apps left of
+    /// the notch and open apps right of it (for people who hide the Windows taskbar).
+    /// </summary>
+    public bool AppWings { get; set; } = true;
+
+    /// <summary>The wings' pinned apps, in order. Seeded once from the taskbar's pins, then Shammy's own.</summary>
+    public List<Shammy.Core.Wings.PinnedApp> PinnedApps { get; set; } = new();
+
+    /// <summary>The taskbar's pins were imported into <see cref="PinnedApps"/> (only ever done once).</summary>
+    public bool WingsPinsImported { get; set; }
+
     [JsonIgnore]
     public bool StartWithWindows
     {
@@ -125,6 +137,8 @@ internal sealed class AppSettings
                 // A hand-edited or half-written file can say null; every list must exist for the rest of Shammy.
                 s.Shelf ??= new();
                 s.MutedNotificationApps ??= new();
+                s.PinnedApps ??= new();
+                s.PinnedApps.RemoveAll(p => p is null || string.IsNullOrWhiteSpace(p.Launch));
                 if (string.IsNullOrWhiteSpace(s.VoiceLanguage)) s.VoiceLanguage = "en";
                 return s;
             }
