@@ -91,8 +91,8 @@ public sealed class GlanceRotator
 /// <summary>The glance items Shammy provides itself.</summary>
 public static class BuiltInGlances
 {
-    /// <summary>Battery shows when it's worth a look: below this, or while charging.</summary>
-    public const int LowBattery = 30;
+    /// <summary>Battery shows when it's worth a look: at or below this (the notch-wide low level), or while charging.</summary>
+    public const int LowBattery = Cards.BatteryLevels.Low;
 
     /// <summary>("10:20", "Tue 3"): the time in bold and a short date beside it.</summary>
     public static (string Time, string Date) Time(DateTime local, bool twentyFourHour) =>
@@ -107,6 +107,6 @@ public static class BuiltInGlances
     {
         if (!hasBattery) return null;
         if (charging) return $"Charging {percent}%";
-        return percent < LowBattery ? $"{percent}% battery" : null;
+        return Cards.BatteryLevels.IsLow(percent) ? $"{percent}% battery" : null;
     }
 }

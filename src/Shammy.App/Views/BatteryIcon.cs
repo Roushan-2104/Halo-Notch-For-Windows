@@ -34,7 +34,7 @@ internal sealed class BatteryIcon : FrameworkElement
         dc.DrawRoundedRectangle(null, pen, new Rect(0.55, 0.55, w - 1.1, h - 1.1), 3.2, 3.2);
         dc.DrawRoundedRectangle(Outline, null, new Rect(w + 0.6, h / 2 - 2, 1.8, 4), 0.9, 0.9);
 
-        var fill = _charging ? Green : _percent <= 20 ? Red : White;
+        var fill = _charging ? Green : Shammy.Core.Cards.BatteryLevels.IsLow(_percent) ? Red : White;
         double inner = (w - 4) * _percent / 100.0;
         if (inner > 0.5) dc.DrawRoundedRectangle(fill, null, new Rect(2, 2, inner, h - 4), 1.6, 1.6);
     }

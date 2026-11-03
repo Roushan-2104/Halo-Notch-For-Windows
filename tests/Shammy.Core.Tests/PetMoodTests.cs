@@ -72,7 +72,8 @@ public class PetMoodTests
     public void Tired_only_when_low_and_not_charging()
     {
         Assert.Equal(PetMood.Tired, PetMoods.Decide(Base with { BatteryPercent = 19 }));
-        Assert.Equal(PetMood.Idle, PetMoods.Decide(Base with { BatteryPercent = 20 }));
+        Assert.Equal(PetMood.Tired, PetMoods.Decide(Base with { BatteryPercent = 20 }));
+        Assert.Equal(PetMood.Idle, PetMoods.Decide(Base with { BatteryPercent = 21 }));
         Assert.Equal(PetMood.Idle, PetMoods.Decide(Base with { BatteryPercent = 12, Charging = true }));
     }
 

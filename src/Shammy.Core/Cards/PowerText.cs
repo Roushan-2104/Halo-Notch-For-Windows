@@ -38,5 +38,5 @@ public static class PowerText
         !hasBattery ? "No battery" : charging ? "Charging" : pluggedIn ? (percent >= 100 ? "Fully charged" : "Plugged in") : "On battery";
 
     /// <summary>The ring's colour band: low battery turns the ring to the alarm colour.</summary>
-    public static bool IsLow(int percent, bool pluggedIn) => !pluggedIn && percent <= 20;
+    public static bool IsLow(int percent, bool pluggedIn) => !pluggedIn && BatteryLevels.IsLow(percent);
 }

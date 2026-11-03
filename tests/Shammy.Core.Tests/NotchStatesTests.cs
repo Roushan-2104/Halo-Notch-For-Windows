@@ -152,7 +152,9 @@ public class GlanceTests
     public void Battery_shows_only_when_low_or_charging()
     {
         Assert.Null(BuiltInGlances.Battery(true, 81, false));
-        Assert.Equal("28% battery", BuiltInGlances.Battery(true, 28, false));
+        Assert.Equal("18% battery", BuiltInGlances.Battery(true, 18, false));
+        Assert.Equal("20% battery", BuiltInGlances.Battery(true, 20, false));
+        Assert.Null(BuiltInGlances.Battery(true, 28, false));
         Assert.Equal("Charging 64%", BuiltInGlances.Battery(true, 64, true));
         Assert.Null(BuiltInGlances.Battery(false, 10, false));
     }

@@ -54,8 +54,8 @@ public static class PetMoods
     /// <summary>A mouse move at night keeps it awake this long.</summary>
     public static readonly TimeSpan AwakeFor = TimeSpan.FromSeconds(12);
 
-    /// <summary>Tired below this battery level when not charging.</summary>
-    public const int TiredBelow = 20;
+    /// <summary>Tired at or below this battery level when not charging (the notch-wide low level).</summary>
+    public const int TiredAtOrBelow = Cards.BatteryLevels.Low;
 
     /// <summary>"Meeting soon" means starting within this many minutes.</summary>
     public const int MeetingWithinMinutes = 5;
@@ -69,7 +69,7 @@ public static class PetMoods
         if (i.NotifiedAt is { } n && !i.NotificationSeen && i.Now - n < NotifyFor && i.Now >= n) return PetMood.Notify;
         if (i.MeetingSoon) return PetMood.MeetingSoon;
         if (i.MusicPlaying) return PetMood.Music;
-        if (i.BatteryPercent is { } b && b < TiredBelow && !i.Charging) return PetMood.Tired;
+        if (i.BatteryPercent is { } b && b <= TiredAtOrBelow && !i.Charging) return PetMood.Tired;
         bool awake = i.PointerNearAt is { } near && i.Now - near < AwakeFor;
         if (EyeLogic.IsSleepy(i.LocalNow) && !awake) return PetMood.Sleepy;
         return PetMood.Idle;

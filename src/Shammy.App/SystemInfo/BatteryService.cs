@@ -42,14 +42,10 @@ internal sealed class BatteryService
         int p = Percent;
         if (HasBattery && !IsPluggedIn)
         {
-            foreach (var threshold in new[] { 20, 10, 5 })
+            if (Shammy.Core.Cards.BatteryLevels.WarningFor(p, _lastWarned) is { } level)
             {
-                if (p <= threshold && _lastWarned > threshold)
-                {
-                    _lastWarned = threshold;
-                    Low?.Invoke(p);
-                    break;
-                }
+                _lastWarned = level;
+                Low?.Invoke(p);
             }
         }
         Changed?.Invoke();
