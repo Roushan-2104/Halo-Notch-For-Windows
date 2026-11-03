@@ -17,6 +17,18 @@ internal static class BrightnessControl
     /// <summary>The level for the current power source (plugged in or on battery), 0–100; null if unreadable.</summary>
     public static int? Get()
     {
+        // The palette asks on every keystroke of "brightness"; the value only changes through keys or us.
+        if (DateTime.UtcNow - _readAt < TimeSpan.FromSeconds(2)) return _last;
+        _last = Read();
+        _readAt = DateTime.UtcNow;
+        return _last;
+    }
+
+    static int? _last;
+    static DateTime _readAt = DateTime.MinValue;
+
+    static int? Read()
+    {
         if (!ActiveScheme(out var scheme)) return null;
         var sub = VideoSubgroup;
         var setting = Brightness;
@@ -37,7 +49,13 @@ internal static class BrightnessControl
         uint err = OnBattery()
             ? PowerWriteDCValueIndex(IntPtr.Zero, ref scheme, ref sub, ref setting, value)
             : PowerWriteACValueIndex(IntPtr.Zero, ref scheme, ref sub, ref setting, value);
-        return err == 0 && PowerSetActiveScheme(IntPtr.Zero, ref scheme) == 0;
+        bool ok = err == 0 && PowerSetActiveScheme(IntPtr.Zero, ref scheme) == 0;
+        if (ok)
+        {
+            _last = (int)value;
+            _readAt = DateTime.UtcNow;
+        }
+        return ok;
     }
 
     static bool ActiveScheme(out Guid scheme)
@@ -93,25 +111,77 @@ internal sealed record AudioOutput(string Id, string Name, bool IsDefault);
 /// </summary>
 internal sealed class AudioOutputs : IDisposable
 {
-    readonly MMDeviceEnumerator _enumerator = new();
+    /// <summary>How long a device list is trusted before a keystroke asks for a fresh one in the background.</summary>
+    static readonly TimeSpan ListLifetime = TimeSpan.FromSeconds(2);
 
+    readonly MMDeviceEnumerator _enumerator = new();
+    IReadOnlyList<(string Id, string Name)> _devices = Array.Empty<(string, string)>();
+    DateTime _listedAt = DateTime.MinValue;
+    Task? _listing;
+
+    /// <summary>
+    /// The cached output devices, the default one first. Reading every device's name from its property
+    /// store costs ~250 ms, so that never happens here: a stale list is refreshed on a worker thread and
+    /// <see cref="ListChanged"/> says when the new one is in. The default flag is read live (~1 ms).
+    /// </summary>
     public IReadOnlyList<AudioOutput> List()
     {
-        var result = new List<AudioOutput>();
+        RefreshIfStale();
+        string? current = DefaultId();
+        return _devices
+            .Select(d => new AudioOutput(d.Id, d.Name, d.Id == current))
+            .OrderByDescending(d => d.IsDefault).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>Raised on the calling (UI) thread's context when a background refresh found a different list.</summary>
+    public event Action? ListChanged;
+
+    /// <summary>Starts a background refresh when the list is older than <see cref="ListLifetime"/> (or <paramref name="force"/>).</summary>
+    public void RefreshIfStale(bool force = false)
+    {
+        if (_listing is not null || (!force && DateTime.UtcNow - _listedAt < ListLifetime)) return;
+        var context = SynchronizationContext.Current;
+        _listing = Task.Run(ReadDevices).ContinueWith(t =>
+        {
+            _listing = null;
+            _listedAt = DateTime.UtcNow;
+            if (t.Result is not { } fresh || fresh.SequenceEqual(_devices)) return;
+            _devices = fresh;
+            ListChanged?.Invoke();
+        }, context is null ? TaskScheduler.Default : TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>On a worker thread, with its own enumerator (Core Audio is free-threaded).</summary>
+    static IReadOnlyList<(string Id, string Name)>? ReadDevices()
+    {
         try
         {
-            string? current = DefaultId();
-            foreach (var device in _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            using var enumerator = new MMDeviceEnumerator();
+            var list = new List<(string, string)>();
+            foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
-                try { result.Add(new AudioOutput(device.ID, device.FriendlyName, device.ID == current)); }
+                try { list.Add((device.ID, device.FriendlyName)); }
                 finally { AudioDeviceRelease.Dispose(device); }
             }
+            return list;
         }
         catch (Exception ex)
         {
             Infrastructure.Log.Warn("Listing audio outputs failed", ex);
+            return null;
         }
-        return result.OrderByDescending(d => d.IsDefault).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>For the test pipe: waits for a fresh list.</summary>
+    public IReadOnlyList<AudioOutput> ListNow()
+    {
+        if (ReadDevices() is { } fresh)
+        {
+            _devices = fresh;
+            _listedAt = DateTime.UtcNow;
+        }
+        return List();
     }
 
     string? DefaultId()
@@ -259,10 +329,46 @@ internal static class BluetoothRadio
         }
     }
 
-    static async Task<Radio?> FindAsync()
+    static Radio? _radio;
+    static Task<Radio?>? _finding;
+
+    /// <summary>
+    /// The state without waiting, once the radio has been found (reading <c>State</c> is a cheap property);
+    /// null before that or without a radio. Finding it the first time takes ~230 ms, so that runs on a
+    /// worker thread (<see cref="Prefetch"/>), never on a keystroke.
+    /// </summary>
+    public static bool? Cached
     {
-        if (await Radio.RequestAccessAsync() != RadioAccessStatus.Allowed) return null;
-        var radios = await Radio.GetRadiosAsync();
-        return radios.FirstOrDefault(r => r.Kind == RadioKind.Bluetooth);
+        get
+        {
+            try { return _radio is { } r ? r.State == RadioState.On : null; }
+            catch (Exception) { return null; }
+        }
+    }
+
+    public static void Prefetch() => _ = FindAsync();
+
+    static Task<Radio?> FindAsync()
+    {
+        if (_radio is not null) return Task.FromResult<Radio?>(_radio);
+        return _finding ??= Task.Run(async () =>
+        {
+            try
+            {
+                if (await Radio.RequestAccessAsync() != RadioAccessStatus.Allowed) return null;
+                var radios = await Radio.GetRadiosAsync();
+                return _radio = radios.FirstOrDefault(r => r.Kind == RadioKind.Bluetooth);
+            }
+            catch (Exception ex)
+            {
+                Infrastructure.Log.Warn("Finding the Bluetooth radio failed", ex);
+                return null;
+            }
+            finally
+            {
+                // Without a radio (or access), try again next time the palette opens.
+                _finding = null;
+            }
+        });
     }
 }

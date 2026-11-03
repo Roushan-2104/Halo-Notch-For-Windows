@@ -10,7 +10,6 @@ using Shammy.Core.Palette;
 using Shammy.Core.Search;
 using Shammy.Interop;
 using Shammy.Modules.Launcher;
-using Shammy.Shelf;
 
 namespace Shammy.Modules.Palette;
 
@@ -60,7 +59,7 @@ internal sealed class PaletteModule : IShammyModule
     readonly PaletteView _view = new();
     readonly FileSearch _files = new();
     readonly AudioOutputs _audio = new();
-    readonly Dictionary<string, ImageSource?> _icons = new(StringComparer.OrdinalIgnoreCase);
+    IconLoader _icons = null!;
     readonly Dictionary<string, FrameworkElement> _controls = new();
     readonly string _profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     FrecencyStore _frecency = new();
@@ -90,6 +89,13 @@ internal sealed class PaletteModule : IShammyModule
 
         _bar.QueryChanged += OnQuery;
         _bar.PaletteKeys = OnKey;
+        _icons = new IconLoader(ctx.Ui);
+        _icons.Loaded += OnIconLoaded;
+        // A fresh device list arrived in the background: redraw if the sound rows are showing.
+        _audio.ListChanged += () =>
+        {
+            if (_local.Any(i => i.Key.StartsWith("audio:", StringComparison.Ordinal) || i.Key == "setting:Volume")) Refresh();
+        };
         _view.RowInvoked += (i, ctrl) => Invoke(i, ctrl);
         _view.RowHovered += i =>
         {
@@ -115,7 +121,7 @@ internal sealed class PaletteModule : IShammyModule
         {
             arg = arg.Trim();
             if (arg is "on" or "off") return Task.Run(() => BluetoothRadio.SetAsync(arg == "on")).GetAwaiter().GetResult() ? $"bluetooth {arg}" : "error: couldn't switch";
-            var state = Task.Run(BluetoothRadio.GetAsync).GetAwaiter().GetResult();
+            var state = Task.Run(() => BluetoothRadio.GetAsync()).GetAwaiter().GetResult();
             return state is null ? "bluetooth=unavailable" : $"bluetooth={(state.Value ? "on" : "off")}";
         });
         ctx.AddPipeCommand("palette-frecency", _ => string.Join(" | ", _frecency.Entries
@@ -138,6 +144,10 @@ internal sealed class PaletteModule : IShammyModule
             _ranked = RankedPalette.Empty;
             _view.ResetPointer();
             _bar.SetPalette(null, 0);
+            // The box just opened (or was cleared): warm the slow sources now, so typing "sound" or
+            // "bluetooth" only reads caches.
+            _audio.RefreshIfStale();
+            BluetoothRadio.Prefetch();
             return;
         }
 
@@ -333,6 +343,7 @@ internal sealed class PaletteModule : IShammyModule
                     }
                     break;
                 case SettingControl.Bluetooth:
+                    _bluetooth = BluetoothRadio.Cached ?? _bluetooth;
                     items.Add(new PaletteItem(key, PaletteKind.Setting, BluetoothTitle(), "", match)
                     {
                         Hint = "Settings",
@@ -458,7 +469,8 @@ internal sealed class PaletteModule : IShammyModule
             return sw;
         });
         toggle.State = _bluetooth;
-        _ = RefreshBluetoothAsync(key);
+        // Only until the radio has been found once (off the UI thread); after that its state is a cached read.
+        if (_bluetooth is null) _ = RefreshBluetoothAsync(key);
         return new PaletteEntry
         {
             Glyph = "\uE702",
@@ -538,9 +550,11 @@ internal sealed class PaletteModule : IShammyModule
     string? WantsFiles(string text, List<PaletteItem> local)
     {
         if (_files.Available == false) return null;
-        if (text.Trim().Length < 2 || local.Any(i => i.Kind == PaletteKind.Command)) return null;
-        if (local.Any(i => i.Kind == PaletteKind.Setting && i.Match >= 99)) return null;
-        return WindowsSearchSql.Build(text, _profile, 30);
+        bool search = FileResults.ShouldSearch(text,
+            hasCommand: local.Any(i => i.Kind == PaletteKind.Command && i.Key != "calc"),
+            isCalculation: local.Any(i => i.Key == "calc"),
+            exactSetting: local.Any(i => i.Kind == PaletteKind.Setting && i.Match >= 99));
+        return search ? WindowsSearchSql.Build(text, _profile, 30) : null;
     }
 
     void SubmitFileQuery()
@@ -670,38 +684,18 @@ internal sealed class PaletteModule : IShammyModule
         var rows = _ranked.Items.Select(i =>
         {
             var entry = i.Tag as PaletteEntry;
-            return new PaletteRowView(i, entry?.Glyph ?? "\uE721", entry?.IconPath is { } p ? CachedIcon(p) : null, entry?.Control);
+            return new PaletteRowView(i, entry?.Glyph ?? "\uE721", entry?.IconPath is { } p ? _icons.Get(p, i.Kind == PaletteKind.File) : null, entry?.Control);
         }).ToList();
         double height = _view.Render(rows, _ranked.Selected);
         _bar.SetPalette(_view, height);
-        LoadMissingIcons();
     }
 
-    ImageSource? CachedIcon(string path) => _icons.TryGetValue(path, out var icon) ? icon : null;
-
-    /// <summary>Icons come after the rows are on screen, so a slow shell icon never delays a keystroke.</summary>
-    void LoadMissingIcons()
+    /// <summary>An icon arrived from the loader: put it into every row showing that path, without a rebuild.</summary>
+    void OnIconLoaded(string path, ImageSource icon)
     {
-        var missing = _ranked.Items
-            .Select(i => (i.Tag as PaletteEntry)?.IconPath)
-            .Where(p => p is not null && !_icons.ContainsKey(p))
-            .Cast<string>()
-            .ToList();
-        if (missing.Count == 0) return;
-        int generation = _generation;
-        _ctx.Ui.BeginInvoke(DispatcherPriority.Background, () =>
-        {
-            bool any = false;
-            foreach (var path in missing)
-            {
-                if (_icons.ContainsKey(path)) continue;
-                var icon = ShellIcons.Get(path, 32, iconOnly: true);
-                _icons[path] = icon;
-                any |= icon is not null;
-            }
-            if (_icons.Count > 300) _icons.Clear();
-            if (any && generation == _generation) Render();
-        });
+        for (int i = 0; i < _ranked.Items.Count; i++)
+            if (_ranked.Items[i].Tag is PaletteEntry { IconPath: { } p } && string.Equals(p, path, StringComparison.OrdinalIgnoreCase))
+                _view.SetIcon(i, icon);
     }
 
     void Remember(double ms)
@@ -796,7 +790,7 @@ internal sealed class PaletteModule : IShammyModule
 
     string PipeAudio(string arg)
     {
-        var devices = _audio.List();
+        var devices = _audio.ListNow();
         var parts = arg.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts is ["set", var n] && int.TryParse(n, out var i) && i >= 1 && i <= devices.Count)
             return _audio.SetDefault(devices[i - 1].Id) ? $"default is now {devices[i - 1].Name}" : "error: switch failed";
@@ -809,5 +803,6 @@ internal sealed class PaletteModule : IShammyModule
     {
         _files.Dispose();
         _audio.Dispose();
+        _icons?.Dispose();
     }
 }

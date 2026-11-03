@@ -97,9 +97,23 @@ public static class FileResults
         var segments = p.TrimEnd('\\').Split('\\');
         // Any folder on the way, or the item itself when it is one of those folders.
         if (segments.Any(NoiseDirs.Contains)) return true;
+        // Hidden dot-folders and dotfiles (.agents, .config, .env): never what someone types a name to find.
+        if (segments.Any(s => s.StartsWith('.'))) return true;
         var name = segments[^1];
         return name.Length == 0 || name.StartsWith("~$", StringComparison.Ordinal) || name.StartsWith('.') ||
                name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Whether to ask the index at all. A command stays the top row, but files are still worth showing
+    /// under it once there are 3+ letters ("resume" is a media command and a CV). Sums and exact settings
+    /// words ("sound", "wifi") are never file names anyone means.
+    /// </summary>
+    public static bool ShouldSearch(string text, bool hasCommand, bool isCalculation, bool exactSetting)
+    {
+        int length = (text ?? "").Trim().Length;
+        if (length < 2 || isCalculation || exactSetting) return false;
+        return !hasCommand || length >= 3;
     }
 
     /// <summary>Best name matches first (the index order, newest first, breaks ties); at most <paramref name="max"/>.</summary>
