@@ -156,6 +156,7 @@ internal sealed class ShammyHost : IDisposable
         {
             Language = _settings.VoiceLanguage,
             Vocabulary = () => _modules.Vocabulary.SelectMany(f => f()),
+            SongHistory = () => _modules.SongVocabulary.SelectMany(f => f()),
         });
         _whisper.Upgraded += model => _ui.BeginInvoke(() =>
             Post(new Activity("voice-upgraded", ActivityKind.Message, PriorityMessage,
