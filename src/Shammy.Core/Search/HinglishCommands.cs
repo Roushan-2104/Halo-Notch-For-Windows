@@ -27,7 +27,8 @@ public static class HinglishCommands
 
     static readonly Regex Minute = new(@"^(?:minutes?|minat|minit|mint|minute|minton|mins?)$", Opts);
     static readonly Regex Second = new(@"^(?:seconds?|sekand|second|secs?)$", Opts);
-    static readonly Regex Hour = new(@"^(?:ghanta|ghante|ghanton|ghante|hours?|hrs?)$", Opts);
+    // The English model hears "ghante" as "gante".
+    static readonly Regex Hour = new(@"^(?:gh?a+nta|gh?a+nte|gh?a+nton|hours?|hrs?)$", Opts);
     // "alam" is how the English pass hears it ("Ka Alam Lagado").
     static readonly Regex AlarmWord = new(@"^(?:alarm|alaarm|alaram|alarum|alam)$", Opts);
     static readonly Regex TimerWord = new(@"^(?:timer|taimar|taimer|taaimar|timar|taymar)$", Opts);

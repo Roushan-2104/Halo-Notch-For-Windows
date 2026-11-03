@@ -329,6 +329,7 @@ public class HinglishCommandTests
     [InlineData("mujhe 10 minute baad yaad dila dena chai banana hai", "remind me in 10 minutes to chai banana hai")]
     [InlineData("aaj shaam 6 baje mummy ko phone karna yaad dilana", "remind me today evening at 6 to mummy ko phone karna")]
     [InlineData("aaj raat saade 9 baje remind karna", "remind me tonight at 9:30")]
+    [InlineData("Do gante bad yad dilna ki khana khalo.", "remind me in 2 hours to khana khalo")]
     public void Reminders(string hinglish, string english) => Assert.Equal(english, HinglishCommands.ToEnglish(hinglish));
 
     [Theory]
