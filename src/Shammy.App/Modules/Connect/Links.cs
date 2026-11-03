@@ -20,6 +20,25 @@ internal interface IClipboardLink
 {
     IReadOnlyList<Shammy.Core.Clipboard.ClipEntry> Items { get; }
     void CopyBack(Shammy.Core.Clipboard.ClipEntry entry);
+
+    /// <summary>Clears the unpinned history (with the usual Undo pill); false when there was nothing to clear.</summary>
+    bool Clear();
+}
+
+/// <summary>What the calendar module offers Settings: whether it's connected, how the sync is, connect and disconnect.</summary>
+internal interface ICalendarLink
+{
+    bool Connected { get; }
+
+    /// <summary>"Couldn't refresh · last updated 10:20 AM" while syncing fails, else null.</summary>
+    string? SyncProblem { get; }
+
+    DateTime? FetchedAt { get; }
+
+    /// <summary>Opens the paste-your-address card.</summary>
+    void OpenSetup();
+
+    void Disconnect();
 }
 
 /// <summary>What the phone-send module offers others (screenshot card, downloads card).</summary>
@@ -47,6 +66,8 @@ internal static class Links
     public static IClipboardLink? Clipboard { get; set; }
 
     public static IPhoneLink? Phone { get; set; }
+
+    public static ICalendarLink? Calendar { get; set; }
 
     /// <summary>Opens a card's detail (or "shelf", "alerts") in the open notch, after any command confirmation (ctx.OpenCard).</summary>
     public static bool OpenCard(ModuleContext ctx, string id) => ctx.OpenCard(id);
