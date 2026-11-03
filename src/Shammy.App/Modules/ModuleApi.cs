@@ -108,6 +108,9 @@ internal sealed class ModuleRegistry
     /// <summary>Raised when a module's vocabulary changed (e.g. the app list finished indexing).</summary>
     public event Action? VocabularyChanged;
 
+    /// <summary>Every module's name, started or disabled (for the settings' module switches).</summary>
+    public List<string> ModuleNames { get; } = new();
+
     internal void OnVocabularyChanged() => VocabularyChanged?.Invoke();
 }
 
@@ -167,6 +170,9 @@ internal sealed class ModuleContext
 
     /// <summary>Every module's commands, in the order the search flow tries them (the palette previews them).</summary>
     internal IReadOnlyList<ITextCommand> Commands => _registry.Commands;
+
+    /// <summary>Every module's name, including disabled ones.</summary>
+    internal IReadOnlyList<string> ModuleNames => _registry.ModuleNames;
 
     /// <summary>Offer words for voice recognition to expect (e.g. installed app names).</summary>
     public void AddVocabulary(Func<IEnumerable<string>> words) => _registry.Vocabulary.Add(words);

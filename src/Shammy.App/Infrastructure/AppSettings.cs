@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Shammy.Core.Notch;
 using Shammy.Core.Search;
+using Shammy.Core.Settings;
 using Microsoft.Win32;
 
 namespace Shammy.Infrastructure;
@@ -66,6 +68,106 @@ internal sealed class AppSettings
     /// <summary>App IDs the user muted from the notch.</summary>
     public List<string> MutedNotificationApps { get; set; } = new();
 
+    // ---- Settings screen (alarms-settings) ------------------------------------------------------------
+    // Everything the Settings card and the settings-get/settings-set pipe can change. Defaults keep today's
+    // behaviour; Normalize() puts hand-edited values back in range. SettingsApplier pushes the ones features
+    // read from static knobs; the rest are read live where they're used.
+
+    /// <summary>12 or 24-hour times; null follows the Windows region format.</summary>
+    public bool? Use24Hour { get; set; }
+
+    public TemperatureUnit TemperatureUnit { get; set; } = TemperatureUnit.Celsius;
+
+    /// <summary>Circled prices convert to this (three-letter code).</summary>
+    public string HomeCurrency { get; set; } = "INR";
+
+    /// <summary>English text is translated into this language (Google Translate code; Hindi by default).</summary>
+    public string TranslateTarget { get; set; } = "hi";
+
+    public int PomodoroWorkMinutes { get; set; } = 25;
+    public int PomodoroShortBreakMinutes { get; set; } = 5;
+    public int PomodoroLongBreakMinutes { get; set; } = 15;
+
+    /// <summary>Snooze length for reminders and alarms without their own.</summary>
+    public int SnoozeMinutes { get; set; } = 10;
+
+    /// <summary>How long a due reminder's card stays before it closes by itself.</summary>
+    public int ReminderCardSeconds { get; set; } = 30;
+
+    /// <summary>How long the pointer has to rest before the peek and the open notch.</summary>
+    public HoverSpeed HoverSpeed { get; set; } = HoverSpeed.Normal;
+
+    /// <summary>The glanceable peek on a resting pointer; off opens the notch after the whole wait instead.</summary>
+    public bool PeekEnabled { get; set; } = true;
+
+    /// <summary>Wheel and swipe over the notch (volume, next/previous track).</summary>
+    public bool GesturesEnabled { get; set; } = true;
+
+    /// <summary>The microphone's name (as Windows lists it); null uses the Windows default.</summary>
+    public string? MicrophoneDeviceId { get; set; }
+
+    public bool ClipboardHistoryEnabled { get; set; } = true;
+
+    /// <summary>Unpinned clipboard history is forgotten after this many hours.</summary>
+    public int ClipboardRetentionHours { get; set; } = 24;
+
+    /// <summary>The short "copied" preview in the notch.</summary>
+    public bool CopyPreviewEnabled { get; set; } = true;
+
+    /// <summary>How long another app's notification shows in the notch.</summary>
+    public int NotificationPopupSeconds { get; set; } = 6;
+
+    /// <summary>Show who a notification is from but never what it says, even when not presenting.</summary>
+    public bool AlwaysHideNotificationText { get; set; }
+
+    /// <summary>Battery (charging, low) and Bluetooth connect pills.</summary>
+    public bool SystemAlertsEnabled { get; set; } = true;
+
+    /// <summary>0–100: the ping, the timer/reminder chime and the alarm.</summary>
+    public int NotchSoundVolume { get; set; } = 100;
+
+    /// <summary>Modules (by name, e.g. "music", "clipboard") that don't start. Takes effect on the next start.</summary>
+    public List<string> DisabledModules { get; set; } = new();
+
+    /// <summary>Raised (with the property name) after the settings card or pipe changed a setting.</summary>
+    public event Action<string>? Changed;
+
+    public void NotifyChanged(string name) => Changed?.Invoke(name);
+
+    /// <summary>Lets one app's notifications show again; true if it was muted.</summary>
+    public bool UnmuteApp(string appId)
+    {
+        int removed = MutedNotificationApps.RemoveAll(a => string.Equals(a, appId, StringComparison.OrdinalIgnoreCase));
+        if (removed > 0) Save();
+        return removed > 0;
+    }
+
+    /// <summary>Puts every setting back in range (a hand-edited file, or a value from the pipe).</summary>
+    public void Normalize()
+    {
+        Shelf ??= new();
+        MutedNotificationApps ??= new();
+        DisabledModules ??= new();
+        DisabledModules = DisabledModules.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim().ToLowerInvariant()).Distinct().ToList();
+        if (string.IsNullOrWhiteSpace(VoiceLanguage)) VoiceLanguage = "en";
+        if (VoiceMode != HinglishVoice) VoiceMode = EnglishVoice;
+        // Lens needs a picture; as the default for typed and spoken searches it means the AI answer.
+        if (DefaultSearchMode == SearchMode.Lens || !Enum.IsDefined(DefaultSearchMode)) DefaultSearchMode = SearchMode.Ai;
+        if (!Enum.IsDefined(TemperatureUnit)) TemperatureUnit = TemperatureUnit.Celsius;
+        if (!Enum.IsDefined(HoverSpeed)) HoverSpeed = HoverSpeed.Normal;
+        HomeCurrency = SettingLimits.CurrencyCode(HomeCurrency);
+        TranslateTarget = SettingLimits.LanguageCode(TranslateTarget);
+        PomodoroWorkMinutes = SettingLimits.PomodoroMinutes(PomodoroWorkMinutes);
+        PomodoroShortBreakMinutes = SettingLimits.PomodoroMinutes(PomodoroShortBreakMinutes);
+        PomodoroLongBreakMinutes = SettingLimits.PomodoroMinutes(PomodoroLongBreakMinutes);
+        SnoozeMinutes = SettingLimits.SnoozeMinutes(SnoozeMinutes);
+        ReminderCardSeconds = SettingLimits.ReminderCardSeconds(ReminderCardSeconds);
+        ClipboardRetentionHours = SettingLimits.ClipboardRetentionHours(ClipboardRetentionHours);
+        NotificationPopupSeconds = SettingLimits.NotificationPopupSeconds(NotificationPopupSeconds);
+        NotchSoundVolume = SettingLimits.Volume(NotchSoundVolume);
+        if (string.IsNullOrWhiteSpace(MicrophoneDeviceId)) MicrophoneDeviceId = null;
+    }
+
     [JsonIgnore]
     public bool StartWithWindows
     {
@@ -130,11 +232,9 @@ internal sealed class AppSettings
             if (File.Exists(Paths.SettingsFile))
             {
                 var s = JsonSerializer.Deserialize<AppSettings>(ReadSettingsText(), Json) ?? new AppSettings();
-                // A hand-edited or half-written file can say null; every list must exist for the rest of Shammy.
-                s.Shelf ??= new();
-                s.MutedNotificationApps ??= new();
-                if (string.IsNullOrWhiteSpace(s.VoiceLanguage)) s.VoiceLanguage = "en";
-                if (s.VoiceMode != HinglishVoice) s.VoiceMode = EnglishVoice;
+                // A hand-edited or half-written file can say null (every list must exist for the rest of Shammy)
+                // or a value out of range.
+                s.Normalize();
                 return s;
             }
         }

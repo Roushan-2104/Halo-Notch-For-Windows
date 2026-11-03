@@ -2,12 +2,15 @@ namespace Shammy.Core.Productivity;
 
 public enum PomodoroPhase { Focus, ShortBreak, LongBreak }
 
-/// <summary>The classic cycle: 25 min focus, 5 min break, and every fourth break is 15 min.</summary>
+/// <summary>
+/// The classic cycle: 25 min focus, 5 min break, and every fourth break is 15 min. The lengths come from settings
+/// (PomodoroWorkMinutes, PomodoroShortBreakMinutes, PomodoroLongBreakMinutes).
+/// </summary>
 public static class Pomodoro
 {
-    public static readonly TimeSpan FocusLength = TimeSpan.FromMinutes(25);
-    public static readonly TimeSpan ShortBreakLength = TimeSpan.FromMinutes(5);
-    public static readonly TimeSpan LongBreakLength = TimeSpan.FromMinutes(15);
+    public static TimeSpan FocusLength { get; set; } = TimeSpan.FromMinutes(25);
+    public static TimeSpan ShortBreakLength { get; set; } = TimeSpan.FromMinutes(5);
+    public static TimeSpan LongBreakLength { get; set; } = TimeSpan.FromMinutes(15);
 
     /// <summary>Phase number <paramref name="step"/> counted from 0: focus, break, focus, break, ... long break.</summary>
     public static PomodoroPhase PhaseAt(int step) =>

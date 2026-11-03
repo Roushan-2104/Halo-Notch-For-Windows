@@ -11,7 +11,7 @@ internal sealed class ReminderCard : Grid
 {
     public const double CardWidth = 460, CardHeight = 96;
 
-    public ReminderCard(ReminderItem reminder, Action done, Action snooze)
+    public ReminderCard(ReminderItem reminder, Action done, Action snooze, int snoozeMinutes = 10)
     {
         Reminder = reminder;
         Width = CardWidth;
@@ -72,7 +72,7 @@ internal sealed class ReminderCard : Grid
 
         var buttons = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
         buttons.Children.Add(Pill("Done", primary: true, done));
-        var later = Pill("Snooze 10 min", primary: false, snooze);
+        var later = Pill($"Snooze {snoozeMinutes} min", primary: false, snooze);
         later.Margin = new Thickness(0, 6, 0, 0);
         buttons.Children.Add(later);
         SetColumn(buttons, 3);

@@ -2,6 +2,9 @@ namespace Shammy.Core.Notch;
 
 public enum HoverDecision { None, Peek, Open }
 
+/// <summary>How long the pointer has to rest before the peek and the open notch (settings: HoverSpeed).</summary>
+public enum HoverSpeed { Quick, Normal, Relaxed }
+
 public enum HoverStage { Resting, Peek, Open }
 
 /// <summary>
@@ -13,11 +16,33 @@ public enum HoverStage { Resting, Peek, Open }
 /// </summary>
 public sealed class HoverIntent
 {
-    /// <summary>Resting for this long on the notch shows the peek.</summary>
+    /// <summary>Resting for this long on the notch shows the peek (at <see cref="HoverSpeed.Normal"/>).</summary>
     public static readonly TimeSpan PeekDwell = TimeSpan.FromMilliseconds(250);
 
-    /// <summary>Resting this much longer on the peek opens the full notch.</summary>
+    /// <summary>Resting this much longer on the peek opens the full notch (at <see cref="HoverSpeed.Normal"/>).</summary>
     public static readonly TimeSpan OpenDwell = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>The two waits for a speed: Quick is about 60 % of Normal, Relaxed about 160 %.</summary>
+    public static (TimeSpan Peek, TimeSpan Open) Dwells(HoverSpeed speed) => speed switch
+    {
+        HoverSpeed.Quick => (TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(420)),
+        HoverSpeed.Relaxed => (TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(1100)),
+        _ => (PeekDwell, OpenDwell),
+    };
+
+    TimeSpan _peekDwell = PeekDwell, _openDwell = OpenDwell;
+    HoverSpeed _speedSetting = HoverSpeed.Normal;
+
+    /// <summary>The user's hover speed; changes the waits from the next sample on.</summary>
+    public HoverSpeed SpeedSetting
+    {
+        get => _speedSetting;
+        set
+        {
+            _speedSetting = value;
+            (_peekDwell, _openDwell) = Dwells(value);
+        }
+    }
 
     /// <summary>Speed is averaged over this window, so one jittery sample doesn't count as moving.</summary>
     public static readonly TimeSpan SpeedWindow = TimeSpan.FromMilliseconds(100);
@@ -79,19 +104,19 @@ public sealed class HoverIntent
 
         if (Stage == HoverStage.Resting)
         {
-            if (AllowPeek && rested >= PeekDwell)
+            if (AllowPeek && rested >= _peekDwell)
             {
                 Stage = HoverStage.Peek;
                 _slowSince = now;
                 return HoverDecision.Peek;
             }
-            if (!AllowPeek && rested >= PeekDwell + OpenDwell)
+            if (!AllowPeek && rested >= _peekDwell + _openDwell)
             {
                 Stage = HoverStage.Open;
                 return HoverDecision.Open;
             }
         }
-        else if (Stage == HoverStage.Peek && rested >= OpenDwell)
+        else if (Stage == HoverStage.Peek && rested >= _openDwell)
         {
             Stage = HoverStage.Open;
             return HoverDecision.Open;

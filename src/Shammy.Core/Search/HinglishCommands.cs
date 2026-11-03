@@ -86,7 +86,10 @@ public static class HinglishCommands
         return task.Count == 0 ? $"remind me {when}" : $"remind me {when} to {string.Join(' ', task)}";
     }
 
-    /// <summary>"kal subah 7 baje ka alarm laga do" as "alarm tomorrow morning at 7" (an alarm is a reminder titled Alarm).</summary>
+    /// <summary>
+    /// "kal subah 7 baje ka alarm laga do" as "alarm tomorrow morning at 7" (a one-off alarm), and "roz subah 7 baje
+    /// ka alarm" as "alarm morning at 7 every day" (a repeating one).
+    /// </summary>
     static string? Alarm(string t)
     {
         var verb = SetVerb.Match(t);
@@ -95,9 +98,31 @@ public static class HinglishCommands
         int alarm = words.FindIndex(w => AlarmWord.IsMatch(w));
         if (alarm < 0) return null;
         words.RemoveAt(alarm);
+        bool daily = TakeDaily(words);
         // Nothing but the time may be left ("ka", "mera" aside): "alarm laga do gaana" isn't an alarm.
         if (When(words, out var rest) is not { } when || rest.Count > 0) return null;
-        return "alarm " + when;
+        if (daily && when.StartsWith("in ", StringComparison.Ordinal)) return null;
+        return daily ? $"alarm {when} every day" : "alarm " + when;
+    }
+
+    /// <summary>Removes "roz", "rozana", "har roz", "har din", "daily": every day.</summary>
+    static bool TakeDaily(List<string> words)
+    {
+        for (int i = 0; i < words.Count; i++)
+        {
+            if (words[i] is "roz" or "roj" or "rozana" or "rojana" or "rozaana" or "daily")
+            {
+                words.RemoveAt(i);
+                if (i > 0 && words[i - 1] == "har") words.RemoveAt(i - 1);
+                return true;
+            }
+            if (words[i] == "har" && i + 1 < words.Count && words[i + 1] is "din" or "roz" or "roj")
+            {
+                words.RemoveRange(i, 2);
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>The time phrase in Hinglish words, as English ("tomorrow morning at 7", "in 10 minutes"); the
