@@ -369,16 +369,14 @@ internal sealed class SearchCoordinator
     async Task<bool> TryRunCommandAsync(string text)
     {
         int session = _session;
-        var clean = text.Trim().TrimEnd('.', '!', '?').Trim();
-        var command = _modules.Commands.FirstOrDefault(c =>
+        var clean = text.Trim().TrimEnd('.', '!', '?', '।').Trim();
+        var command = Find(clean);
+        // Hinglish timers and reminders ("5 minute ka timer laga do") run as the English the commands know.
+        if (command is null && HinglishCommands.ToEnglish(clean) is { } english && Find(english) is { } translated)
         {
-            try { return c.CanHandle(clean); }
-            catch (Exception ex)
-            {
-                Log.Warn($"Command {c.GetType().Name} threw in CanHandle", ex);
-                return false;
-            }
-        });
+            command = translated;
+            clean = english;
+        }
         if (command is null) return false;
 
         _phase = Phase.Processing;
@@ -397,6 +395,16 @@ internal sealed class SearchCoordinator
         if (session == _session) ShowCommandResult(result);
         return true;
     }
+
+    Modules.ITextCommand? Find(string text) => _modules.Commands.FirstOrDefault(c =>
+    {
+        try { return c.CanHandle(text); }
+        catch (Exception ex)
+        {
+            Log.Warn($"Command {c.GetType().Name} threw in CanHandle", ex);
+            return false;
+        }
+    });
 
     /// <summary>A short confirmation card that closes by itself.</summary>
     void ShowCommandResult(Modules.CommandResult result)

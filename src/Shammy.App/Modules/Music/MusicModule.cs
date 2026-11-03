@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Shammy.Core.Music;
+using Shammy.Infrastructure;
 using Shammy.Playback;
 using NAudio.CoreAudioApi;
 
@@ -39,6 +40,15 @@ internal sealed class MusicModule : IShammyModule
     DispatcherTimer? _glowFallback;
     YouTubeMusicSong? _lastPlayed;
 
+    // Songs heard on this PC, so "play ..." by voice expects their names. Recorded once a track has played
+    // for a while (skipped tracks and half-loaded metadata don't count), never while presenting.
+    static readonly TimeSpan HeardAfter = TimeSpan.FromSeconds(20);
+    readonly ListeningHistoryStore _historyStore = new();
+    ListeningHistory _history = new();
+    volatile string[] _historyNames = Array.Empty<string>();
+    DispatcherTimer? _heardTimer;
+    string _heardKey = "";
+
     public string Name => "music";
 
     MediaService Media => _ctx.Services.Media;
@@ -52,6 +62,9 @@ internal sealed class MusicModule : IShammyModule
         _panel = new LyricsPanel(Media);
 
         ctx.AddCommand(new MusicTextCommand(this));
+        _history = _historyStore.Load();
+        _historyNames = _history.Names().ToArray();
+        ctx.AddSongVocabulary(() => _historyNames);
         ctx.AddTab("\uE8D6", "Lyrics", _panel);
         ctx.AddTrayToggle("Flash album colour on new songs", () => _settings.AlbumGlow, on =>
         {
@@ -181,6 +194,31 @@ internal sealed class MusicModule : IShammyModule
             LoadLyricsForCurrentTrack(debounce: true);
         }
         _panel.OnMediaChanged();
+        WatchForHeard();
+    }
+
+    /// <summary>Restarts the "heard it" countdown when a new track starts playing.</summary>
+    void WatchForHeard()
+    {
+        var m = Media;
+        if (!m.HasSession || !m.IsPlaying || _trackKey == _heardKey) return;
+        _heardTimer ??= new DispatcherTimer(HeardAfter, DispatcherPriority.Background, (_, _) => RecordHeard(), _ctx.Ui) { IsEnabled = false };
+        if (_heardTimer.IsEnabled && _heardTimer.Tag as string == _trackKey) return;
+        _heardTimer.Tag = _trackKey;
+        _heardTimer.Stop();
+        _heardTimer.Start();
+    }
+
+    void RecordHeard()
+    {
+        _heardTimer!.Stop();
+        var m = Media;
+        // Still the same track and still playing; nothing is recorded while the screen may be watched.
+        if (!m.HasSession || !m.IsPlaying || _heardTimer.Tag as string != _trackKey || PrivacyState.Presenting) return;
+        _heardKey = _trackKey;
+        if (!_history.Record(m.Title, m.Artist, DateTime.UtcNow)) return;
+        _historyNames = _history.Names().ToArray();
+        _historyStore.SaveInBackground(_history.Songs);
     }
 
     void LoadLyricsForCurrentTrack(bool debounce)
@@ -383,7 +421,7 @@ internal sealed class MusicModule : IShammyModule
         var glow = _glow is { } c ? $"last #{c.R:X2}{c.G:X2}{c.B:X2}" : "none";
         return $"track={(m.HasSession ? NowPlaying() : "-")} playing={m.IsPlaying} glow={glow} glowSetting={_settings.AlbumGlow} " +
                $"lyrics={_panel.Kind} lines={_panel.LineCount} index={_panel.CurrentIndex} ticking={_panel.IsTicking} tabVisible={_panel.IsVisible} " +
-               $"volume={volume} lastPlayed={_lastPlayed?.VideoId ?? "-"} ytmApp={_player.Describe()}";
+               $"volume={volume} lastPlayed={_lastPlayed?.VideoId ?? "-"} ytmApp={_player.Describe()} heardSongs={_history.Songs.Count}";
     }
 
     public void Dispose()
@@ -393,6 +431,7 @@ internal sealed class MusicModule : IShammyModule
         _ctx.NotchWheel -= OnWheel;
         _ctx.NotchHorizontalWheel -= OnSwipe;
         _glowFallback?.Stop();
+        _heardTimer?.Stop();
         _device?.Dispose();
         _enumerator?.Dispose();
     }

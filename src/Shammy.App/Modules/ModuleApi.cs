@@ -82,6 +82,10 @@ internal sealed class ModuleRegistry
     /// <summary>Words voice recognition is primed with (app names, ...); read when a voice model loads.</summary>
     public List<Func<IEnumerable<string>>> Vocabulary { get; } = new();
 
+    /// <summary>Song and artist names a play command's second voice pass is primed with; read per command,
+    /// from the transcription thread.</summary>
+    public List<Func<IEnumerable<string>>> SongVocabulary { get; } = new();
+
     /// <summary>Raised when a module's vocabulary changed (e.g. the app list finished indexing).</summary>
     public event Action? VocabularyChanged;
 
@@ -144,6 +148,10 @@ internal sealed class ModuleContext
 
     /// <summary>Offer words for voice recognition to expect (e.g. installed app names).</summary>
     public void AddVocabulary(Func<IEnumerable<string>> words) => _registry.Vocabulary.Add(words);
+
+    /// <summary>Offer song titles and artists for play commands to expect, best first. Called off the UI
+    /// thread, so return a snapshot.</summary>
+    public void AddSongVocabulary(Func<IEnumerable<string>> names) => _registry.SongVocabulary.Add(names);
 
     /// <summary>Call after the words from <see cref="AddVocabulary"/> changed.</summary>
     public void VocabularyChanged() => _registry.OnVocabularyChanged();
