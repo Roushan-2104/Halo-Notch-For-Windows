@@ -69,7 +69,12 @@ internal sealed class ShammyHost : IDisposable
         };
         _notch.Show();
 
-        _activities.Changed += () => _notch.SetActivities(_activities.Current, _activities.Secondary);
+        _activities.Changed += () => _notch.SetActivities(_activities.Current, _activities.Secondary, _activities.Ranked);
+        // The pet's costumes and the action circle, testable without a real call, song or download.
+        var petTest = new Modules.PetActivityTest(Post, _activities.Remove);
+        _modules.PipeCommands["activity-test"] = petTest.Run;
+        _modules.PipeCommands["circle-state"] = _ => _notch.DescribeCircle();
+        _modules.PipeCommands["circle-click"] = arg => _notch.ClickCircle(arg);
         _tick = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Normal, (_, _) => _activities.Tick(DateTime.UtcNow), _ui);
         _tick.Start();
 
@@ -250,6 +255,10 @@ internal sealed class ShammyHost : IDisposable
         Safe("keyboard pills", () => _keyboardPills = new KeyboardIndicators(_keys, _ui, Post));
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
         _modules.SearchImage = png => _search.SearchImageAsync(png);
+        // What the designed screens borrow from the host (the tour opens the palette, Settings asks about voice).
+        Modules.HostLinks.OpenPalette = _search.OpenTyping;
+        Modules.HostLinks.HinglishAvailable = () => _whisper.HinglishAvailable;
+        Modules.HostLinks.Glances = _modules.Glances;
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
         _notch.ExpandedView.SearchRequested += _search.OpenTyping;
         // The v2 open notch, for scripted checks: "v2-state", "v2-open <id|chip label>", "v2-back".
@@ -296,6 +305,11 @@ internal sealed class ShammyHost : IDisposable
         SystemEvents.TimeChanged += OnTimeChanged;
 
         _updates = Own(new UpdateService(_ui));
+        Modules.HostLinks.Version = () => _updates.CurrentVersion;
+        Modules.HostLinks.UpdateStatus = () => (_updates.LastResult, _updates.IsInstalled);
+        Modules.HostLinks.CheckForUpdates = _updates.CheckAsync;
+        // Settings can switch these too; the tray has its own callbacks for them.
+        _settings.Changed += name => _ui.BeginInvoke(() => ApplySettingChange(name));
         _updates.Ready += _ => AnnounceUpdate();
         // A prompt that was missed (a call outranked it, the notch was busy) comes back later; the update
         // is also applied whenever Shammy quits, so nothing is lost if it's never clicked.
@@ -366,6 +380,22 @@ internal sealed class ShammyHost : IDisposable
                 Own(module);
                 Log.Info($"Module started: {module.Name}");
             });
+        }
+    }
+
+    void ApplySettingChange(string name)
+    {
+        switch (name)
+        {
+            case nameof(AppSettings.VoiceMode):
+                bool on = _settings.VoiceMode == AppSettings.HinglishVoice;
+                if (!on) _activities.Remove("voice-hinglish");
+                _ = _whisper.SetHinglishAsync(on);
+                break;
+            case nameof(AppSettings.ShowNotifications):
+                if (_settings.ShowNotifications) _ = StartNotificationsAsync();
+                else _activities.Remove("notification");
+                break;
         }
     }
 

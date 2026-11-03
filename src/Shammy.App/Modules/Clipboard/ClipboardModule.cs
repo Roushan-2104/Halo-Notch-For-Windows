@@ -715,6 +715,7 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
 
     IReadOnlyList<ClipEntry> Connect.IClipboardLink.Items => _history.Items;
     void Connect.IClipboardLink.CopyBack(ClipEntry entry) => CopyBack(entry);
+    bool Connect.IClipboardLink.Clear() => ClearWithUndo() is not null;
 
     public void Dispose()
     {

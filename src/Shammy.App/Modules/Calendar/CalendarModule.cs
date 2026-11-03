@@ -26,7 +26,7 @@ internal sealed class CalendarStore
 /// Fetches every 10 minutes and after waking or reconnecting; the parsed agenda is cached so the card works
 /// offline and right after start.
 /// </summary>
-internal sealed class CalendarModule : IShammyModule
+internal sealed class CalendarModule : IShammyModule, Connect.ICalendarLink
 {
     const string PillId = "calendar.meeting";
     // Below Bluetooth (60) and notifications, above messages (50): a call about to start beats most pills.
@@ -90,6 +90,7 @@ internal sealed class CalendarModule : IShammyModule
             Peek = _card.Peek,
         };
         ctx.AddCard(_notchCard);
+        Connect.Links.Calendar = this;
         ctx.AddGlance("calendar", Glance);
         // "calendar", "my meetings", "what's next": before the launcher, which would open Windows' Calendar app.
         ctx.AddCommandFirst(new CalendarCommand(this));
@@ -129,8 +130,16 @@ internal sealed class CalendarModule : IShammyModule
         OnTick();
     }
 
+    // Settings → Calendar shows the connection and connects or disconnects through these.
+    bool Connect.ICalendarLink.Connected => Connected;
+    string? Connect.ICalendarLink.SyncProblem => SyncProblem;
+    DateTime? Connect.ICalendarLink.FetchedAt => FetchedAt;
+    void Connect.ICalendarLink.OpenSetup() => OpenSetup();
+    void Connect.ICalendarLink.Disconnect() => Disconnect();
+
     public void Dispose()
     {
+        if (Connect.Links.Calendar == this) Connect.Links.Calendar = null;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         NetworkChange.NetworkAvailabilityChanged -= OnNetworkChanged;
         _fetch.Stop();

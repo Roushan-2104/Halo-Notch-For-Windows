@@ -2,6 +2,7 @@ using Shammy.Core.Ambient;
 using Shammy.Core.Conversions;
 using Shammy.Core.Productivity;
 using Shammy.Search;
+using Shammy.Views.Screens;
 
 namespace Shammy.Infrastructure;
 
@@ -24,5 +25,6 @@ internal static class SettingsApplier
         NotchSound.Enabled = s.NotchSounds;
         NotchSound.Volume = s.NotchSoundVolume;
         MicRecorder.PreferredDevice = s.MicrophoneDeviceId;
+        PetLook.Apply(s);
     }
 }

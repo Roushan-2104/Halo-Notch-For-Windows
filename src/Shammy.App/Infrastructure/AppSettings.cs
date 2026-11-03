@@ -132,6 +132,25 @@ internal sealed class AppSettings
     /// <summary>Modules (by name, e.g. "music", "clipboard") that don't start. Takes effect on the next start.</summary>
     public List<string> DisabledModules { get; set; } = new();
 
+    // ---- Pet, welcome tour, alarm extras (alarm-settings-tour) ---------------------------------------
+
+    /// <summary>The pet's eye shape (Settings → Notch &amp; pet); every mood keeps it.</summary>
+    public PetEyeStyle PetEyeStyle { get; set; } = PetEyeStyle.Round;
+
+    public PetEyeColor PetEyeColor { get; set; } = PetEyeColor.White;
+
+    /// <summary>What the pet calls itself in the tour and on Settings; picked in the tour's last step.</summary>
+    public string PetName { get; set; } = PetLooks.DefaultName;
+
+    /// <summary>The first-run welcome tour has been shown (finished, skipped or left); the tray can replay it.</summary>
+    public bool TourSeen { get; set; }
+
+    /// <summary>A ringing alarm swells from quiet to full over 30 s; off rings at full volume straight away.</summary>
+    public bool AlarmGentleWake { get; set; } = true;
+
+    /// <summary>A ringing alarm shows over fullscreen apps (games, videos, slides); off waits until fullscreen ends.</summary>
+    public bool AlarmBreaksFullscreen { get; set; } = true;
+
     /// <summary>Raised (with the property name) after the settings card or pipe changed a setting.</summary>
     public event Action<string>? Changed;
 
@@ -169,6 +188,9 @@ internal sealed class AppSettings
         NotificationPopupSeconds = SettingLimits.NotificationPopupSeconds(NotificationPopupSeconds);
         NotchSoundVolume = SettingLimits.Volume(NotchSoundVolume);
         if (string.IsNullOrWhiteSpace(MicrophoneDeviceId)) MicrophoneDeviceId = null;
+        if (!Enum.IsDefined(PetEyeStyle)) PetEyeStyle = PetEyeStyle.Round;
+        if (!Enum.IsDefined(PetEyeColor)) PetEyeColor = PetEyeColor.White;
+        PetName = PetLooks.Name(PetName);
     }
 
     [JsonIgnore]

@@ -14,14 +14,17 @@ namespace Shammy.Modules.Productivity.Alarms;
 /// Real alarms: keeps them in the productivity store, wakes when one is due (and on resume from sleep), rings
 /// (a looping, swelling sound and a card that breaks through fullscreen) until Stop or Snooze, snoozes an
 /// unanswered alarm by itself, and reports alarms the PC slept through. The schedule itself is pure logic in
-/// <see cref="AlarmSchedule"/>; the views (AlarmViews.cs, behind <see cref="IAlarmHost"/>) are meant to be replaced.
+/// <see cref="AlarmSchedule"/>; the views (the ringing notch, the Alarms screen, the snoozed and stopped pills)
+/// work against <see cref="IAlarmHost"/>.
 /// </summary>
 internal sealed class AlarmController : IAlarmHost, IDisposable
 {
     public const string Glyph = "";
-    const string RingId = "productivity.alarm", MissedId = "productivity.alarm-missed";
+    const string RingId = "productivity.alarm", MissedId = "productivity.alarm-missed",
+        SnoozedId = "productivity.alarm-snoozed", StoppedId = "productivity.alarm-stopped";
     // Above notifications (80) and reminders: an alarm is the one thing that must be seen.
-    const int RingPriority = 95, MissedPriority = 60;
+    // The snoozed pill sits under messages (50) and over downloads (40): it lasts minutes, they come and go.
+    const int RingPriority = 95, MissedPriority = 60, StoppedPriority = 52, SnoozedPriority = 45;
 
     // Wake at least this often: a DispatcherTimer doesn't count time the PC spent asleep.
     static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(30);
@@ -33,7 +36,9 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
     readonly AlarmSound _sound = new();
     readonly AlarmsCard _card;
     readonly AlarmTile _tile;
-    AlarmRingCard? _ringCard;
+    AlarmRingView? _ringCard;
+    SnoozedPill? _snoozedPill;
+    StoppedPill? _stoppedPill;
     Alarm? _ringing;
     bool _relevant;
     bool _disposed;
@@ -186,13 +191,16 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
     void StartRinging(Alarm a)
     {
         _ringing = a;
-        _sound.Start(_ctx.Settings.NotchSoundVolume);
-        _ctx.SetGlow((Color)ColorConverter.ConvertFromString(NotchPalette.Alarm));
+        _sound.Start(_ctx.Settings.NotchSoundVolume, _ctx.Settings.AlarmGentleWake);
+        // The ring around the notch is the wall's accent, like the pulsing ring on the ringing screen.
+        _ctx.SetGlow((Color)ColorConverter.ConvertFromString("#FF8A3D"));
+        _ctx.Remove(StoppedId);
+        SyncSnoozedPill();
         // If the card gets covered (a search, another card), the pill brings it back.
         _ctx.Post(new Activity(RingId, ActivityKind.Message, RingPriority,
             new MessagePayload(Glyph, $"{AlarmText.Time(a)} · {(a.Label.Length > 0 ? a.Label : "Alarm")} · tap to stop"))
         {
-            BreaksFullscreen = true,
+            BreaksFullscreen = _ctx.Settings.AlarmBreaksFullscreen,
             Click = ShowRingCard,
         });
         ShowRingCard();
@@ -202,7 +210,7 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
     void ShowRingCard()
     {
         if (_ringing is not { } a) return;
-        var card = new AlarmRingCard(a, DefaultSnoozeMinutes, Stop, Snooze);
+        var card = new AlarmRingView(a, AlarmSchedule.SnoozeLength(a, DefaultSnoozeMinutes), Stop, Snooze);
         _ringCard = card;
         bool seen = false;
         card.IsVisibleChanged += (_, _) =>
@@ -215,7 +223,8 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
             });
         };
         // Not interactive: it must not take focus (a game, a call), and an outside click mustn't silence it.
-        _ctx.ShowCard(card, AlarmRingCard.CardWidth, AlarmRingCard.CardHeight, interactive: false, breaksFullscreen: true);
+        _ctx.ShowCard(card, AlarmRingView.CardWidth, AlarmRingView.CardHeight, interactive: false,
+            breaksFullscreen: _ctx.Settings.AlarmBreaksFullscreen);
     }
 
     static bool Busy(NotchMode mode) =>
@@ -240,6 +249,15 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
         StopRinging();
         _save();
         Schedule();
+        ShowStopped();
+    }
+
+    /// <summary>The pet stretches and waves beside "Morning · 24°" (the weather glance's temperature, else the time).</summary>
+    void ShowStopped()
+    {
+        var now = DateTime.Now;
+        _stoppedPill = new StoppedPill(AlarmText.Greeting(now), AlarmText.Temperature(HostLinks.WeatherGlance()) ?? ClockPreference.Format(now));
+        _ctx.Post(new Activity(StoppedId, ActivityKind.Custom, StoppedPriority, _stoppedPill, DateTime.UtcNow.AddSeconds(5)));
     }
 
     public void Snooze(int minutes)
@@ -248,8 +266,87 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
         AlarmSchedule.Snooze(a, DateTime.UtcNow, Math.Clamp(minutes, 1, 60), auto: false);
         StopRinging();
         _save();
+        // Schedule() refreshes, which puts up the snoozed pill (the pet dozing, the countdown).
         Schedule();
-        _ctx.ShowMessage(Glyph, $"Snoozed until {ClockPreference.Format(a.SnoozedUntilUtc!.Value.ToLocalTime())}");
+    }
+
+    /// <summary>The snoozed pill shows while any alarm is snoozed (and none rings); it survives a restart.</summary>
+    void SyncSnoozedPill()
+    {
+        var snoozed = _ringing is null ? List.Where(a => a.IsSnoozed && a.Enabled).OrderBy(a => a.SnoozedUntilUtc).FirstOrDefault() : null;
+        if (snoozed is null)
+        {
+            if (_snoozedPill is not null) _ctx.Remove(SnoozedId);
+            _snoozedPill = null;
+            return;
+        }
+        if (_snoozedPill?.Alarm == snoozed && _ctx.Get(SnoozedId) is not null) return;
+        _snoozedPill = new SnoozedPill(snoozed, () => TurnOffSnoozed(snoozed));
+        _ctx.Post(new Activity(SnoozedId, ActivityKind.Custom, SnoozedPriority, _snoozedPill) { Click = ShowList });
+    }
+
+    // ---- The Alarms screen ------------------------------------------------------------------------
+
+    public Alarm Add(int hour, int minute, AlarmDays days, string label)
+    {
+        Add(new AlarmSpec(hour, minute, days, null, label.Trim()));
+        return List.Last(a => a.Hour == hour && a.Minute == minute && a.Days == days);
+    }
+
+    public void Edit(Alarm a, int hour, int minute, AlarmDays days, string label)
+    {
+        if (!List.Contains(a)) return;
+        if (_ringing == a) StopRinging();
+        a.Hour = Math.Clamp(hour, 0, 23);
+        a.Minute = Math.Clamp(minute, 0, 59);
+        a.Days = days;
+        a.Label = label.Trim();
+        // A one-off rings the next time the clock shows its time.
+        a.Date = null;
+        a.Enabled = true;
+        AlarmSchedule.Reset(a, DateTime.UtcNow);
+        _save();
+        Schedule();
+    }
+
+    public void SetDays(Alarm a, AlarmDays days)
+    {
+        if (!List.Contains(a) || a.Days == days) return;
+        a.Days = days;
+        if (days != AlarmDays.None) a.Date = null;
+        // Days chosen on an alarm that's off mean "use it": turn it on, counting from now.
+        if (a.Enabled && !a.IsRinging && !a.IsSnoozed) AlarmSchedule.Reset(a, DateTime.UtcNow);
+        else if (!a.Enabled) SetEnabledQuiet(a);
+        _save();
+        Schedule();
+    }
+
+    public void TurnOffSnoozed(Alarm a)
+    {
+        if (!List.Contains(a) || !a.IsSnoozed) return;
+        AlarmSchedule.Stop(a);
+        _save();
+        Schedule();
+        _ctx.ShowMessage(Glyph, a.Repeats ? $"{AlarmText.Time(a)} is off for today" : $"{AlarmText.Time(a)} turned off", seconds: 2.5);
+    }
+
+    public void SetSnoozeMinutes(int minutes) => SetSetting(nameof(AppSettings.SnoozeMinutes), minutes);
+
+    public bool GentleWake
+    {
+        get => _ctx.Settings.AlarmGentleWake;
+        set => SetSetting(nameof(AppSettings.AlarmGentleWake), value);
+    }
+
+    public bool BreaksFullscreen
+    {
+        get => _ctx.Settings.AlarmBreaksFullscreen;
+        set => SetSetting(nameof(AppSettings.AlarmBreaksFullscreen), value);
+    }
+
+    void SetSetting(string name, object value)
+    {
+        if (Settings.SettingsCatalog.Find(name) is { } info) Settings.SettingsCatalog.Set(_ctx.Settings, info, value);
     }
 
     void ShowMissed(Alarm a)
@@ -480,6 +577,7 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
 
     void Refresh()
     {
+        SyncSnoozedPill();
         _card.Refresh();
         _tile.Refresh();
         bool relevant = IsRelevant();
@@ -546,6 +644,8 @@ internal sealed class AlarmController : IAlarmHost, IDisposable
         }
         return $"alarms={List.Count} ringing={(_ringing is { } r ? AlarmText.Time(r, use24Hour: true) : "-")} sound={_sound.IsPlaying} " +
                $"card={(_ringCard?.IsVisible == true ? "shown" : _ringCard is null ? "-" : "hidden")} " +
+               $"pill={(_ctx.Get(SnoozedId) is not null ? _snoozedPill?.Describe() : _ctx.Get(StoppedId) is not null ? _stoppedPill?.Describe() : "-")} " +
+               $"snooze={DefaultSnoozeMinutes} gentle={GentleWake} breaks={BreaksFullscreen} " +
                $"wake={(_wake.IsEnabled ? $"{_wake.Interval.TotalSeconds:0.#}s" : "off")} now={now:HH:mm:ss} " +
                string.Join(" ", List.Select(Describe));
     }

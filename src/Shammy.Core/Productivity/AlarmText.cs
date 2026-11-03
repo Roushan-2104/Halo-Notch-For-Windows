@@ -72,4 +72,63 @@ public static class AlarmText
 
     /// <summary>"Missed alarm 7:00 AM".</summary>
     public static string Missed(Alarm a) => $"Missed alarm {Time(a)}";
+
+    /// <summary>The Alarms screen's header: "Next · tomorrow 7:00 AM · in 8 h 12 m", "Next · today 6:30 PM · in 45 m".</summary>
+    public static string NextLine(DateTime nowLocal, DateTime nextLocal, bool? use24Hour = null)
+    {
+        int days = (nextLocal.Date - nowLocal.Date).Days;
+        string day = days switch
+        {
+            <= 0 => "today",
+            1 => "tomorrow",
+            < 7 => nextLocal.ToString("dddd", Invariant),
+            _ => nextLocal.ToString("ddd d MMM", Invariant),
+        };
+        return $"Next · {day} {ClockPreference.Format(nextLocal, use24Hour)} · {Short(nextLocal - nowLocal)}";
+    }
+
+    /// <summary>The short form of <see cref="Until"/> for tight rows: "in 45 m", "in 8 h 12 m", "in 3 days".</summary>
+    public static string Short(TimeSpan until)
+    {
+        long minutes = (long)Math.Ceiling(Math.Max(0, until.TotalMinutes));
+        if (minutes < 1) return "now";
+        if (minutes < 60) return $"in {minutes} m";
+        if (minutes < 48 * 60)
+        {
+            long h = minutes / 60, m = minutes % 60;
+            return m == 0 ? $"in {h} h" : $"in {h} h {m} m";
+        }
+        return $"in {minutes / (24 * 60)} days";
+    }
+
+    /// <summary>What the notch says once an alarm is stopped: "Morning", "Afternoon", "Evening" or "Night".</summary>
+    public static string Greeting(DateTime nowLocal) => nowLocal.Hour switch
+    {
+        >= 4 and < 12 => "Morning",
+        >= 12 and < 17 => "Afternoon",
+        >= 17 and < 21 => "Evening",
+        _ => "Night",
+    };
+
+    /// <summary>The temperature at the start of a weather glance ("24° Bhubaneswar" → "24°"), or null.</summary>
+    public static string? Temperature(string? weatherGlance)
+    {
+        if (string.IsNullOrWhiteSpace(weatherGlance)) return null;
+        var t = weatherGlance.Trim();
+        int i = t.IndexOf('°');
+        if (i <= 0 || i > 4) return null;
+        var number = t[..i];
+        return (number.TrimStart('-', '−').Length > 0 && number.TrimStart('-', '−').All(char.IsAsciiDigit)) ? number + "°" : null;
+    }
+
+    /// <summary>The ringing screen's header: "Alarm · Thu 5 Nov".</summary>
+    public static string RingDate(DateTime nowLocal) => "Alarm · " + nowLocal.ToString("ddd d MMM", Invariant);
+
+    /// <summary>The days row's spoken name for a day toggle ("Monday"), in the design's Monday-first order.</summary>
+    public static readonly IReadOnlyList<(AlarmDays Day, string Letter, string Name)> Week = new[]
+    {
+        (AlarmDays.Monday, "M", "Monday"), (AlarmDays.Tuesday, "T", "Tuesday"), (AlarmDays.Wednesday, "W", "Wednesday"),
+        (AlarmDays.Thursday, "T", "Thursday"), (AlarmDays.Friday, "F", "Friday"), (AlarmDays.Saturday, "S", "Saturday"),
+        (AlarmDays.Sunday, "S", "Sunday"),
+    };
 }

@@ -1,14 +1,17 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Shammy.Core.Notch;
 
 namespace Shammy.Modules.MeetingSystem;
 
 /// <summary>
 /// Compact ears while an app has the microphone: mic (green live / red slashed muted) and a camera
-/// when one is on, with the app's name on the right. Mute and camera update in place.
+/// when one is on, with the app's name on the right. Mute and camera update in place. The pet wears it as
+/// the call costume (headset, mouth following the mic, zipped lips when muted) with the call's running time,
+/// and the action circle mutes and unmutes.
 /// </summary>
-internal sealed class MeetingContent : ICompactContent
+internal sealed class MeetingContent : ICompactContent, IPetActivity
 {
     const double MaxNameWidth = 120;
 
@@ -16,14 +19,38 @@ internal sealed class MeetingContent : ICompactContent
     TextBlock? _mic, _cam, _bubbleMic;
     FrameworkElement? _gap;
 
-    public MeetingContent(string appName, bool muted, bool camera)
+    readonly DateTime _since;
+    readonly Action? _toggleMute;
+    readonly Func<double>? _level;
+
+    /// <param name="since">When the call started (the app first took the mic), for the pet's call timer.</param>
+    public MeetingContent(string appName, bool muted, bool camera, DateTime? since = null, Action? toggleMute = null, Func<double>? level = null)
     {
         AppName = appName;
         _muted = muted;
         _camera = camera;
+        _since = since ?? DateTime.UtcNow;
+        _toggleMute = toggleMute;
+        _level = level;
     }
 
     public string AppName { get; }
+
+    public PetActivityState Describe(DateTime utcNow) => new()
+    {
+        Costume = PetCostume.Call,
+        Label = AppName,
+        Value = PetActivities.Clock(utcNow - _since),
+        Muted = _muted,
+    };
+
+    public void RunCircle(CircleAction action)
+    {
+        if (action is CircleAction.Mute or CircleAction.Unmute) _toggleMute?.Invoke();
+    }
+
+    /// <summary>No mouth movement while muted: nobody hears it anyway.</summary>
+    public double Level() => _muted ? 0 : _level?.Invoke() ?? 0;
 
     public double Build(ContentControl left, ContentControl right)
     {
