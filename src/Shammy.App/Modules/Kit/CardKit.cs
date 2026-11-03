@@ -184,7 +184,30 @@ internal static class CardKit
     /// Shows a card's detail as a popup card in the notch, for commands ("show my notes") until the notch
     /// can open a card's detail in place. Fits the window: the detail stretches to the width available.
     /// </summary>
-    public static void ShowDetailPopup(ModuleContext ctx, FrameworkElement detail)
+    public static void ShowDetailPopup(ModuleContext ctx, Func<FrameworkElement> build)
+    {
+        // A command's confirmation (or the search bar) is still up: wait for it to clear, like OpenTab does,
+        // so the popup can take focus and closes on an outside click.
+        if (Busy(ctx.Notch.Mode))
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            var wait = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            wait.Tick += (_, _) =>
+            {
+                if (Busy(ctx.Notch.Mode) && DateTime.UtcNow < deadline) return;
+                wait.Stop();
+                if (!Busy(ctx.Notch.Mode)) Show(ctx, build());
+            };
+            wait.Start();
+            return;
+        }
+        Show(ctx, build());
+    }
+
+    static bool Busy(NotchMode mode) =>
+        mode is NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking or NotchMode.Typing or NotchMode.Answer or NotchMode.Result;
+
+    static void Show(ModuleContext ctx, FrameworkElement detail)
     {
         double width = Math.Min(Modules.NotchPalette.DetailWidth + 32, NotchWindow.WindowWidth - 24);
         var frame = new Border { Padding = new Thickness(16), Child = detail };

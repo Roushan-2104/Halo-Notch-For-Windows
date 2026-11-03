@@ -38,7 +38,7 @@ internal sealed class ClipboardModule : IShammyModule
     readonly ClipHistory _history = new();
     readonly CopyCoalescer _coalescer = new(TimeSpan.FromMilliseconds(300));
     ModuleContext _ctx = null!;
-    ClipboardPanel _panel = null!;
+    ClipboardCard _card2 = null!;
     ClipboardListener? _listener;
     ScreenshotWatcher? _screens;
     DispatcherTimer? _readDelay, _saveDelay, _expiry;
@@ -62,8 +62,19 @@ internal sealed class ClipboardModule : IShammyModule
         _expiry = new DispatcherTimer(TimeSpan.FromMinutes(10), DispatcherPriority.Background,
             (_, _) => _history.Expire(DateTime.Now - KeepFor), ctx.Ui);
 
-        _panel = new ClipboardPanel(_history, CopyBack);
-        ctx.AddTab("", "Clipboard", _panel);
+        _card2 = new ClipboardCard(_history, CopyBack, OpenLink);
+        // A chip-only card (v2): reached from the chips row, never pushed onto the home row by itself.
+        ctx.AddCard(new NotchCard
+        {
+            Id = "clipboard",
+            Title = "Clipboard",
+            Width = 176,
+            Order = 60,
+            Chip = true,
+            IsRelevant = () => false,
+            Compact = _card2.Compact,
+            Detail = _card2.BuildDetail,
+        });
         ctx.AddCommand(new ClipboardCommand(this));
         ctx.AddPipeCommand("clipboard-copy", PipeCopy);
         ctx.AddPipeCommand("clipboard-screenshot", PipeScreenshot);
@@ -136,9 +147,12 @@ internal sealed class ClipboardModule : IShammyModule
         {
             if (ClipPrivacy.ShouldSkip(false, Flag(data, ClipPrivacy.HistoryFormat), Flag(data, ClipPrivacy.CloudFormat))) return;
 
+            var source = ClipCardText.SourceName(ClipNative.ProcessName(owner));
             if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
             {
-                _history.Add(ClipEntry.FromFiles(files, now));
+                var entry = ClipEntry.FromFiles(files, now);
+                entry.Source = source;
+                _history.Add(entry);
             }
             // Text before image: Office and browsers put a picture of the selection next to the text.
             else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
@@ -146,7 +160,12 @@ internal sealed class ClipboardModule : IShammyModule
             {
                 // A copied 100 MB log mustn't sit in memory for a day or be re-split on every panel refresh;
                 // the preview only ever needs the start.
-                if (text.Length <= MaxHistoryText) _history.Add(ClipEntry.FromText(text, now));
+                if (text.Length <= MaxHistoryText)
+                {
+                    var entry = ClipEntry.FromText(text, now);
+                    entry.Source = source;
+                    _history.Add(entry);
+                }
                 ShowPreview(ClipText.Preview(text.Length > 4096 ? text[..4096] : text), null);
             }
             else if (ClipImages.FromDataObject(data) is { } image)
@@ -201,7 +220,9 @@ internal sealed class ClipboardModule : IShammyModule
                 }
             }
             var (hash, clip) = await Task.Run(() => ClipImages.Process(shared));
-            _history.Add(ClipEntry.FromImage(hash, image.PixelWidth, image.PixelHeight, now, clip));
+            var entry = ClipEntry.FromImage(hash, image.PixelWidth, image.PixelHeight, now, clip);
+            entry.Source = ClipCardText.SourceName(ownerProcess);
+            _history.Add(entry);
             if (_capture is { } c && ReferenceEquals(c.Full, image)) c.Png ??= clip.Png;
         }
         catch (Exception ex)
@@ -218,7 +239,7 @@ internal sealed class ClipboardModule : IShammyModule
         else _preview!.Set(text, thumb);
         _ctx.Post(new Activity(PreviewId, ActivityKind.Custom, PreviewPriority, _preview, now.AddSeconds(2))
         {
-            Click = () => _ctx.OpenTab(_panel),
+            Click = OpenTabHeld,
         });
     }
 
@@ -243,7 +264,6 @@ internal sealed class ClipboardModule : IShammyModule
         }
         if (!SetClipboard(data, echo: false)) return;
         _history.Touch(entry, DateTime.Now);
-        _panel.Flash("Copied");
         _ctx.ShowMessage("", "Copied", seconds: 1.5);
     }
 
@@ -465,8 +485,19 @@ internal sealed class ClipboardModule : IShammyModule
         return new CommandResult("", "Clipboard", CountText());
     }
 
-    /// <summary>OpenTab waits for a command's confirmation card and holds the tab until it's been looked at.</summary>
-    void OpenTabHeld() => _ctx.OpenTab(_panel);
+    /// <summary>
+    /// Opens the clipboard detail (after a command's confirmation clears). Until the notch can open a card's
+    /// detail in place, it shows as a popup card.
+    /// </summary>
+    void OpenTabHeld() => Kit.CardKit.ShowDetailPopup(_ctx, _card2.BuildDetail);
+
+    /// <summary>Opens a copied link; only http(s) addresses the card recognised as links.</summary>
+    void OpenLink(string url)
+    {
+        if (!ClipCardText.IsLink(url)) return;
+        if (url.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) url = "https://" + url;
+        _ctx.Open(url);
+    }
 
     string CountText()
     {

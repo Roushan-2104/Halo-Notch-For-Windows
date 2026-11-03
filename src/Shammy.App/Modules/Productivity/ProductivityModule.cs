@@ -11,7 +11,7 @@ namespace Shammy.Modules.Productivity;
 /// <summary>
 /// Timers, a stopwatch, pomodoro cycles, focus sessions, reminders and quick notes, all from typed or
 /// spoken commands ("timer 25m", "remind me at 6pm to take medicine", "note: buy milk").
-/// Running clocks live in the compact ears; reminders and notes persist and show in a Notes tab.
+/// Running clocks live in the compact ears; reminders and notes persist and show on the Notes card.
 /// </summary>
 internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview
 {
@@ -39,7 +39,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     ModuleContext _ctx = null!;
     ProductivityStore _store = new();
-    NotesPanel _panel = null!;
+    NotesCard _notes = null!;
     ReminderCard? _card;
     bool _glowing;
     int _nextId;
@@ -54,20 +54,37 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _store.Reminders ??= new();
         _store.Notes ??= new();
         // Fired reminders stay listed for a week, then quietly go.
-        _store.Reminders.RemoveAll(r => r.FiredAt is { } fired && fired < DateTime.Now.AddDays(-7));
+        _store.Reminders.RemoveAll(r => r.FiredAt is { } fired && fired < DateTime.Now.AddDays(-7)
+                                        || r.DoneAt is { } done && done < DateTime.Now.AddDays(-7));
 
         _tick.Tick += (_, _) => OnTick();
         _reminders.Tick += (_, _) => OnReminderTick();
         _glowOff.Tick += (_, _) => ClearGlow();
         _cardClose.Tick += (_, _) => CloseCard();
 
-        _panel = new NotesPanel(() => _store, Delete, Copy);
-        ctx.AddTab(NoteGlyph, "Notes", _panel);
+        _notes = new NotesCard(() => _store, ToggleDone, Delete, text => AddNote(text));
+        ctx.AddCard(new NotchCard
+        {
+            Id = "notes",
+            Title = "Notes",
+            Width = 176,
+            Order = 50,
+            Chip = true,
+            IsRelevant = ReminderDueToday,
+            Compact = _notes.Compact,
+            Detail = _notes.BuildDetail,
+        });
+        _lastRelevant = ReminderDueToday();
         ctx.AddCommand(this);
 
         ctx.AddPipeCommand("productivity-timer", PipeTimer);
         ctx.AddPipeCommand("productivity-remind-now", PipeRemindNow);
         ctx.AddPipeCommand("productivity-state", _ => State());
+        ctx.AddPipeCommand("notes-open", _ =>
+        {
+            Kit.CardKit.ShowDetailPopup(_ctx, _notes.BuildDetail);
+            return "ok";
+        });
         ctx.AddPipeCommand("productivity-run", text =>
         {
             var r = Run(text, typed: false);
@@ -274,9 +291,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     CommandResult ShowNotes(bool typed)
     {
-        // OpenTab waits for the command's confirmation card to close by itself.
-        _panel.Refresh();
-        _ctx.OpenTab(_panel);
+        // Waits for the command's confirmation card to clear, then shows the Notes detail.
+        Kit.CardKit.ShowDetailPopup(_ctx, _notes.BuildDetail);
         int upcoming = _store.Reminders.Count(r => !r.Fired), notes = _store.Notes.Count;
         return new CommandResult(NoteGlyph, "Notes",
             $"{notes} {(notes == 1 ? "note" : "notes")} \u00B7 {upcoming} upcoming {(upcoming == 1 ? "reminder" : "reminders")}");
@@ -436,7 +452,9 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     void ScheduleReminders()
     {
         _reminders.Stop();
-        var next = _store.Reminders.Where(r => !r.Fired).Select(r => (DateTime?)r.Due).Min();
+        var next = _store.Reminders.Where(r => !r.Fired && !r.Done).Select(r => (DateTime?)r.Due).Min();
+        // The Notes card is relevant on a day with an open reminder; a fired one still open stops counting at midnight.
+        if (next is null && ReminderDueToday()) next = DateTime.Today.AddDays(1);
         if (next is not { } due) return;
         // Wake at least every 30 s: a DispatcherTimer doesn't count time the PC spent asleep.
         _reminders.Interval = TimeSpan.FromMilliseconds(Math.Clamp((due - DateTime.Now).TotalMilliseconds, 200, 30_000));
@@ -447,13 +465,14 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     {
         _reminders.Stop();
         var now = DateTime.Now;
-        var due = _store.Reminders.Where(r => !r.Fired && r.Due <= now.AddMilliseconds(500)).OrderBy(r => r.Due).ToList();
+        var due = _store.Reminders.Where(r => !r.Fired && !r.Done && r.Due <= now.AddMilliseconds(500)).OrderBy(r => r.Due).ToList();
         if (due.Count > 0)
         {
             foreach (var r in due) r.FiredAt = now;
             Save();
             foreach (var r in due) Fire(r);
         }
+        else CheckRelevance();
         ScheduleReminders();
     }
 
@@ -508,7 +527,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     void Done(ReminderItem reminder)
     {
-        _store.Reminders.Remove(reminder);
+        // Ticked off rather than deleted, so it counts on the Notes card's progress for today.
+        reminder.DoneAt = DateTime.Now;
         Save();
         CloseCard();
     }
@@ -523,7 +543,42 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _ctx.ShowMessage(BellGlyph, $"Snoozed until {ClockText(reminder.Due)}");
     }
 
-    // ---- Notes tab -------------------------------------------------------------------------------
+    // ---- Notes card ------------------------------------------------------------------------------
+
+    /// <summary>Ticks a note or reminder off, or back on. An unticked reminder that's still ahead fires as planned.</summary>
+    void ToggleDone(string id)
+    {
+        var now = DateTime.Now;
+        if (_store.Reminders.FirstOrDefault(r => r.Id == id) is { } r)
+        {
+            r.DoneAt = r.Done ? null : now;
+            if (r.Done && _card?.Reminder == r) CloseCard();
+        }
+        else if (_store.Notes.FirstOrDefault(n => n.Id == id) is { } n)
+        {
+            n.DoneAt = n.Done ? null : now;
+        }
+        else return;
+        Save();
+        ScheduleReminders();
+    }
+
+    /// <summary>The Notes card earns the home row on a day with a reminder that isn't ticked off.</summary>
+    bool ReminderDueToday()
+    {
+        var today = DateTime.Today;
+        return _store.Reminders.Any(r => !r.Done && r.Due.Date == today);
+    }
+
+    bool _lastRelevant;
+
+    void CheckRelevance()
+    {
+        bool relevant = ReminderDueToday();
+        if (relevant == _lastRelevant) return;
+        _lastRelevant = relevant;
+        _ctx.CardsChanged();
+    }
 
     void Delete(string id)
     {
@@ -534,22 +589,11 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         if (_card?.Reminder.Id == id) CloseCard();
     }
 
-    void Copy(string text)
-    {
-        try
-        {
-            Clipboard.SetText(text);
-        }
-        catch (Exception ex)
-        {
-            _ctx.Warn("Copying a note failed", ex);
-        }
-    }
-
     void Save()
     {
         _ctx.Save(_store);
-        _panel.Refresh();
+        _notes.Refresh();
+        CheckRelevance();
     }
 
     // ---- Test pipe -------------------------------------------------------------------------------
@@ -583,7 +627,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             $"{c.Kind.ToString().ToLowerInvariant()}{(c.Label.Length > 0 ? $"[{c.Label}]" : "")}={c.Display(now)}{(c.Paused ? "(paused)" : "")}";
         int upcoming = _store.Reminders.Count(r => !r.Fired);
         return $"clocks={(_clocks.Count == 0 ? "-" : string.Join(",", _clocks.Select(Describe)))} " +
-               $"reminders={upcoming} upcoming/{_store.Reminders.Count - upcoming} fired notes={_store.Notes.Count} " +
+               $"reminders={upcoming} upcoming/{_store.Reminders.Count - upcoming} fired notes={_store.Notes.Count} done={_store.Notes.Count(n => n.Done) + _store.Reminders.Count(r => r.Done)} notesRelevant={ReminderDueToday()} " +
                $"card={(_card is null ? "-" : "open")} queued={_cardQueue.Count} glow={_glowing} " +
                $"focus={_focus.Status} tick={(_tick.IsEnabled ? $"{_tick.Interval.TotalMilliseconds:0}ms" : "off")}";
     }

@@ -581,7 +581,7 @@ public partial class NotchWindow : Window
         NotchMode.Notification => (460, 92, 30),
         NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
         NotchMode.Expanded => (480, 204, 32),
-        NotchMode.Drop => (480, 150, 32),
+        NotchMode.Drop => (DropZone.Width, DropZone.Height, 28),
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => (420, 54, 27),
         NotchMode.Typing => (560, 58 + _paletteHeight, _paletteHeight > 0 ? 30 : 29),
         NotchMode.Answer => (440, 120, 32),
@@ -831,6 +831,7 @@ public partial class NotchWindow : Window
         _dragOut.Stop();
         if (!_dragging) return;
         _dragging = false;
+        DropZone.Reset();
         Recompute();
     }
 
@@ -838,10 +839,20 @@ public partial class NotchWindow : Window
     {
         _dragOut.Stop();
         _dragging = false;
+        // The drop zone knows which of its targets (Shelf, phone, compress, convert) the files landed on.
+        var target = DropZone.TakeTarget();
         if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
         {
-            FilesDropped?.Invoke(files);
-            ExpandTo(shelf: true);
+            if (target is null or Core.DropActions.DropAction.Shelf)
+            {
+                FilesDropped?.Invoke(files);
+                ExpandTo(shelf: true);
+            }
+            else
+            {
+                DropZone.RaiseDropped(target.Value, files);
+                Recompute();
+            }
         }
         else
         {

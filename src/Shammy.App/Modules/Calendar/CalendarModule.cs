@@ -92,6 +92,11 @@ internal sealed class CalendarModule : IShammyModule
         ctx.AddPipeCommand("cal-state", _ => State());
         ctx.AddPipeCommand("cal-load-ics", LoadIcsFile);
         ctx.AddPipeCommand("cal-pill-test", _ => PillTest());
+        ctx.AddPipeCommand("cal-open", _ =>
+        {
+            ShowDetail();
+            return "ok";
+        });
 
         _fetch.Interval = FetchEvery;
         _fetch.Tick += (_, _) => _ = FetchAsync();
@@ -387,5 +392,5 @@ internal sealed class CalendarModule : IShammyModule
         return "ok pill shown for 20 s (Join just dismisses it)";
     }
 
-    internal void ShowDetail() => CardKit.ShowDetailPopup(_ctx, _card.BuildDetail());
+    internal void ShowDetail() => CardKit.ShowDetailPopup(_ctx, _card.BuildDetail);
 }
