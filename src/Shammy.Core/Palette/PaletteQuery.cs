@@ -70,7 +70,7 @@ public static class PaletteQuery
     static readonly Regex HindiPlayBefore = new($@"^{HindiVerb}\s+(?<q>.+)$", Opts);
 
     // "arijit ke gaane bajao" → "arijit"; "tum hi ho song chalao" → "tum hi ho".
-    static readonly Regex SongWord = new(@"\s+(?:ke|ka|ki)\s+(?:gaane|gane|gaana|gana|songs?)$|\s+(?:wala\s+|vala\s+)?(?:gaana|gana|gaane|gane|song|songs)$", Opts);
+    static readonly Regex SongWord = new(@"\s+(?:ke|ka|ki)\s+(?:ga+n(?:y?e|ey|a)|songs?)$|\s+(?:wala\s+|vala\s+)?(?:gaana|gana|gaane|gane|song|songs)$", Opts);
 
     /// <summary>What a timer/reminder/note command will do, in a few words; null when there's nothing useful to say.</summary>
     public static string? DescribeProductivity(ProductivityCommand c, DateTime now) => c.Action switch
@@ -87,7 +87,9 @@ public static class PaletteQuery
         ProductivityAction.StopPomodoro => "Stop the pomodoro",
         ProductivityAction.StartFocus => $"Focus for {TimeFormat.Describe(c.Duration)}",
         ProductivityAction.StopFocus => "End focus session",
-        ProductivityAction.Remind => $"Reminder · {TimeFormat.When(c.Due, now)} · {c.Text}",
+        ProductivityAction.Remind => c.Text.Length > 0
+            ? $"Reminder · {TimeFormat.When(c.Due, now)} · {c.Text}"
+            : $"Reminder · {TimeFormat.When(c.Due, now)}",
         ProductivityAction.ReminderNeedsTime => "Reminder · add a time",
         ProductivityAction.Note => $"Save note · {c.Text}",
         ProductivityAction.ShowNotes => "Show notes",

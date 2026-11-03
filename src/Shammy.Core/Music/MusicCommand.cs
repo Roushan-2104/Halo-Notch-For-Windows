@@ -72,7 +72,8 @@ public static class MusicCommand
     static readonly Regex OnYouTube = new(@"(?:\s+(?:on|in|from|with|using)\s+(?:youtube\s+music|yt\s+music|youtube)|" +
         @"\s+(?:youtube\s+music|yt\s+music|youtube)\s+(?:pe|par|mein|me))$", Opts);
     // "arijit ke gaane bajao" searches for "arijit": "ke gaane" just means "songs of".
-    static readonly Regex SongsOf = new(@"\s+(?:ke|ka|ki|wale|vale|wala|vala)\s+(?:gaane|gane|gaana|gana|songs?)$", Opts);
+    // The Hinglish model also writes "ganye" / "gaaney".
+    static readonly Regex SongsOf = new(@"\s+(?:ke|ka|ki|wale|vale|wala|vala)\s+(?:ga+n(?:y?e|ey|a)|songs?)$", Opts);
     static readonly Regex Please = new(@"(?:^please\s+|[\s,]+please$)", Opts);
 
     // "play store", "play station 5 price" are searches, not songs.

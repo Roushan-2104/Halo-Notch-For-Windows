@@ -14,6 +14,9 @@ public class SpeechFixesTests
     [InlineData("Time or 10 minutes.", "Timer 10 minutes.")]
     [InlineData("timeout 5 minutes", "timer 5 minutes")]
     [InlineData("Time of 2 hours", "Timer 2 hours")]
+    [InlineData("Time of five minutes.", "Timer five minutes.")]
+    [InlineData("Time for 10 minutes.", "Timer 10 minutes.")]
+    [InlineData("time or twenty five minutes", "timer twenty five minutes")]
     public void Fixes_weather(string spoken, string expected)
     {
         Assert.Equal(expected, SpeechFixes.Apply(spoken));
@@ -27,6 +30,7 @@ public class SpeechFixesTests
     [InlineData("time or money")]
     [InlineData("timeout error in python")]
     [InlineData("time of 5 pm meeting")]
+    [InlineData("time for five guys")]
     public void Leaves_real_whether(string spoken)
     {
         Assert.Equal(spoken, SpeechFixes.Apply(spoken));

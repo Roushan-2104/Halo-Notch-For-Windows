@@ -12,9 +12,11 @@ public static class SpeechFixes
     static readonly Regex LeadingWhether = new(
         @"^(\s*)whether(?=\s+(?:in|at|for|of|near|today|tomorrow|tonight|this|next|now|forecast|report|update|like)\b|\s*[.?!]?\s*$)", Opts);
 
-    // "timer 10 minutes" heard as "Time or 10 minutes" / "Timeout 5 minutes": a duration right after means a timer.
+    // "timer 10 minutes" heard as "Time or 10 minutes" / "Timeout 5 minutes" / "Time of five minutes" / "Time for 10
+    // minutes" (Indian English): a duration right after means a timer.
+    const string Count = @"(?:\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|forty[\s-]five|fifty|sixty|ninety)";
     static readonly Regex TimeOr = new(
-        @"^(\s*)(?:time\s+or|time\s+of|timeout|time\s+out|timer's)(?=\s+(?:for\s+)?\d+\s*(?:sec|second|min|minute|hour|hr)s?\b)", Opts);
+        @"^(\s*)(?:time\s+or|time\s+of|time\s+for|timeout|time\s+out|timer's)(?=\s+(?:for\s+)?" + Count + @"(?:[\s-]+(?:one|two|three|four|five|six|seven|eight|nine))?\s*(?:sec|second|min|minute|hour|hr)s?\b)", Opts);
 
     public static string Apply(string spoken)
     {

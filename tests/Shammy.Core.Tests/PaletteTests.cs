@@ -472,6 +472,7 @@ public class PaletteQueryTests
     [InlineData("put on bohemian rhapsody", "bohemian rhapsody")]
     [InlineData("tum hi ho bajao", "tum hi ho")]
     [InlineData("arijit ke gaane bajao", "arijit")]
+    [InlineData("Arijit Singh Ke Ganye Bajau.", "Arijit Singh")]
     [InlineData("kesariya chalao", "kesariya")]
     [InlineData("tum hi ho song chala do", "tum hi ho")]
     [InlineData("kesariya sunao na", "kesariya")]
@@ -511,5 +512,12 @@ public class PaletteQueryTests
         var remind = ProductivityParser.Parse("remind me at 6pm to call mom", now)!;
         Assert.StartsWith("Reminder \u00B7 Today 6:00 PM", PaletteQuery.DescribeProductivity(remind, now));
         Assert.StartsWith("Save note", PaletteQuery.DescribeProductivity(ProductivityParser.Parse("note buy milk", now)!, now));
+    }
+
+    [Fact]
+    public void A_reminder_without_text_has_no_dangling_separator()
+    {
+        var now = new DateTime(2026, 11, 3, 10, 0, 0);
+        Assert.Equal("Reminder · Today 6:00 PM", PaletteQuery.DescribeProductivity(ProductivityParser.Parse("remind me at 6pm", now)!, now));
     }
 }
