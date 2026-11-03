@@ -26,6 +26,7 @@ The whole API is in [`ModuleApi.cs`](ModuleApi.cs); read it first.
 | Show something live in the compact notch | `ctx.Post(new Activity("<module>.<id>", ActivityKind.Custom, priority, payload))` where payload implements `ICompactContent` |
 | A tab in the expanded notch | `ctx.AddTab(glyph, tooltip, panel)` (panel gets ~436×150), `ctx.OpenTab(panel)` |
 | A bigger popup (QR code, picker) | `ctx.ShowCard(element, width, height, interactive)` / `ctx.CloseCard()` |
+| Show over a fullscreen app (only for things the user asked to be interrupted for, like alarms) | `BreaksFullscreen = true` on the `Activity`, or `ctx.ShowCard(..., breaksFullscreen: true)`; it never takes focus there |
 | Act on a circle before it becomes a search | `ctx.AddSelectionHandler(ISelectionHandler)` (return null to pass) |
 | A chip on the results card | `ctx.AddResultChip(...)` |
 | Right-click action on shelf files | `ctx.AddShelfAction(...)` |

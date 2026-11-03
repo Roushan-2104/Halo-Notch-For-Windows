@@ -331,10 +331,11 @@ internal sealed class ShammyHost : IDisposable
         // During a call or screen capture others may see the notch: show who it's from, not what it says.
         if (PrivacyState.Presenting)
         {
+            var (title, body) = Shammy.Core.Notifications.NotificationText.ForPopup(n.AppName, n.Title, n.Body, presenting: true);
             n = new ShammyNotification
             {
                 Id = n.Id, AppId = n.AppId, AppName = n.AppName, Icon = n.Icon, Time = n.Time,
-                Title = n.AppName, Body = "Hidden while you're in a call or sharing your screen",
+                Title = title, Body = body,
             };
         }
 
@@ -487,6 +488,24 @@ internal sealed class ShammyHost : IDisposable
                 _settings.MutedNotificationApps.Clear();
                 _settings.Save();
                 return "ok";
+            // "notifications list": the rows the Notifications tab shows right now (text hidden while private).
+            case "notifications" when arg.Trim() == "list":
+                return $"presenting={PrivacyState.Presenting} rows={_notifications.History.Count} {_notch.ExpandedView.DescribeAlertRows()}";
+            // "notify-test App|Title|Body": a made-up toast through the real path (history, pop-up, privacy).
+            case "notify-test":
+            {
+                var f = arg.Split('|');
+                _notifications.InjectForTest(new ShammyNotification
+                {
+                    Id = (uint)Random.Shared.Next(1 << 30, int.MaxValue),
+                    AppId = "",
+                    AppName = f[0].Trim().Length > 0 ? f[0].Trim() : "Test",
+                    Title = f.Length > 1 ? f[1].Trim() : "Test",
+                    Body = f.Length > 2 ? f[2].Trim() : "",
+                    Time = DateTimeOffset.Now,
+                });
+                return "ok";
+            }
             case "notifications":
                 return $"available={_notifications.IsAvailable} problem={_notifications.Problem ?? "-"} history={_notifications.History.Count} " +
                        $"muted={_settings.MutedNotificationApps.Count} presenting={PrivacyState.Presenting} " +
@@ -494,7 +513,8 @@ internal sealed class ShammyHost : IDisposable
             case "state":
                 return $"mode={_notch.Mode} activity={_activities.Current?.Id ?? "-"} secondary={_activities.Secondary?.Id ?? "-"} " +
                        $"whisper={(_whisper.IsReady ? "ready:" + _whisper.ActiveModel.Replace(' ', '_') : _whisper.IsDownloading ? $"downloading {_whisper.DownloadProgress:P0}" : _whisper.Failure ?? "loading")} " +
-                       $"keys={_keys.IsInstalled} media={(_media.HasSession ? _media.Title : "-")} playing={_media.IsPlaying} height={_notch.Height}";
+                       $"keys={_keys.IsInstalled} media={(_media.HasSession ? _media.Title : "-")} playing={_media.IsPlaying} height={_notch.Height} " +
+                       $"fullscreen={_notch.IsFullscreen}";
             case "expand":
                 _notch.ExpandTo(arg.Contains("shelf"), hold: arg.Contains("hold"));
                 if (arg.Contains("alerts")) _notch.ExpandedView.ShowAlerts();

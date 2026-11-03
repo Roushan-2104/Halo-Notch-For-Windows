@@ -17,8 +17,16 @@ internal sealed class YouTubeMusicPlayer
 
     public YouTubeMusicPlayer(ModuleContext ctx) => _ctx = ctx;
 
-    /// <summary>The first song for <paramref name="query"/>, or null when offline or nothing matched.</summary>
-    public async Task<YouTubeMusicSong?> SearchAsync(string query, CancellationToken ct = default)
+    /// <summary>
+    /// The song to play for <paramref name="query"/>: the top result that isn't a remix, lofi, cover or other
+    /// variant the query didn't ask for (<see cref="SongPick"/>). Null when offline or nothing matched.
+    /// <paramref name="asked"/> is what the user said, when <paramref name="query"/> was rewritten from it.
+    /// </summary>
+    public async Task<YouTubeMusicSong?> SearchAsync(string query, string? asked = null, CancellationToken ct = default) =>
+        SongPick.Choose(await SearchAllAsync(query, ct).ConfigureAwait(false), asked ?? query);
+
+    /// <summary>Every song row YouTube Music returned for <paramref name="query"/>, in its order.</summary>
+    public async Task<IReadOnlyList<YouTubeMusicSong>> SearchAllAsync(string query, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, YouTubeMusic.SearchUrl)
         {
@@ -30,10 +38,10 @@ internal sealed class YouTubeMusicPlayer
         if (!response.IsSuccessStatusCode)
         {
             _ctx.Warn($"YouTube Music search returned {(int)response.StatusCode}");
-            return null;
+            return Array.Empty<YouTubeMusicSong>();
         }
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        return YouTubeMusic.ParseFirstSong(json);
+        return YouTubeMusic.ParseSongs(json);
     }
 
     /// <summary>Open a music.youtube.com URL in the YouTube Music app, or the default browser without it.</summary>

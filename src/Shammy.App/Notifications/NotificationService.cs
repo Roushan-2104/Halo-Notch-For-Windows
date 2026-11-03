@@ -19,6 +19,11 @@ internal sealed class ShammyNotification
     public required string Body { get; init; }
     public required DateTimeOffset Time { get; init; }
 
+    // The Notifications tab's two lines, read when a row is built; the tab rebuilds its rows when
+    // PrivacyState flips, so a call hides them and its end reveals them without reopening.
+    public string ListTitle => Shammy.Core.Notifications.NotificationText.ForList(AppName, Title, Body, PrivacyState.Presenting).Title;
+    public string ListDetail => Shammy.Core.Notifications.NotificationText.ForList(AppName, Title, Body, PrivacyState.Presenting).Detail;
+
     public string TimeText
     {
         get
@@ -282,6 +287,13 @@ internal sealed class NotificationService : IDisposable
     }
 
     public void ClearHistory() => History.Clear();
+
+    /// <summary>Test pipe: a made-up toast through the same path as a real one (history, then pop-up).</summary>
+    internal void InjectForTest(ShammyNotification n)
+    {
+        AddToHistory(n, atEnd: false);
+        Arrived?.Invoke(n);
+    }
 
     public void Dispose()
     {
