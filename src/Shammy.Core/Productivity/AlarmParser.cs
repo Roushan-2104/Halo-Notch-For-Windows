@@ -179,7 +179,8 @@ public static class AlarmParser
         while (j < pairs.Count)
         {
             var word = pairs[j].Word;
-            bool s = word.EndsWith('s') && DayNames.ContainsKey(word[..^1]);
+            // "mondays" is plural; "tues" and "thurs" are just short names.
+            bool s = !DayNames.ContainsKey(word) && word.EndsWith('s') && DayNames.ContainsKey(word[..^1]);
             if (!DayNames.TryGetValue(s ? word[..^1] : word, out var day)) break;
             // "monday to friday": every day between.
             if (j + 2 < pairs.Count && pairs[j + 1].Word is "to" or "through" or "till" or "until" &&

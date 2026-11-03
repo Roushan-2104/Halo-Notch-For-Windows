@@ -440,6 +440,7 @@ public class AlarmParserTests
     [InlineData("alarm every monday and wednesday at 6", 6, 0, AlarmDays.Monday | AlarmDays.Wednesday)]
     [InlineData("alarm at 8 on mondays", 8, 0, AlarmDays.Monday)]
     [InlineData("alarm at 7 am mon, wed, fri", 7, 0, AlarmDays.Monday | AlarmDays.Wednesday | AlarmDays.Friday)]
+    [InlineData("alarm at 7 every tues and thurs", 7, 0, AlarmDays.Tuesday | AlarmDays.Thursday)]
     [InlineData("alarm at 6 monday to friday", 6, 0, AlarmDays.Weekdays)]
     [InlineData("alarm at 6 monday-thursday", 6, 0, AlarmDays.Monday | AlarmDays.Tuesday | AlarmDays.Wednesday | AlarmDays.Thursday)]
     [InlineData("set an alarm every weekday at 9 pm", 21, 0, AlarmDays.Weekdays)]
@@ -459,12 +460,14 @@ public class AlarmParserTests
     [InlineData("set an alarm for 7 am", "")]
     public void Labels(string text, string label) => Assert.Equal(label, Spec(text).Label);
 
-    [Fact]
-    public void Singular_on_monday_is_a_one_off()
+    [Theory]
+    [InlineData("alarm on monday at 7", 16)]
+    [InlineData("alarm at 7 on thursday", 12)]
+    public void Singular_day_is_a_one_off(string text, int day)
     {
-        var s = Spec("alarm on monday at 7");
+        var s = Spec(text);
         Assert.Equal(AlarmDays.None, s.Days);
-        Assert.Equal(new DateTime(2026, 3, 16), s.Date);
+        Assert.Equal(new DateTime(2026, 3, day), s.Date);
     }
 
     [Theory]
