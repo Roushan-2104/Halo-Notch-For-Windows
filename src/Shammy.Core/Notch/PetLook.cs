@@ -13,11 +13,11 @@ public enum PetEyeColor { White, Peach, Mint, Sky, Lilac }
 /// </summary>
 public static class PetLooks
 {
-    public const string DefaultName = "Momo";
+    public const string DefaultName = "Shammy";
     public const int MaxNameLength = 12;
 
     /// <summary>The names the tour and Settings offer as one-click picks.</summary>
-    public static readonly IReadOnlyList<string> NamePresets = new[] { "Momo", "Pixel", "Shammy", "Golu" };
+    public static readonly IReadOnlyList<string> NamePresets = new[] { "Shammy", "Momo", "Pixel", "Golu" };
 
     /// <summary>Trimmed, inner runs of spaces collapsed, at most 12 characters; empty means the default.</summary>
     public static string Name(string? name)

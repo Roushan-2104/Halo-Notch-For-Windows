@@ -62,8 +62,8 @@ public class ScreensTests
     }
 
     [Theory]
-    [InlineData(null, "Momo")]
-    [InlineData("   ", "Momo")]
+    [InlineData(null, "Shammy")]
+    [InlineData("   ", "Shammy")]
     [InlineData("  Golu  ", "Golu")]
     [InlineData("Mr   Pixel", "Mr Pixel")]
     [InlineData("Shammyshammyshammy", "Shammyshammy")]
