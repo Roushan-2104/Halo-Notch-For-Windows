@@ -142,7 +142,7 @@ internal sealed class AppSettings
         {
             if (File.Exists(Paths.SettingsFile))
             {
-                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Paths.SettingsFile), Json) ?? new AppSettings();
+                var s = JsonSerializer.Deserialize<AppSettings>(ReadSettingsText(), Json) ?? new AppSettings();
                 // A hand-edited or half-written file can say null; every list must exist for the rest of Shammy.
                 s.Shelf ??= new();
                 s.MutedNotificationApps ??= new();
@@ -156,8 +156,37 @@ internal sealed class AppSettings
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
             Log.Warn("Settings unreadable, using defaults", ex);
+            KeepUnreadable();
         }
         return new AppSettings();
+    }
+
+    /// <summary>A file another program holds open for a moment (a sync client, an antivirus scan) is read again.</summary>
+    static string ReadSettingsText()
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { return File.ReadAllText(Paths.SettingsFile); }
+            catch (IOException) when (attempt < 4) { Thread.Sleep(100); }
+        }
+    }
+
+    /// <summary>
+    /// The first save after starting on defaults would overwrite the unreadable file, and with it the user's pins,
+    /// voice choice and muted apps. Keep a copy beside it so a hand-edit gone wrong can be put right.
+    /// </summary>
+    static void KeepUnreadable()
+    {
+        try
+        {
+            var kept = Paths.SettingsFile + ".unreadable";
+            File.Copy(Paths.SettingsFile, kept, overwrite: true);
+            Log.Warn($"Kept the unreadable settings as {Path.GetFileName(kept)}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("Couldn't keep a copy of the unreadable settings", ex);
+        }
     }
 
     public void Save()
