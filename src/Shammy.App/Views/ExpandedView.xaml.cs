@@ -24,8 +24,15 @@ public partial class ExpandedView : UserControl
         IsVisibleChanged += (_, _) =>
         {
             _clock.IsEnabled = IsVisible;
-            if (IsVisible) Refresh();
+            if (!IsVisible) return;
+            // Opening (by hover or by a command): no tab is lit until the pointer actually moves over it.
+            ClearTabHover();
+            Refresh();
+            RebuildAlertRows();
         };
+        TabHover.Track(HomeTab);
+        TabHover.Track(ShelfTab);
+        TabHover.Track(AlertsTab);
     }
 
     /// <summary>Raised while a file is being dragged off the shelf, so the notch stays open.</summary>
@@ -41,13 +48,42 @@ public partial class ExpandedView : UserControl
         services.Shelf.Items.CollectionChanged += (_, _) => RefreshShelf();
         AlertItems.ItemsSource = services.Notifications.History;
         services.Notifications.History.CollectionChanged += (_, _) => Refresh();
+        // A call starting or ending hides or reveals the rows' text in place, even with the tab open.
+        PrivacyState.Changed += _ => Dispatcher.BeginInvoke(RebuildAlertRows);
         Bars.Source = services.Visualizer.Level;
         RefreshShelf();
     }
 
-    internal void ShowShelf() => ShelfTab.IsChecked = true;
-    internal void ShowHome() => HomeTab.IsChecked = true;
-    internal void ShowAlerts() => AlertsTab.IsChecked = true;
+    internal void ShowShelf() => Select(ShelfTab);
+    internal void ShowHome() => Select(HomeTab);
+    internal void ShowAlerts() => Select(AlertsTab);
+
+    /// <summary>A tab chosen by code (a command, a drop): the pointer isn't on any tab, so none stays lit.</summary>
+    void Select(RadioButton tab)
+    {
+        ClearTabHover();
+        tab.IsChecked = true;
+    }
+
+    IEnumerable<RadioButton> Tabs => new[] { HomeTab, ShelfTab, AlertsTab }.Concat(_moduleTabs.Select(t => t.Tab));
+
+    void ClearTabHover()
+    {
+        foreach (var tab in Tabs) TabHover.Clear(tab);
+    }
+
+    /// <summary>
+    /// Rebuild the notification rows so their text (and "5m" ages) is read again: rows bind once, and
+    /// whether the text shows depends on <see cref="PrivacyState"/>, which isn't a bindable property.
+    /// </summary>
+    void RebuildAlertRows()
+    {
+        if (_s is not null && AlertItems.ItemsSource is not null) AlertItems.Items.Refresh();
+    }
+
+    /// <summary>What the Notifications tab lists right now, rows separated by " || " (test pipe; replies are one line).</summary>
+    internal string DescribeAlertRows() => _s is null ? "" : string.Join(" || ",
+        _s.Notifications.History.Select(n => $"{n.ListTitle} | {n.ListDetail} | {n.TimeText}"));
 
     readonly List<(RadioButton Tab, FrameworkElement Panel)> _moduleTabs = new();
 
@@ -66,6 +102,7 @@ public partial class ExpandedView : UserControl
             Margin = new Thickness(4, 0, 0, 0),
         };
         tab.Checked += OnTabChanged;
+        TabHover.Track(tab);
         TabStrip.Children.Add(tab);
         Grid.SetRow(panel, 1);
         panel.Visibility = Visibility.Collapsed;
@@ -76,7 +113,7 @@ public partial class ExpandedView : UserControl
     internal void ShowTab(FrameworkElement panel)
     {
         foreach (var (tab, p) in _moduleTabs)
-            if (p == panel) tab.IsChecked = true;
+            if (p == panel) Select(tab);
     }
 
     void OnTabChanged(object sender, RoutedEventArgs e) => Refresh();

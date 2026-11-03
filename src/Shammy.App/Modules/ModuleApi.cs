@@ -196,9 +196,11 @@ internal sealed class ModuleContext
     /// <summary>
     /// Show arbitrary content in the notch (e.g. a QR code). The notch morphs to width×height. With
     /// <paramref name="interactive"/> it takes keyboard focus and closes when you click elsewhere.
+    /// With <paramref name="breaksFullscreen"/> (alarms, due reminders) it shows over a fullscreen app too,
+    /// without taking focus from it; other cards wait until fullscreen ends.
     /// </summary>
-    public void ShowCard(FrameworkElement content, double width, double height, bool interactive = false) =>
-        Notch.ShowCard(content, width, height, interactive);
+    public void ShowCard(FrameworkElement content, double width, double height, bool interactive = false, bool breaksFullscreen = false) =>
+        Notch.ShowCard(content, width, height, interactive, breaksFullscreen);
 
     public void CloseCard() => Notch.CloseCard();
 

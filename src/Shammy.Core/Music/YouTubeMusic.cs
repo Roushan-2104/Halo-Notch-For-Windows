@@ -38,21 +38,31 @@ public static class YouTubeMusic
         ["params"] = SongsFilter,
     }.ToJsonString();
 
-    public static YouTubeMusicSong? ParseFirstSong(string json)
+    public static YouTubeMusicSong? ParseFirstSong(string json) => ParseSongs(json).FirstOrDefault();
+
+    /// <summary>
+    /// Every song row in result order (duplicates dropped), so the caller can pass over remixes and covers
+    /// (<see cref="SongPick"/>). Without song rows (a layout change?) it settles for any playable id, so
+    /// "play" still does something.
+    /// </summary>
+    public static IReadOnlyList<YouTubeMusicSong> ParseSongs(string json)
     {
+        var songs = new List<YouTubeMusicSong>();
         try
         {
             using var doc = JsonDocument.Parse(json);
-            if (FindProperty(doc.RootElement, "musicResponsiveListItemRenderer") is { } row && FromRow(row) is { } song)
-                return song;
-            // No song rows (layout change?): settle for any playable id so "play" still does something.
-            if (FindProperty(doc.RootElement, "videoId") is { ValueKind: JsonValueKind.String } id)
-                return new YouTubeMusicSong(id.GetString()!, "", "");
+            var rows = new List<JsonElement>();
+            FindAll(doc.RootElement, "musicResponsiveListItemRenderer", rows);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var row in rows)
+                if (FromRow(row) is { } song && seen.Add(song.VideoId)) songs.Add(song);
+            if (songs.Count == 0 && FindProperty(doc.RootElement, "videoId") is { ValueKind: JsonValueKind.String } id)
+                songs.Add(new YouTubeMusicSong(id.GetString()!, "", ""));
         }
         catch (JsonException)
         {
         }
-        return null;
+        return songs;
     }
 
     static YouTubeMusicSong? FromRow(JsonElement row)
@@ -89,6 +99,24 @@ public static class YouTubeMusic
         foreach (var run in runs.EnumerateArray())
             if (run.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String) sb.Append(text.GetString());
         return sb.ToString();
+    }
+
+    /// <summary>Every property with this name, in document order (not looking inside a match).</summary>
+    static void FindAll(JsonElement e, string name, List<JsonElement> found)
+    {
+        switch (e.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var p in e.EnumerateObject())
+                {
+                    if (p.NameEquals(name)) found.Add(p.Value);
+                    else FindAll(p.Value, name, found);
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in e.EnumerateArray()) FindAll(item, name, found);
+                break;
+        }
     }
 
     /// <summary>Depth-first, document-order search for the first property with this name.</summary>

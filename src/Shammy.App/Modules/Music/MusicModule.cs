@@ -87,6 +87,7 @@ internal sealed class MusicModule : IShammyModule
         ctx.NotchHorizontalWheel += OnSwipe;
 
         ctx.AddPipeCommand("music-search", PipeSearch);
+        ctx.AddPipeCommand("music-pick", PipePick);
         ctx.AddPipeCommand("music-lyrics", _ => PipeLyrics());
         ctx.AddPipeCommand("music-wheel", arg => PipeWheel(arg));
         ctx.AddPipeCommand("music-swipe", arg => PipeSwipe(arg));
@@ -402,6 +403,30 @@ internal sealed class MusicModule : IShammyModule
             // The pipe handler runs on the UI thread; SearchAsync never resumes there, so blocking is safe.
             var song = Task.Run(() => _player.SearchAsync(query.Trim())).GetAwaiter().GetResult();
             return song is null ? "none" : $"videoId={song.VideoId} title={song.Title} artist={song.Artist}";
+        }
+        catch (Exception ex)
+        {
+            return "error: " + ex.Message;
+        }
+    }
+
+    /// <summary>Dry run of "play &lt;query&gt;": the song it would pick and the results it chose from, without playing.</summary>
+    string PipePick(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return "error: usage music-pick <query>";
+        query = query.Trim();
+        try
+        {
+            var all = Task.Run(() => _player.SearchAllAsync(query)).GetAwaiter().GetResult();
+            if (all.Count == 0) return "none";
+            var pick = SongPick.Choose(all, query)!;
+            static string Row(YouTubeMusicSong s)
+            {
+                var marks = SongPick.VariantsIn(s.Title);
+                return $"{s.Title} \u00B7 {s.Artist}{(marks.Count > 0 ? $" [{string.Join(",", marks)}]" : "")}";
+            }
+            return $"pick={pick.Title} \u00B7 {pick.Artist} videoId={pick.VideoId} first={all[0].Title} " +
+                   $"results={string.Join(" | ", all.Take(8).Select(Row))}";
         }
         catch (Exception ex)
         {

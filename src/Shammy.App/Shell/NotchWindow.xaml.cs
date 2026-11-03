@@ -33,7 +33,7 @@ public partial class NotchWindow : Window
     readonly List<Layer> _layers = new();
     readonly Layer _compactA, _compactB, _expanded, _drop, _searchBar, _answer, _result, _notification, _card;
     (double W, double H) _cardSize;
-    bool _cardOpen, _cardInteractive;
+    bool _cardOpen, _cardInteractive, _cardBreaksFullscreen;
     readonly DispatcherTimer _hoverIn, _hoverOut, _dragOut;
     Layer _compactActive;
     IntPtr _hwnd;
@@ -335,6 +335,8 @@ public partial class NotchWindow : Window
         }
     }
 
+    public bool IsFullscreen => _fullscreen;
+
     public void SetFullscreen(bool fullscreen)
     {
         if (_fullscreen == fullscreen) return;
@@ -446,23 +448,27 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>Show module content in the notch at the given size (see ModuleContext.ShowCard).</summary>
-    internal void ShowCard(FrameworkElement content, double width, double height, bool interactive)
+    internal void ShowCard(FrameworkElement content, double width, double height, bool interactive, bool breaksFullscreen = false)
     {
         CardHost.Content = content;
         CardHost.Width = width;
         CardHost.Height = height;
         _cardSize = (width, height);
         _cardOpen = true;
-        _cardInteractive = interactive;
+        _cardBreaksFullscreen = breaksFullscreen;
+        // Over a fullscreen app the card must not take focus from it (a game would minimise or lose input);
+        // its buttons still work by mouse, since clicks reach a no-activate window.
+        _cardInteractive = interactive && !(breaksFullscreen && _fullscreen);
         _hoverExpanded = false;
         Recompute();
-        if (interactive && _searchMode is null) SetInteractive(true);
+        if (_cardInteractive && _searchMode is null) SetInteractive(true);
     }
 
     internal void CloseCard()
     {
         if (!_cardOpen) return;
         _cardOpen = false;
+        _cardBreaksFullscreen = false;
         if (_cardInteractive && _searchMode is null) SetInteractive(false);
         _cardInteractive = false;
         Recompute();
@@ -529,7 +535,12 @@ public partial class NotchWindow : Window
     {
         NotchMode mode;
         if (_searchMode is { } s) mode = s;
-        else if (_fullscreen && _activity?.Kind != ActivityKind.Hud) mode = NotchMode.Hidden;
+        // Over a fullscreen app only what you asked to be interrupted for shows: a reminder/alarm card, a
+        // finished timer, or the volume HUD for the key you just pressed. Never expanded, never activated.
+        else if (_fullscreen)
+            mode = _cardOpen && _cardBreaksFullscreen ? NotchMode.Card
+                : FullscreenPolicy.ShowsOver(_activity) ? NotchMode.Compact
+                : NotchMode.Hidden;
         else if (_dragging) mode = NotchMode.Drop;
         else if (_cardOpen) mode = NotchMode.Card;
         else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded) mode = NotchMode.Notification;
@@ -539,6 +550,8 @@ public partial class NotchWindow : Window
 
         if (mode == NotchMode.Compact) PrepareCompact();
         if (mode == NotchMode.Notification && _activity?.Payload is NotificationPayload p) NotificationCard.Show(p.Notification, p.More);
+        // Breaking through: the fullscreen app may have pushed itself above us; re-assert topmost (without activating).
+        if (_fullscreen && _mode == NotchMode.Hidden && mode != NotchMode.Hidden) BringToFront();
         if (mode != _mode || mode is NotchMode.Compact or NotchMode.Card) Transition(mode);
         // The side bubble belongs next to the compact pill only; hide it whenever a card, tab or drop zone opens.
         UpdateBubble();

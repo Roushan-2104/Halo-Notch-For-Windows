@@ -21,6 +21,19 @@ public enum ActivityKind
 public sealed record Activity(string Id, ActivityKind Kind, int Priority, object? Payload = null, DateTime? ExpiresAt = null)
 {
     public Action? Click { get; init; }
+
+    /// <summary>
+    /// Shown even over a fullscreen app (a finished timer, a due alarm): something you asked to be
+    /// interrupted for. Everything else waits until fullscreen ends.
+    /// </summary>
+    public bool BreaksFullscreen { get; init; }
+}
+
+/// <summary>What the notch may show while a game, video or presentation fills the primary monitor.</summary>
+public static class FullscreenPolicy
+{
+    /// <summary>Volume/brightness feedback (you just pressed the key) and activities marked to break through.</summary>
+    public static bool ShowsOver(Activity? current) => current is { Kind: ActivityKind.Hud } or { BreaksFullscreen: true };
 }
 
 /// <summary>

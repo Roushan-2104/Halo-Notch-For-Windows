@@ -399,9 +399,11 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     void Alert(string glyph, string text)
     {
+        // A clock you set running out is worth interrupting a fullscreen game or video for.
         _ctx.Post(new Activity(AlertId, ActivityKind.Message, AlertPriority, new MessagePayload(glyph, text), DateTime.UtcNow + AlertTime)
         {
             Click = () => _ctx.Remove(AlertId),
+            BreaksFullscreen = true,
         });
         Glow();
         Chime();
@@ -479,7 +481,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
                     if (_card == card && !card.IsVisible) CloseCard();
                 });
             };
-            _ctx.ShowCard(card, ReminderCard.CardWidth, ReminderCard.CardHeight, interactive: true);
+            // Alarms are reminders too: a due one shows over a fullscreen app (without taking its focus).
+            _ctx.ShowCard(card, ReminderCard.CardWidth, ReminderCard.CardHeight, interactive: true, breaksFullscreen: true);
             Glow();
             Chime();
             _cardClose.Stop();

@@ -129,10 +129,10 @@
                                     </Border>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                         <TextBlock FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
-                                            <Run Text="{Binding Title, Mode=OneWay}" />
+                                            <Run Text="{Binding ListTitle, Mode=OneWay}" />
                                         </TextBlock>
                                         <TextBlock FontSize="11.5" Foreground="{StaticResource Fg2}" TextTrimming="CharacterEllipsis">
-                                            <Run Text="{Binding AppName, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Body, Mode=OneWay}" />
+                                            <Run Text="{Binding ListDetail, Mode=OneWay}" />
                                         </TextBlock>
                                     </StackPanel>
                                     <TextBlock Grid.Column="3" Text="{Binding TimeText, Mode=OneWay}" FontSize="11" Foreground="{StaticResource Fg3}"

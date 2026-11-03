@@ -171,7 +171,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 
 ### And quietly, in the background
 - 🎵 **Music:**
-  - say *"play …"* to play it in YouTube Music, or *"… on spotify"*;
+  - say *"play …"* to play it in YouTube Music, or *"… on spotify"*. It picks the original over remixes, lofi, covers and festival edits, unless you ask for one (*"kesariya lofi"*);
   - synced lyrics;
   - scroll over the notch for volume, swipe sideways to skip.
 - 📋 **Clipboard:**
@@ -184,7 +184,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - 🖥️ **System:**
   - a CPU, memory and battery tab;
   - alerts when an app hogs the CPU or the battery drains fast.
-- 🙈 **Fullscreen:** Shammy hides itself for fullscreen games, videos and presentations, and never covers a top taskbar.
+- 🙈 **Fullscreen:** Shammy hides itself for fullscreen games, videos and presentations, and never covers a top taskbar. Only a finished timer or a due alarm or reminder shows over them, without taking focus.
 
 ## Install
 
@@ -234,7 +234,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
   - searches go to Google only when you ask;
   - the notch shows a "Sent to Google" badge whenever an image is uploaded to Lens.
 - **The results browser:** it can only open web pages, so pages can't launch apps or files.
-- **Notifications:** their text is hidden while an app uses your microphone or camera, or captures the screen.
+- **Notifications:** their text is hidden, in pop-ups and in the Notifications tab, while an app uses your microphone or camera, or captures the screen. The tab shows it again when that ends.
 - **Your data:**
   - clipboard history, notes, snippets and the song titles voice remembers are encrypted with Windows DPAPI under your account. Song memory can be cleared or turned off from the tray;
   - unpinned clipboard items are forgotten after 24 hours.
@@ -254,6 +254,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - **Lens** uses the same upload endpoint as lens.google.com's own upload button. It isn't a public API, so it could change.
 - **Brightness keys:** Shammy shows its HUD, but Windows' own brightness pop-up can't be suppressed, because the firmware handles those keys.
 - **Notifications** are read when Windows' notification store changes. Clicking one opens the app, not the exact chat: Windows doesn't let other apps trigger a toast's own buttons.
+- **Exclusive-fullscreen games** (not borderless or windowed) can draw over a timer or alarm that breaks through fullscreen; you still hear its chime.
 - **The Copilot key** replaces Windows' Copilot/Search action while Shammy runs.
 - **First launch** shows the notch about 3 s after start (WPF's one-time theme load).
 
