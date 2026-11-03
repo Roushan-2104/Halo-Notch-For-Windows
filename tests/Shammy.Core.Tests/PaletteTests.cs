@@ -304,6 +304,43 @@ public class WindowsSearchSqlTests
     }
 
     [Theory]
+    [InlineData(@"C:\Users\me\Desktop\devel\.agents\skills\readme.md")]
+    [InlineData(@"C:\Users\me\.config\app\settings.json")]
+    [InlineData(@"C:\Users\me\code\.cache")]
+    [InlineData(@"C:\Users\me\code\.env")]
+    public void Hidden_dot_items_anywhere_on_the_path_are_noise(string path)
+    {
+        Assert.True(FileResults.IsNoise(path, @"C:\Users\me"));
+    }
+
+    [Theory]
+    [InlineData("resume", true, false, false, true)]
+    [InlineData("weather", true, false, false, true)]
+    [InlineData("pa", true, false, false, false)]
+    [InlineData("pa", false, false, false, true)]
+    [InlineData("b", false, false, false, false)]
+    [InlineData("2+2", false, true, false, false)]
+    [InlineData("sound", false, false, true, false)]
+    [InlineData("budget", false, false, false, true)]
+    public void When_files_are_searched(string text, bool command, bool calc, bool exactSetting, bool expected)
+    {
+        Assert.Equal(expected, FileResults.ShouldSearch(text, command, calc, exactSetting));
+    }
+
+    [Fact]
+    public void File_rows_that_arrive_late_stay_under_the_selected_command()
+    {
+        var command = new PaletteItem("cmd:music", PaletteKind.Command, "Resume", "Media", 100) { Confident = true };
+        var web = new PaletteItem("web", PaletteKind.Web, "Search", "", 0);
+        var shown = PaletteRanker.Rank(new[] { command, web });
+        Assert.Equal(0, shown.Selected);
+        var file = new PaletteItem("file:C:\\cv\\Resume.pdf", PaletteKind.File, "Resume.pdf", "cv", 100);
+        var merged = PaletteRanker.Stabilize(shown, PaletteRanker.Rank(new[] { command, web, file }));
+        Assert.Equal(new[] { "cmd:music", "file:C:\\cv\\Resume.pdf", "web" }, merged.Items.Select(i => i.Key));
+        Assert.Equal(0, merged.Selected);
+    }
+
+    [Theory]
     [InlineData(@"C:\Users\me\Documents\Build Week\plan.docx")]
     [InlineData(@"C:\Users\me\Documents\binary notes.txt")]
     [InlineData(@"C:\Users\me\Documents\distribution.xlsx")]

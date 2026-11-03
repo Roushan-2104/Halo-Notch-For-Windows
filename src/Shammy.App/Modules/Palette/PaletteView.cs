@@ -22,6 +22,7 @@ internal sealed class PaletteView : Border
     readonly List<Border> _rowBorders = new();
     readonly List<TextBlock> _hints = new();
     readonly List<TextBlock> _titles = new();
+    readonly List<Border> _iconBoxes = new();
     IReadOnlyList<PaletteRowView> _shown = Array.Empty<PaletteRowView>();
     Point? _lastMouse;
 
@@ -54,6 +55,7 @@ internal sealed class PaletteView : Border
         _rowBorders.Clear();
         _hints.Clear();
         _titles.Clear();
+        _iconBoxes.Clear();
         double height = 0;
         for (int i = 0; i < rows.Count; i++)
         {
@@ -118,6 +120,7 @@ internal sealed class PaletteView : Border
                 },
         };
         grid.Children.Add(icon);
+        _iconBoxes.Add(icon);
 
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
         var title = new TextBlock
@@ -196,6 +199,18 @@ internal sealed class PaletteView : Border
     public void SetTitle(int index, string title)
     {
         if (index >= 0 && index < _titles.Count) _titles[index].Text = title;
+    }
+
+    /// <summary>
+    /// Swaps a row's glyph for the real icon once it has loaded, in place: same 28 px box, so nothing moves,
+    /// and no rebuild (which would interrupt a slider drag).
+    /// </summary>
+    public void SetIcon(int index, ImageSource icon)
+    {
+        if (index < 0 || index >= _iconBoxes.Count) return;
+        var box = _iconBoxes[index];
+        box.Background = Brushes.Transparent;
+        box.Child = new Image { Source = icon, Width = 24, Height = 24, Stretch = Stretch.Uniform };
     }
 
     /// <summary>Forget the pointer position, so the first move after the palette opens isn't read as a hover.</summary>
