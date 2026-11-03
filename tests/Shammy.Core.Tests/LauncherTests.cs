@@ -176,6 +176,107 @@ public class AppMatcherTests
         Assert.Equal("Adobe Photoshop 2025", plan.Match!.Value.App.Name);
     }
 
+    static readonly AppEntry[] Office =
+    {
+        new("WhatsApp", "5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"),
+        new("PowerPoint", "Microsoft.Office.POWERPNT.EXE.15"),
+        new("Excel", "Microsoft.Office.EXCEL.EXE.15"),
+        new("WordPad", "Microsoft.Windows.WordPad"),
+        new("YouTube Music", "music.youtube.com-Default"),
+        new("Visual Studio Code", "Microsoft.VisualStudioCode"),
+        new("Notepad", "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App"),
+        new("Google Chrome", "Chrome"),
+        new("Chrome Remote Desktop", "ChromeRemote"),
+        new("Microsoft Edge", "MSEdge"),
+        new("Spotify", "Spotify"),
+        new("Command Prompt", @"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cmd.exe"),
+    };
+
+    [Theory]
+    [InlineData("open google crome", "Google Chrome")]
+    [InlineData("open crome", "Google Chrome")]
+    [InlineData("open chorme", "Google Chrome")]
+    [InlineData("open spotfy", "Spotify")]
+    [InlineData("launch whatsap", "WhatsApp")]
+    [InlineData("open notpad", "Notepad")]
+    [InlineData("open visul studio code", "Visual Studio Code")]
+    public void Forgives_one_typo_per_word(string text, string app)
+    {
+        var plan = LaunchResolver.Resolve(text, Office);
+        Assert.Equal(app, plan?.Match?.App.Name);
+        Assert.True(plan!.CanLaunch);
+    }
+
+    [Fact]
+    public void Typos_rank_below_real_matches()
+    {
+        int typo = AppMatcher.Score("crome", "Google Chrome");
+        Assert.InRange(typo, AppMatcher.LaunchScore, 49);
+        Assert.True(AppMatcher.Score("chrome", "Google Chrome") > typo);
+        Assert.True(AppMatcher.Score("goo", "Google Chrome") > typo);
+        // Short words are never forgiven, nor a wrong first letter.
+        Assert.Equal(0, AppMatcher.Score("edg", "Microsoft Word"));
+        Assert.True(AppMatcher.Score("word", "Microsoft Edge") < AppMatcher.LaunchScore);
+        Assert.True(AppMatcher.Score("bpotify", "Spotify") < AppMatcher.LaunchScore);
+    }
+
+    [Theory]
+    [InlineData("microsoft word")]
+    [InlineData("google maps")]
+    [InlineData("my thing")]
+    [InlineData("chromebook")]
+    [InlineData("whatever")]
+    public void Typos_do_not_launch_strangers(string query)
+    {
+        Assert.True((AppMatcher.Best(query, Office)?.Score ?? 0) < AppMatcher.LaunchScore, AppMatcher.Best(query, Office)?.ToString());
+    }
+
+    [Theory]
+    [InlineData("open my thing")]
+    [InlineData("open google maps")]
+    [InlineData("open microsoft word")]
+    [InlineData("open word")]
+    [InlineData("start over")]
+    public void Typos_and_nicknames_leave_strangers_alone(string text)
+    {
+        var plan = LaunchResolver.Resolve(text, Office);
+        // "open word" with only WordPad installed may still suggest WordPad, but never Edge or Word-by-nickname.
+        Assert.True(plan is null || plan.Match?.App.Name == "WordPad", plan?.Match?.App.Name);
+    }
+
+    [Theory]
+    [InlineData("open vs code", "Visual Studio Code")]
+    [InlineData("open vscode", "Visual Studio Code")]
+    [InlineData("open code", "Visual Studio Code")]
+    [InlineData("open ppt", "PowerPoint")]
+    [InlineData("open power point", "PowerPoint")]
+    [InlineData("open excel", "Excel")]
+    [InlineData("open cmd", "Command Prompt")]
+    [InlineData("open command prompt", "Command Prompt")]
+    [InlineData("open wa", "WhatsApp")]
+    [InlineData("open yt music", "YouTube Music")]
+    [InlineData("start chrome", "Google Chrome")]
+    [InlineData("open edge", "Microsoft Edge")]
+    public void Resolves_nicknames(string text, string app)
+    {
+        var plan = LaunchResolver.Resolve(text, Office);
+        Assert.Equal(app, plan?.Match?.App.Name);
+        Assert.True(plan!.CanLaunch);
+    }
+
+    [Fact]
+    public void Nicknames_only_name_installed_apps()
+    {
+        // "word" is Word when Word is installed, even with WordPad around; without Word it stays WordPad's prefix.
+        var withWord = Office.Append(new AppEntry("Microsoft Word 2016", "WINWORD")).ToArray();
+        Assert.Equal("Microsoft Word 2016", AppMatcher.Best("word", withWord)?.App.Name);
+        Assert.Equal("WordPad", AppMatcher.Best("word", Office)?.App.Name);
+        Assert.False(AppMatcher.IsNickname("ppt", "Microsoft Edge"));
+        Assert.False(AppMatcher.IsNickname("word", "WordPad"));
+        Assert.True(AppMatcher.IsNickname("VS Code", "Visual Studio Code"));
+        Assert.False(LaunchResolver.Resolve("open ppt", Apps)?.CanLaunch ?? false);
+    }
+
     [Theory]
     [InlineData("open github.com", "https://github.com")]
     [InlineData("Open GitHub.com/Microsoft", "https://github.com/Microsoft")]

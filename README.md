@@ -216,12 +216,13 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 | `play kaahe mose` · `kesariya bajao` · `play tum hi ho on spotify` · `pause` · `next` | Plays in YouTube Music (or Spotify) · media controls. Hindi song names are checked against your listening history and a built-in list |
 | `lyrics` | Synced lyrics for the current song |
 | `timer 25m tea` · `stopwatch` · `pomodoro` · `focus 45m` | A live countdown in the notch |
-| `remind me at 6pm to call mom` · `set an alarm for 7 am` · `kal subah 7 baje ka alarm laga do` · `note: buy milk` | A reminder card when it's due · the Notes tab |
-| `5 ft in cm` · `100 usd to inr` · `5pm ist in pst` · `time in tokyo` | Instant answers |
+| `remind me at 6pm to call mom` · `set an alarm for 7 am` · `kal subah 7 baje ka alarm laga do` · `parso subah 9 baje yaad dilana` · `note: buy milk` | A reminder card when it's due · the Notes tab |
+| `5 ft in cm` · `100 usd to inr` · `1.2 lakh in dollars` · `10 lakh + 5 lakh` · `5pm ist in pst` · `time in tokyo` | Instant answers (the palette shows the converted amount as you type) |
 | `translate good morning to hindi` | Google Translate |
-| `open spotify` · `open github.com` · `open downloads` | App, site or folder launcher |
+| `open spotify` · `open vs code` · `open google crome` · `open github.com` · `open downloads` | App, site or folder launcher (nicknames and one typo per word are fine) |
 | `snippet ;sig Best, Roushan` · `snippets` | Text expansion in any app |
-| `weather` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `pet on` | Weather · ticker · notch pet |
+| `weather` · `weather in mumbai tomorrow` · `pune ka mausam` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `pet on` | Weather · ticker · notch pet |
+| `volume 50` · `brightness to 70%` · `volume up` · `mute` | Sets the level directly |
 | `mute mic` · `cpu` · `clipboard` · `send to phone` · `take a screenshot` | Mic toggle · System tab · Clipboard tab · QR transfer · Screenshot |
 | *"…only from Reddit"*, *"…from the past week"*, *"…no junk"*, *"…from the docs"* | Search filters, spoken |
 

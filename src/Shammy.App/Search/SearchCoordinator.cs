@@ -403,7 +403,10 @@ internal sealed class SearchCoordinator
             Log.Error($"Command {command.GetType().Name} failed", ex);
             result = new Modules.CommandResult("", "That didn't work", ex.Message, IsError: true);
         }
-        if (session == _session) ShowCommandResult(result);
+        if (session != _session) return true;
+        // The command found out it can't answer after all (an unknown place): search as if it never claimed the text.
+        if (result.SearchInstead is { Length: > 0 } search) await SearchWebAsync(search);
+        else ShowCommandResult(result);
         return true;
     }
 

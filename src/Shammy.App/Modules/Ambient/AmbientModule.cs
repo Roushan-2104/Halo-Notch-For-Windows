@@ -10,6 +10,9 @@ internal sealed class AmbientData
     public GeoLocation? Location { get; set; }
     public DateTime? LastRainAlertUtc { get; set; }
 
+    /// <summary>Places asked about by name ("weather in mumbai"), keyed by <see cref="CityWeather.Key"/>: a name never moves.</summary>
+    public Dictionary<string, Place> Places { get; set; } = new();
+
     public bool TickerEnabled { get; set; }
     public List<TickerKind> TickerKinds { get; set; } = new();
     public List<string> StockSymbols { get; set; } = new(StocksProvider.DefaultSymbols);
@@ -51,6 +54,7 @@ internal sealed class AmbientModule : IShammyModule
         ctx.AddTrayToggle("Pet", () => _data.PetEnabled, on => _pet.SetEnabled(on));
 
         ctx.AddPipeCommand("ambient-weather", _ => _weather.RefreshNowBlocking());
+        ctx.AddPipeCommand("ambient-weather-city", arg => _weather.CityBlocking(arg));
         ctx.AddPipeCommand("ambient-ticker-preview", arg => _ticker.PreviewBlocking(arg));
         ctx.AddPipeCommand("ambient-pet", arg => _pet.Force(arg));
         ctx.AddPipeCommand("ambient-state", _ =>
@@ -67,15 +71,23 @@ internal sealed class AmbientModule : IShammyModule
     }
 }
 
-/// <summary>"weather", "ticker cricket", "pet on"... Parsing lives in Shammy.Core so it is unit tested.</summary>
-internal sealed class AmbientCommand(WeatherFeature weather, TickerFeature ticker, PetFeature pet) : ITextCommand
+/// <summary>"weather", "weather in mumbai", "ticker cricket", "pet on"... Parsing lives in Shammy.Core so it is unit tested.</summary>
+internal sealed class AmbientCommand(WeatherFeature weather, TickerFeature ticker, PetFeature pet) : ITextCommand, ICommandPreview
 {
     public bool CanHandle(string text) =>
-        AmbientCommands.ParseWeather(text) is not null || AmbientCommands.ParseTicker(text) is not null || AmbientCommands.ParsePet(text) is not null;
+        AmbientCommands.ParseWeather(text) is not null || CityWeather.Parse(text) is not null
+        || AmbientCommands.ParseTicker(text) is not null || AmbientCommands.ParsePet(text) is not null;
+
+    public CommandPreview? Preview(string text)
+    {
+        if (AmbientCommands.ParseWeather(text) is not null) return null;
+        return CityWeather.Parse(text) is { } city ? weather.PreviewCity(city) : null;
+    }
 
     public async Task<CommandResult> RunAsync(string text)
     {
         if (AmbientCommands.ParseWeather(text) is { } query) return await weather.RunCommandAsync(query);
+        if (CityWeather.Parse(text) is { } city) return await weather.RunCityAsync(city, text);
         if (AmbientCommands.ParseTicker(text) is { } cmd) return ticker.Run(cmd);
         if (AmbientCommands.ParsePet(text) is { } on)
         {

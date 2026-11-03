@@ -50,7 +50,16 @@ internal sealed class ConvertCommand : ITextCommand, ICommandPreview
             case UnitConversion units:
                 return new CommandPreview(Glyphs.Measure, units.Title, units.Detail);
             case CurrencyQuery money:
-                return new CommandPreview(Glyphs.Money, $"Convert {Currency.Format(money.From.Amount, money.From.Code)} to {money.To}", "Live exchange rate");
+                // The answer itself from the rates already cached (fetched at most an hour or two ago); Enter refreshes them.
+                var from = Currency.Format(money.From.Amount, money.From.Code);
+                if (_rates.Cached() is { } table
+                    && Currency.TryConvert(money.From.Amount, money.From.Code, money.To, table.Rates, out var value)
+                    && Currency.TryConvert(1, money.From.Code, money.To, table.Rates, out var rate))
+                    return new CommandPreview(Glyphs.Money, $"{Currency.Format(value, money.To)} · {from} → {money.To}",
+                        $"1 {money.From.Code} = {Currency.Format(rate, money.To)}{(table.Date.Length > 0 ? $" · rates of {table.Date}" : "")}");
+                // None yet: fetch in the background (once; ExchangeRates dedups and backs off) so the next keystroke has them.
+                _ = _rates.GetAsync();
+                return new CommandPreview(Glyphs.Money, $"Convert {from} to {money.To}", "Live exchange rate");
             case TranslateRequest translate:
                 return new CommandPreview(Glyphs.Translate, $"Translate to {translate.Language}", translate.Text);
             default:

@@ -48,8 +48,12 @@ internal interface ICommandPreview
 
 internal sealed record CommandPreview(string Glyph, string Title, string? Detail = null);
 
-/// <summary>What the notch shows briefly after a command ran.</summary>
-internal sealed record CommandResult(string Glyph, string Title, string? Detail = null, bool IsError = false);
+/// <summary>
+/// What the notch shows briefly after a command ran. With <see cref="SearchInstead"/> set, nothing is shown and
+/// that text is searched on the web instead: for a command that only learns while running that it can't answer
+/// ("weather in" a place the geocoder doesn't know).
+/// </summary>
+internal sealed record CommandResult(string Glyph, string Title, string? Detail = null, bool IsError = false, string? SearchInstead = null);
 
 /// <summary>
 /// Content a module draws in the compact notch's two ears. Put an instance in

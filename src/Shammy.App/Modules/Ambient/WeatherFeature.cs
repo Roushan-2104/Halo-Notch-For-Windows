@@ -189,6 +189,124 @@ internal sealed class WeatherFeature : IDisposable
             $"{City} \u00B7 feels {WeatherText.Temp(r.FeelsLike)} \u00B7 H {WeatherText.Temp(r.TodayHigh)} L {WeatherText.Temp(r.TodayLow)}{stale}");
     }
 
+    // ---- Weather for a named place ("weather in mumbai") ------------------------------------------
+
+    static readonly TimeSpan CityReportFresh = TimeSpan.FromMinutes(30);
+    const int MaxPlaces = 60;
+
+    /// <summary>Forecasts for named places this session (by place key); the user's own city stays in <see cref="_report"/>.</summary>
+    readonly Dictionary<string, (WeatherReport Report, DateTime FetchedUtc)> _cityReports = new();
+
+    /// <summary>Names the geocoder didn't know this session, so a retry goes straight to the web.</summary>
+    readonly HashSet<string> _unknownPlaces = new();
+
+    /// <summary>Cheap: the answer itself when a fresh forecast for that place is cached, otherwise what Enter will do.</summary>
+    public CommandPreview? PreviewCity(CityWeatherQuery q)
+    {
+        var key = CityWeather.Key(q.City);
+        if (_unknownPlaces.Contains(key)) return null;
+        var place = _data.Places.GetValueOrDefault(key);
+        var label = place?.Label ?? q.City;
+        if (place is not null && _cityReports.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.FetchedUtc < CityReportFresh)
+        {
+            var answer = CityAnswer(cached.Report, place, q.When, DateTime.MinValue);
+            return new CommandPreview(answer.Glyph, $"{answer.Title} · {(q.When == WeatherQuery.Tomorrow ? "tomorrow" : place.Name)}", answer.Detail);
+        }
+        return new CommandPreview(WeatherCodes.CloudGlyph, q.When == WeatherQuery.Tomorrow ? $"Tomorrow’s weather in {label}" : $"Weather in {label}", "Forecast from Open-Meteo");
+    }
+
+    public async Task<CommandResult> RunCityAsync(CityWeatherQuery q, string original)
+    {
+        var key = CityWeather.Key(q.City);
+        var search = original.Trim();
+        if (_unknownPlaces.Contains(key)) return new CommandResult("", "", SearchInstead: search);
+        if (!AmbientNet.IsOnline) return new CommandResult(WeatherCodes.CloudGlyph, "Weather unavailable", "You're offline", IsError: true);
+
+        var place = _data.Places.GetValueOrDefault(key);
+        if (place is null)
+        {
+            var name = CityWeather.LookupName(q.City);
+            var lookup = await Task.Run(() => GeocodeAsync(_ctx.Http, name));
+            if (lookup.Error is not null)
+            {
+                _ctx.Warn($"geocoding failed: {lookup.Error}");
+                return new CommandResult(WeatherCodes.CloudGlyph, "Couldn't reach the weather service", "Check your connection and try again", IsError: true);
+            }
+            if (lookup.Place is null)
+            {
+                // Not a place after all ("weather in my dreams"): the web, exactly as before this command existed.
+                _unknownPlaces.Add(key);
+                return new CommandResult("", "", SearchInstead: search);
+            }
+            place = lookup.Place;
+            if (_data.Places.Count >= MaxPlaces) _data.Places.Remove(_data.Places.Keys.First());
+            _data.Places[key] = place;
+            _save();
+        }
+
+        if (!_cityReports.TryGetValue(key, out var cached) || DateTime.UtcNow - cached.FetchedUtc >= CityReportFresh)
+        {
+            var at = place;
+            var fetched = await Task.Run(() => ForecastAsync(_ctx.Http, at.Latitude, at.Longitude));
+            if (fetched is null)
+                return new CommandResult(WeatherCodes.CloudGlyph, $"Couldn't get the weather for {place.Name}", "The forecast service didn't answer; try again soon", IsError: true);
+            cached = (fetched, DateTime.UtcNow);
+            _cityReports[key] = cached;
+        }
+        return CityAnswer(cached.Report, place, q.When, cached.FetchedUtc);
+    }
+
+    static CommandResult CityAnswer(WeatherReport r, Place place, WeatherQuery when, DateTime fetchedUtc)
+    {
+        if (when == WeatherQuery.Tomorrow && WeatherText.Tomorrow(r) is { } tomorrow)
+            return new CommandResult(WeatherCodes.Glyph(r.TomorrowCode ?? r.Code), "Tomorrow in " + place.Label, tomorrow);
+        return new CommandResult(WeatherCodes.Glyph(r.Code, r.IsDay), $"{WeatherText.Temp(r.Temperature)} {WeatherCodes.Describe(r.Code)}",
+            $"{place.Label} · feels {WeatherText.Temp(r.FeelsLike)} · H {WeatherText.Temp(r.TodayHigh)} L {WeatherText.Temp(r.TodayLow)}");
+    }
+
+    sealed record GeocodeResult(Place? Place, string? Error);
+
+    static async Task<GeocodeResult> GeocodeAsync(HttpClient http, string name)
+    {
+        try
+        {
+            var json = await AmbientNet.GetAsync(http, OpenMeteoGeocoding.SearchUrl(name)).ConfigureAwait(false);
+            // An answer without "results" means the name isn't a place; anything unparsable is a failure.
+            if (!json.TrimStart().StartsWith('{')) return new GeocodeResult(null, "unexpected response");
+            if (json.Contains("\"error\"", StringComparison.Ordinal) && !json.Contains("\"results\"", StringComparison.Ordinal))
+                return new GeocodeResult(null, "service error");
+            return new GeocodeResult(OpenMeteoGeocoding.Parse(json), null);
+        }
+        catch (Exception ex)
+        {
+            return new GeocodeResult(null, ex.Message);
+        }
+    }
+
+    static async Task<WeatherReport?> ForecastAsync(HttpClient http, double lat, double lon)
+    {
+        try
+        {
+            return OpenMeteo.Parse(await AmbientNet.GetAsync(http, OpenMeteo.ForecastUrl(lat, lon)).ConfigureAwait(false));
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>For the test pipe: "ambient-weather-city weather in mumbai tomorrow" → the answer, or what would happen.</summary>
+    public string CityBlocking(string text)
+    {
+        if (CityWeather.Parse(text) is not { } q) return "not a city weather phrase";
+        // The pipe runs on the UI thread, so the lookup runs on a worker (it touches no UI).
+        var result = AmbientNet.Block(() => RunCityAsync(q, text), TimeSpan.FromSeconds(30),
+            new CommandResult("", "timed out", IsError: true));
+        return result.SearchInstead is { } s
+            ? $"city={q.City} when={q.When} -> web search \"{s}\""
+            : $"city={q.City} when={q.When} -> {result.Title} | {result.Detail}{(result.IsError ? " (error)" : "")}";
+    }
+
     /// <summary>OpenTab waits for the command's confirmation card and holds the tab until it's been looked at.</summary>
     void OpenTabSoon() => _ctx.OpenTab(_panel);
 

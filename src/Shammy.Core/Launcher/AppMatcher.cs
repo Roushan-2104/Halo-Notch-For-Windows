@@ -9,7 +9,8 @@ public readonly record struct AppMatch(AppEntry App, int Score);
 
 /// <summary>
 /// Spotlight-style fuzzy matching of a typed or spoken app name. Scores are bands so the kind of match
-/// decides the order: exact > prefix > word initials ("vsc") > word start > substring > subsequence.
+/// decides the order: exact > nickname ("vs code") > prefix > word initials ("vsc") > word start > substring >
+/// one slip per word ("google crome") > subsequence.
 /// </summary>
 public static class AppMatcher
 {
@@ -22,10 +23,59 @@ public static class AppMatcher
     /// <summary>The kind of match "start X" needs.</summary>
     public const int WordStartScore = 70;
 
-    /// <summary>Also matches the program's file name, so "cmd" finds Command Prompt (…\cmd.exe).</summary>
+    /// <summary>A nickname ("ppt", "vs code") of an installed app: above a prefix, so "word" is Word, not WordPad.</summary>
+    public const int AliasScore = 92;
+
+    /// <summary>One slip per word ("google crome"): enough to launch, below every exact kind of match.</summary>
+    const int TypoScore = 47, PartialTypoScore = 44;
+
+    /// <summary>
+    /// What people call apps, mapped to the (normalized) Start menu names. A nickname only ever picks an app that
+    /// is installed under one of these names, or one of them plus an edition ("Microsoft Word 2016").
+    /// </summary>
+    static readonly Dictionary<string, string[]> Nicknames = BuildNicknames();
+
+    static Dictionary<string, string[]> BuildNicknames()
+    {
+        var map = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        void Add(string[] names, params string[] nicknames)
+        {
+            foreach (var n in nicknames) map[n.Replace(" ", "")] = names;
+        }
+        Add(new[] { "visual studio code" }, "vs code", "vscode", "code");
+        Add(new[] { "powerpoint", "microsoft powerpoint" }, "ppt", "powerpoint", "power point", "ms powerpoint");
+        Add(new[] { "excel", "microsoft excel" }, "excel", "ms excel");
+        Add(new[] { "word", "microsoft word" }, "word", "ms word", "microsoft word");
+        Add(new[] { "outlook", "microsoft outlook", "outlook new", "outlook classic" }, "outlook", "ms outlook");
+        Add(new[] { "onenote", "microsoft onenote" }, "onenote", "one note");
+        Add(new[] { "command prompt" }, "cmd", "command prompt", "command line");
+        Add(new[] { "whatsapp", "whatsapp beta" }, "wa", "whatsapp", "whats app");
+        Add(new[] { "youtube music" }, "yt music", "ytm", "youtube music");
+        Add(new[] { "youtube" }, "yt", "youtube");
+        Add(new[] { "google chrome" }, "chrome", "google chrome");
+        Add(new[] { "microsoft edge" }, "edge", "ms edge");
+        Add(new[] { "firefox", "mozilla firefox" }, "ff", "firefox");
+        Add(new[] { "microsoft teams", "teams" }, "teams", "ms teams");
+        Add(new[] { "notepad++" }, "npp", "notepad plus plus");
+        Add(new[] { "task manager" }, "taskmgr", "task manager");
+        Add(new[] { "file explorer" }, "explorer", "windows explorer");
+        Add(new[] { "instagram" }, "insta");
+        return map;
+    }
+
+    /// <summary>True when <paramref name="query"/> is a nickname of this app ("vs code" for "Visual Studio Code").</summary>
+    public static bool IsNickname(string query, string appName)
+    {
+        if (!Nicknames.TryGetValue(Normalize(query).Replace(" ", ""), out var names)) return false;
+        var n = Normalize(appName);
+        return names.Any(t => n == t || n.StartsWith(t + " ", StringComparison.Ordinal));
+    }
+
+    /// <summary>Also nicknames, and the program's file name, so "cmd" finds Command Prompt (…\cmd.exe).</summary>
     public static int Score(string query, AppEntry app)
     {
         int score = Score(query, app.Name);
+        if (score < AliasScore && IsNickname(query, app.Name)) score = AliasScore;
         if (score < 85 && app.Target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
             var exe = Path.GetFileNameWithoutExtension(app.Target);
@@ -61,14 +111,68 @@ public static class AppMatcher
         if (q.Length >= 3 && n.Contains(q, StringComparison.Ordinal)) return 50;
         if (!oneWord && OneWordMisheard(q.Split(' '), n.Split(' ')) is int misheard) return misheard;
 
+        int slips = WithSlips(q.Split(' '), n.Split(' '));
+
         // Subsequences are only trusted for one dense word ("spotfy"); multi-word phrases like
         // "source licenses" would otherwise scatter across long app names.
         if (oneWord && qc.Length >= 3)
         {
             double density = SubsequenceDensity(qc, n);
-            if (density >= 0.4) return (int)(20 + 30 * density);
+            if (density >= 0.4) return Math.Max(slips, (int)(20 + 30 * density));
         }
-        return 0;
+        return slips;
+    }
+
+    /// <summary>
+    /// Every query word, in order, is a name word: exactly, or with one slip in a word of 4+ letters (two in 8+)
+    /// that keeps its first letter ("crome" for Chrome, "notpad", "whatsap"). The last word may also start a name
+    /// word. Short words must be exact, so "microsoft word" never becomes Edge nor "google maps" Chrome.
+    /// </summary>
+    static int WithSlips(string[] query, string[] name)
+    {
+        if (query.Length > name.Length) return 0;
+        int j = 0;
+        bool slipped = false;
+        for (int i = 0; i < query.Length; i++)
+        {
+            var w = query[i];
+            bool last = i == query.Length - 1, found = false;
+            while (j < name.Length && !found)
+            {
+                var candidate = name[j++];
+                if (candidate == w || (last && w.Length >= 2 && candidate.StartsWith(w, StringComparison.Ordinal))) found = true;
+                else if (IsSlip(w, candidate)) found = slipped = true;
+            }
+            if (!found) return 0;
+        }
+        if (!slipped) return 0;
+        return query.Length == name.Length ? TypoScore : PartialTypoScore;
+    }
+
+    static bool IsSlip(string typed, string word)
+    {
+        if (typed.Length < 4 || word.Length < 4 || typed[0] != word[0]) return false;
+        int allowed = Math.Min(typed.Length, word.Length) >= 8 ? 2 : 1;
+        if (Math.Abs(typed.Length - word.Length) > allowed) return false;
+        int d = Distance(typed, word);
+        return d >= 1 && d <= allowed;
+    }
+
+    /// <summary>Edits between two words, where swapping two neighbouring letters ("chorme") counts as one.</summary>
+    static int Distance(string a, string b)
+    {
+        var d = new int[a.Length + 1, b.Length + 1];
+        for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+        for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+        for (int i = 1; i <= a.Length; i++)
+        {
+            for (int j = 1; j <= b.Length; j++)
+            {
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) d[i, j] = Math.Min(d[i, j], d[i - 2, j - 2] + 1);
+            }
+        }
+        return d[a.Length, b.Length];
     }
 
     /// <summary>Best matches first; equal scores prefer the shorter (more specific) name.</summary>
