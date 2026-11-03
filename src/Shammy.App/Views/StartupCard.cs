@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Shammy.Modules.Productivity;
@@ -8,7 +9,8 @@ namespace Shammy.Views;
 /// <summary>The one-time question after installing: should Shammy start with Windows? Yes / Not now.</summary>
 internal sealed class StartupCard : Grid
 {
-    public const double CardWidth = 460, CardHeight = 96;
+    // A little taller than a notification so the reassurance line fits under the two-line question.
+    public const double CardWidth = 460, CardHeight = 112;
 
     public StartupCard(Action yes, Action no)
     {
@@ -16,55 +18,19 @@ internal sealed class StartupCard : Grid
         Height = CardHeight;
         Background = Brushes.Transparent;
 
-        var grid = new Grid { Margin = new Thickness(16, 12, 14, 12) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Children.Add(grid);
+        var title = WallParts.Text("Start Shammy when Windows starts?", 14, FontWeights.Bold);
+        title.TextWrapping = TextWrapping.Wrap;
+        var line = WallParts.Text("You can change this any time in the tray menu", 11.5, FontWeights.Normal, "WallText2");
+        line.TextWrapping = TextWrapping.Wrap;
+        AutomationProperties.SetName(this, "Welcome to Shammy. " + title.Text);
 
-        var icon = new TextBlock
-        {
-            Text = "", // power
-            FontFamily = (FontFamily)Application.Current.Resources["IconFont"],
-            FontSize = 18,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
-        grid.Children.Add(new Border
-        {
-            Width = 44,
-            Height = 44,
-            CornerRadius = new CornerRadius(11),
-            Background = Res("Fill1"),
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = icon,
-        });
-
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = "Welcome to Shammy", FontSize = 11.5, Foreground = Res("Fg2") });
-        text.Children.Add(new TextBlock
-        {
-            Text = "Start Shammy when Windows starts?",
-            FontSize = 13.5,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Res("Fg"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 1, 0, 0),
-        });
-        text.Children.Add(new TextBlock { Text = "You can change this any time in the tray menu", FontSize = 11, Foreground = Res("Fg3"), Margin = new Thickness(0, 2, 0, 0) });
-        SetColumn(text, 2);
-        grid.Children.Add(text);
-
-        var buttons = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-        buttons.Children.Add(ReminderCard.Pill("Yes", primary: true, yes));
-        var later = ReminderCard.Pill("Not now", primary: false, no);
-        later.Margin = new Thickness(0, 6, 0, 0);
-        buttons.Children.Add(later);
-        SetColumn(buttons, 3);
-        grid.Children.Add(buttons);
+        Children.Add(ReminderCard.Layout(
+            WallParts.ArtTile(WallParts.Glyph("", 20), 56), // power
+            "Welcome to Shammy",
+            meta: null,
+            title,
+            line,
+            WallParts.Primary("Yes", yes, 30),
+            WallParts.Quiet("Not now", no, 30)));
     }
-
-    static Brush Res(string key) => (Brush)Application.Current.Resources[key];
 }

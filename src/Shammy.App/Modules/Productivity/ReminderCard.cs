@@ -1,14 +1,17 @@
-using System.Globalization;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using Shammy.Core.Connect;
 using Shammy.Infrastructure;
+using Shammy.Views;
 
 namespace Shammy.Modules.Productivity;
 
-/// <summary>A due reminder as it drops out of the notch, laid out like a notification: bell, text, Done and Snooze.</summary>
+/// <summary>
+/// A due reminder as it drops out of the notch, laid out like a notification in the Focus Wall look: a bell on a tile,
+/// a tracked "REMINDER" label with the due time, the reminder in bold, Done (the one accent control) and Snooze.
+/// </summary>
 internal sealed class ReminderCard : Grid
 {
     public const double CardWidth = 460, CardHeight = 96;
@@ -20,115 +23,75 @@ internal sealed class ReminderCard : Grid
         Height = CardHeight;
         Background = Brushes.Transparent;
 
-        var grid = new Grid { Margin = new Thickness(16, 12, 14, 12) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Children.Add(grid);
-
-        var bell = new TextBlock
-        {
-            Text = "\uEA8F",
-            FontFamily = (FontFamily)Application.Current.Resources["IconFont"],
-            FontSize = 18,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        bell.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
-        grid.Children.Add(new Border
-        {
-            Width = 44,
-            Height = 44,
-            CornerRadius = new CornerRadius(11),
-            Background = Res("Fill1"),
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = bell,
-        });
-
-        var header = new Grid();
-        header.Children.Add(new TextBlock { Text = "Reminder", FontSize = 11.5, Foreground = Res("Fg2") });
-        header.Children.Add(new TextBlock
-        {
-            Text = Shammy.Core.Cards.ClockFormat.Time(reminder.Due, Kit.CardKit.H24),
-            FontSize = 11.5,
-            Foreground = Res("Fg3"),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 0, 4, 0),
-        });
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(header);
         // While the screen is shared the card only says "Reminder"; it follows a share starting or ending.
-        var title = new TextBlock
+        var title = WallParts.Text(PrivacyText.Reminder(reminder.Title, PrivacyState.Presenting), 14, FontWeights.Bold);
+        title.TextWrapping = TextWrapping.Wrap;
+        title.MaxHeight = 38;
+        Action<bool> privacy = presenting => Dispatcher.BeginInvoke(() =>
         {
-            Text = PrivacyText.Reminder(reminder.Title, PrivacyState.Presenting),
-            FontSize = 13.5,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Res("Fg"),
-            TextWrapping = TextWrapping.Wrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxHeight = 38,
-            Margin = new Thickness(0, 1, 0, 0),
-        };
-        text.Children.Add(title);
-        Action<bool> privacy = presenting => Dispatcher.BeginInvoke(() => title.Text = PrivacyText.Reminder(reminder.Title, presenting));
+            title.Text = PrivacyText.Reminder(reminder.Title, presenting);
+            AutomationProperties.SetName(this, "Reminder: " + title.Text);
+        });
         Loaded += (_, _) => PrivacyState.Changed += privacy;
         Unloaded += (_, _) => PrivacyState.Changed -= privacy;
-        SetColumn(text, 2);
-        grid.Children.Add(text);
+        AutomationProperties.SetName(this, "Reminder: " + title.Text);
 
-        var buttons = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
-        buttons.Children.Add(Pill("Done", primary: true, done));
-        var later = Pill($"Snooze {snoozeMinutes} min", primary: false, snooze);
-        later.Margin = new Thickness(0, 6, 0, 0);
-        buttons.Children.Add(later);
-        SetColumn(buttons, 3);
-        grid.Children.Add(buttons);
+        Children.Add(Layout(
+            WallParts.ArtTile(WallParts.Glyph("", 20), 56),
+            "Reminder",
+            Shammy.Core.Cards.ClockFormat.Time(reminder.Due, Kit.CardKit.H24),
+            title,
+            line: null,
+            WallParts.Primary("Done", done, 30),
+            WallParts.Quiet($"Snooze {snoozeMinutes} min", snooze, 30)));
     }
 
     public ReminderItem Reminder { get; }
 
-    /// <summary>A rounded text button; Borders rather than Buttons so the card never takes keyboard focus for them.</summary>
-    internal static Border Pill(string label, bool primary, Action onClick)
+    /// <summary>
+    /// The pop-up card layout shared with <see cref="Views.StartupCard"/>: artwork tile, a tracked label with an optional
+    /// time on its right, a bold title, an optional grey line, and a primary button over a quiet one.
+    /// </summary>
+    internal static Grid Layout(UIElement art, string label, string? meta, TextBlock title, TextBlock? line, Button primary, Button secondary)
     {
-        var text = new TextBlock
-        {
-            Text = label,
-            FontSize = 12,
-            FontWeight = FontWeights.SemiBold,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var pill = new Border
-        {
-            Height = 26,
-            MinWidth = 96,
-            CornerRadius = new CornerRadius(13),
-            Padding = new Thickness(12, 0, 12, 0),
-            Cursor = Cursors.Hand,
-            Child = text,
-        };
-        if (primary)
-        {
-            pill.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
-            text.SetResourceReference(TextBlock.ForegroundProperty, "OnAccentBrush");
-            pill.MouseEnter += (_, _) => pill.Opacity = 0.85;
-            pill.MouseLeave += (_, _) => pill.Opacity = 1;
-        }
-        else
-        {
-            pill.Background = Res("Fill1");
-            text.Foreground = Res("Fg");
-            pill.MouseEnter += (_, _) => pill.Background = Res("Fill2");
-            pill.MouseLeave += (_, _) => pill.Background = Res("Fill1");
-        }
-        pill.MouseLeftButtonUp += (_, e) =>
-        {
-            e.Handled = true;
-            onClick();
-        };
-        return pill;
-    }
+        var grid = new Grid { Margin = new Thickness(16, 12, 16, 12) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.Children.Add(art);
 
-    static Brush Res(string key) => (Brush)Application.Current.Resources[key];
+        var header = new DockPanel { LastChildFill = true };
+        if (meta is not null)
+        {
+            var time = WallParts.Text(meta, 11.5, FontWeights.Normal, "WallText2");
+            time.Margin = new Thickness(8, 0, 0, 0);
+            DockPanel.SetDock(time, Dock.Right);
+            header.Children.Add(time);
+        }
+        var kicker = WallParts.Label(label);
+        kicker.HorizontalAlignment = HorizontalAlignment.Left;
+        header.Children.Add(kicker);
+
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(header);
+        title.Margin = new Thickness(0, 3, 0, 0);
+        text.Children.Add(title);
+        if (line is not null)
+        {
+            line.Margin = new Thickness(0, 2, 0, 0);
+            text.Children.Add(line);
+        }
+        SetColumn(text, 2);
+        grid.Children.Add(text);
+
+        var buttons = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
+        primary.MinWidth = secondary.MinWidth = 104;
+        buttons.Children.Add(primary);
+        secondary.Margin = new Thickness(0, 6, 0, 0);
+        buttons.Children.Add(secondary);
+        SetColumn(buttons, 3);
+        grid.Children.Add(buttons);
+        return grid;
+    }
 }

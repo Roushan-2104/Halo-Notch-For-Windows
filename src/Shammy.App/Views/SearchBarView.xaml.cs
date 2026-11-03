@@ -5,7 +5,10 @@ using Shammy.Motion;
 
 namespace Shammy.Views;
 
-/// <summary>The pill shown while listening, while circling, while searching, and for typed queries.</summary>
+/// <summary>
+/// The pill shown while listening, while circling, while searching, and for typed queries. Focus Wall: a quiet
+/// tile orb, a bold title over a grey line, and no accent of its own (the edge light carries the state's colour).
+/// </summary>
 public partial class SearchBarView : UserControl
 {
     readonly SpringValue _pulse = new(0.8, 0.002);
@@ -70,7 +73,8 @@ public partial class SearchBarView : UserControl
         Primary.Text = primary;
         Secondary.Text = secondary;
         Wave.Source = i => micLevel() * (0.55f + 0.45f * (float)Math.Abs(Math.Sin(Environment.TickCount64 / 90.0 + i * 1.3)));
-        Wave.Color = ((System.Windows.Media.SolidColorBrush)Application.Current.Resources["AccentBrush"]).Color;
+        // The Wall keeps colour for artwork and meaning; the mic wave is a white meter, like the eq bars.
+        Wave.Color = ((System.Windows.Media.SolidColorBrush)Application.Current.Resources["WallText"]).Color;
         Wave.Active = true;
         Wave.Visibility = Visibility.Visible;
         UpdateFrames();
@@ -133,7 +137,7 @@ public partial class SearchBarView : UserControl
         OrbCore.Visibility = spinning ? Visibility.Collapsed : Visibility.Visible;
         OrbPulse.Visibility = spinning ? Visibility.Collapsed : Visibility.Visible;
         Spin.Visibility = spinning ? Visibility.Visible : Visibility.Collapsed;
-        Spin.Stroke = (System.Windows.Media.Brush)Application.Current.Resources["AccentBrush"];
+        Spin.Stroke = (System.Windows.Media.Brush)Application.Current.Resources["WallText"];
         TextStack.Visibility = typing ? Visibility.Collapsed : Visibility.Visible;
         Secondary.Visibility = Visibility.Visible;
         InputHost.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;

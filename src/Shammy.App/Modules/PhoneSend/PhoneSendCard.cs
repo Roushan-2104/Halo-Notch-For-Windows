@@ -4,12 +4,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Shammy.Core.PhoneSend;
 using Shammy.Motion;
+using Shammy.Views;
 
 namespace Shammy.Modules.PhoneSend;
 
 /// <summary>
-/// The transfer card: QR code on the left; file, instructions and live progress on the right.
-/// Built in code like the compact views so the module stays one folder of .cs files.
+/// The transfer card: QR code on the left (the artwork; dark-on-white so every scanner reads it); a tracked label,
+/// the file in bold, instructions and then live progress on the right. Built in code like the compact views so the
+/// module stays one folder of .cs files.
 /// </summary>
 internal sealed class PhoneSendCard : Grid
 {
@@ -44,37 +46,32 @@ internal sealed class PhoneSendCard : Grid
             right.RowDefinitions.Add(new RowDefinition { Height = i == 3 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
         Children.Add(right);
 
-        // Header: what this is, plus close.
-        var header = Row(Glyph("", 12, Res("Fg3")), Text("Send to phone", 11.5, Res("Fg3"), margin: new Thickness(6, 0, 0, 0)));
-        header.VerticalAlignment = VerticalAlignment.Center;
+        // Header: a tracked label, plus close.
+        var header = WallParts.Label("Send to phone");
+        header.HorizontalAlignment = HorizontalAlignment.Left;
+        header.Margin = new Thickness(0, 2, 34, 0);
         right.Children.Add(header);
-        var close = new Button
-        {
-            Style = (Style)Application.Current.Resources["IconButton"],
-            Content = "",
-            FontSize = 10,
-            Width = 26,
-            Height = 26,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, -5, -8, 0),
-            ToolTip = "Stop sharing",
-        };
-        close.Click += (_, _) => CloseRequested?.Invoke();
+        var close = WallParts.Icon("", "Stop sharing", () => CloseRequested?.Invoke(), 26, 10);
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.VerticalAlignment = VerticalAlignment.Top;
+        close.Margin = new Thickness(0, -5, -8, 0);
         right.Children.Add(close);
 
-        var name = Text(fileName, 15.5, Res("Fg"), FontWeights.SemiBold, new Thickness(0, 10, 0, 0));
+        var name = WallParts.Text(fileName, 18, FontWeights.Bold);
         name.TextWrapping = TextWrapping.Wrap;
-        name.MaxHeight = 42;
+        name.MaxHeight = 48;
+        name.Margin = new Thickness(0, 10, 0, 0);
         name.ToolTip = fileName;
         SetRow(name, 1);
         right.Children.Add(name);
 
-        var sizeText = Text(ByteSize.Format(size), 12.5, Res("Fg2"), margin: new Thickness(0, 2, 0, 0));
+        var sizeText = WallParts.Text(ByteSize.Format(size), 12.5, FontWeights.Normal, "WallText2");
+        sizeText.Margin = new Thickness(0, 3, 0, 0);
         SetRow(sizeText, 2);
         right.Children.Add(sizeText);
 
-        _received = Text("", 11.5, Res("Green"), margin: new Thickness(0, 0, 0, 8));
+        _received = WallParts.Text("", 12, FontWeights.SemiBold);
+        _received.Margin = new Thickness(0, 0, 0, 8);
         _received.Visibility = Visibility.Collapsed;
         SetRow(_received, 4);
         right.Children.Add(_received);
@@ -84,34 +81,45 @@ internal sealed class PhoneSendCard : Grid
         SetRow(status, 5);
         right.Children.Add(status);
 
-        _hint = Text("Scan with your phone on the same Wi-Fi", 12, Res("Fg2"));
+        _hint = WallParts.Text("Scan with your phone on the same Wi-Fi", 12, FontWeights.Normal, "WallText2");
         _hint.TextWrapping = TextWrapping.Wrap;
         // The token is the only thing that lets someone in, so the card shows just the address;
         // the QR code carries the full link.
-        _url = Text(MaskToken(url), 10.5, Res("Fg3"), margin: new Thickness(0, 4, 0, 0));
+        _url = WallParts.Text(MaskToken(url), 11, FontWeights.Normal, "WallText2");
+        _url.Margin = new Thickness(0, 4, 0, 0);
         _waiting = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
         _waiting.Children.Add(_hint);
         _waiting.Children.Add(_url);
         status.Children.Add(_waiting);
 
-        _fill = new Border { Height = 5, Width = 0, CornerRadius = new CornerRadius(2.5), HorizontalAlignment = HorizontalAlignment.Left };
-        _fill.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
-        _track = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Res("Fill2"), Child = _fill };
-        _progressText = Text("", 11.5, Res("Fg2"));
-        _percentText = Text("", 11.5, Res("Fg"), FontWeights.SemiBold);
+        // Progress is a white meter on a dark track; the percentage is the big number.
+        _fill = new Border { Height = 4, Width = 0, CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left, Background = WallParts.Res("WallText") };
+        _track = new Border { Height = 4, CornerRadius = new CornerRadius(2), Background = WallParts.Res("WallTrack"), Child = _fill };
+        _progressText = WallParts.Text("", 11.5, FontWeights.Normal, "WallText2");
+        _percentText = WallParts.Text("", 22, FontWeights.ExtraBold, tabular: true);
         _percentText.HorizontalAlignment = HorizontalAlignment.Right;
+        _percentText.VerticalAlignment = VerticalAlignment.Bottom;
+        var sending = WallParts.Label("Sending");
+        sending.HorizontalAlignment = HorizontalAlignment.Left;
+        sending.VerticalAlignment = VerticalAlignment.Bottom;
+        sending.Margin = new Thickness(0, 0, 0, 3);
+        var top = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        top.Children.Add(sending);
+        top.Children.Add(_percentText);
         var labels = new Grid { Margin = new Thickness(0, 7, 0, 0) };
         labels.Children.Add(_progressText);
-        labels.Children.Add(_percentText);
         _progress = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 2) };
-        _progress.Children.Add(Text("Sending…", 12, Res("Fg"), FontWeights.SemiBold, new Thickness(0, 0, 0, 8)));
+        _progress.Children.Add(top);
         _progress.Children.Add(_track);
         _progress.Children.Add(labels);
         status.Children.Add(_progress);
 
-        _sent = Row(Glyph("", 18, Res("Green")), Text("Sent", 15, Res("Green"), FontWeights.SemiBold, new Thickness(8, 0, 0, 0)));
-        _sent.VerticalAlignment = VerticalAlignment.Bottom;
-        _sent.Visibility = Visibility.Collapsed;
+        var check = WallParts.Glyph("", 18);
+        var sentWord = WallParts.Text("Sent", 22, FontWeights.ExtraBold);
+        sentWord.Margin = new Thickness(8, 0, 0, 0);
+        _sent = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom, Visibility = Visibility.Collapsed };
+        _sent.Children.Add(check);
+        _sent.Children.Add(sentWord);
         status.Children.Add(_sent);
 
         KeyDown += (_, e) =>
@@ -177,11 +185,12 @@ internal sealed class PhoneSendCard : Grid
             SnapsToDevicePixels = true,
         };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        System.Windows.Automation.AutomationProperties.SetName(image, "QR code: scan it with your phone's camera to download");
         return new Border
         {
             Width = Tile,
             Height = Tile,
-            CornerRadius = new CornerRadius(20),
+            CornerRadius = new CornerRadius(WallParts.Radius),
             Background = new SolidColorBrush(tileColor),
             Padding = new Thickness(8),
             Margin = new Thickness(20, 0, 0, 0),
@@ -198,33 +207,5 @@ internal sealed class PhoneSendCard : Grid
             Infrastructure.Log.Warn("[phonesend] QR render failed", ex);
             return null;
         }
-    }
-
-    static Brush Res(string key) => (Brush)Application.Current.Resources[key];
-
-    static TextBlock Text(string text, double size, Brush brush, FontWeight? weight = null, Thickness? margin = null) => new()
-    {
-        Text = text,
-        FontSize = size,
-        Foreground = brush,
-        FontWeight = weight ?? FontWeights.Normal,
-        Margin = margin ?? new Thickness(0),
-        TextTrimming = TextTrimming.CharacterEllipsis,
-    };
-
-    static TextBlock Glyph(string glyph, double size, Brush brush) => new()
-    {
-        Text = glyph,
-        FontFamily = (FontFamily)Application.Current.Resources["IconFont"],
-        FontSize = size,
-        Foreground = brush,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-
-    static StackPanel Row(params UIElement[] children)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (var c in children) row.Children.Add(c);
-        return row;
     }
 }
