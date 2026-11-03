@@ -69,7 +69,12 @@ internal sealed class ShammyHost : IDisposable
         };
         _notch.Show();
 
-        _activities.Changed += () => _notch.SetActivities(_activities.Current, _activities.Secondary);
+        _activities.Changed += () => _notch.SetActivities(_activities.Current, _activities.Secondary, _activities.Ranked);
+        // The pet's costumes and the action circle, testable without a real call, song or download.
+        var petTest = new Modules.PetActivityTest(Post, _activities.Remove);
+        _modules.PipeCommands["activity-test"] = petTest.Run;
+        _modules.PipeCommands["circle-state"] = _ => _notch.DescribeCircle();
+        _modules.PipeCommands["circle-click"] = arg => _notch.ClickCircle(arg);
         _tick = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Normal, (_, _) => _activities.Tick(DateTime.UtcNow), _ui);
         _tick.Start();
 

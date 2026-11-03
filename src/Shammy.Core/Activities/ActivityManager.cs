@@ -51,6 +51,9 @@ public sealed class ActivityManager
     public Activity? Current { get; private set; }
     public Activity? Secondary { get; private set; }
 
+    /// <summary>Every live activity, most important first (the pet's costume and its waiting dot are picked from these).</summary>
+    public IReadOnlyList<Activity> Ranked { get; private set; } = Array.Empty<Activity>();
+
     public IReadOnlyList<Activity> All => _items.Values.Select(v => v.Activity).ToList();
 
     public void Post(Activity activity)
@@ -90,6 +93,7 @@ public sealed class ActivityManager
             .Select(v => v.Activity)
             .ToList();
 
+        Ranked = ordered;
         Current = ordered.Count > 0 ? ordered[0] : null;
         Secondary = Current is null
             ? null

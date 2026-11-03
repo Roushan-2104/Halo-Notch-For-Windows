@@ -9,6 +9,7 @@ using Shammy.Core.Music;
 using Shammy.Core.Notch;
 using Shammy.Infrastructure;
 using Shammy.Interop;
+using Shammy.Modules;
 using Shammy.Motion;
 using Shammy.Notifications;
 using Shammy.Views;
@@ -81,6 +82,17 @@ public partial class NotchWindow : Window
     string _lastTrack = "";
     (Point At, TimeSpan T)? _press;
 
+    // The pet wears every activity (see ActivityView): the compact notch keeps the pet in the middle in costume,
+    // with the action circle and the second activity's dot beside it (ActivityChrome).
+    readonly Layer _petCompact;
+    readonly ActivityView _activityView;
+    readonly ActivityChrome _chrome;
+    readonly DispatcherTimer _petTick;
+    IReadOnlyList<Activity> _ranked = Array.Empty<Activity>();
+    PetLive? _petOwner, _petDot;
+    string? _petPreferred;
+    bool _petShowing, _notifyRevealed;
+
     internal NotchWindow(ShammyServices services)
     {
         _services = services;
@@ -114,6 +126,19 @@ public partial class NotchWindow : Window
         _peek = AddLayer(_peekView);
         _peekView.GlanceClicked += OnPeekGlanceClicked;
 
+        _activityView = new ActivityView(services);
+        ContentHost.Children.Insert(0, _activityView);
+        _petCompact = AddLayer(_activityView);
+        _chrome = new ActivityChrome(Root, Shape, Shape.Fill);
+        _chrome.CircleClicked += RunCircle;
+        _chrome.DotClicked += id =>
+        {
+            _petPreferred = id;
+            Recompute();
+        };
+        // Live values (a call's timer, a countdown, a download) refresh once a second while the pet wears them.
+        _petTick = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshPet(), Dispatcher) { IsEnabled = false };
+
         // While the pointer is on the notch, sample it often enough to tell resting from passing through.
         _hoverIn = new DispatcherTimer(TimeSpan.FromMilliseconds(40), DispatcherPriority.Input, OnHoverTick, Dispatcher) { IsEnabled = false };
         _hoverOut = new DispatcherTimer(TimeSpan.FromMilliseconds(320), DispatcherPriority.Input, OnHoverOut, Dispatcher) { IsEnabled = false };
@@ -146,7 +171,11 @@ public partial class NotchWindow : Window
         Root.DragOver += OnDragEnter;
         Root.DragLeave += (_, _) => _dragOut.Start();
         Root.Drop += OnDrop;
-        Bubble.MouseLeftButtonUp += (_, _) => _secondary?.Click?.Invoke();
+        Bubble.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            _secondary?.Click?.Invoke();
+        };
         // Pressing on the notch means a click (or a drag-swipe) is coming; don't let a pending hover expand it away first.
         Root.PreviewMouseLeftButtonDown += (_, e) =>
         {
@@ -168,13 +197,18 @@ public partial class NotchWindow : Window
         // Clicking the resting notch or the peek opens the notch straight away.
         Root.MouseLeftButtonUp += (_, _) =>
         {
-            if (_mode == NotchMode.Compact && IsAction(_activity)) ActionClicked?.Invoke(_activity!.Id);
+            if (_mode == NotchMode.Compact && _petShowing) PetBodyClicked();
+            else if (_mode == NotchMode.Compact && IsAction(_activity)) ActionClicked?.Invoke(_activity!.Id);
             else if (_mode is NotchMode.Idle or NotchMode.Peek || (_mode == NotchMode.Compact && _activity is { Click: null })) OpenFromHover();
         };
-        // Moving from the side bubble onto the pill (both inside Root) raises no new MouseEnter.
+        // Moving from the side bubble (or the action circle) onto the pill (both inside Root) raises no new MouseEnter.
         Bubble.MouseLeave += (_, _) =>
         {
             if (Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
+        };
+        _chrome.PointerLeft += () =>
+        {
+            if (Root.IsMouseOver && !_hoverExpanded && !_chrome.IsMouseOver) StartHoverIn();
         };
         Deactivated += (_, _) =>
         {
@@ -325,12 +359,17 @@ public partial class NotchWindow : Window
 
     // ---- Inputs -------------------------------------------------------------------------------
 
-    internal void SetActivities(Activity? current, Activity? secondary)
+    /// <param name="ranked">Every live activity, most important first: the pet picks its costume and dot from these.</param>
+    internal void SetActivities(Activity? current, Activity? secondary, IReadOnlyList<Activity>? ranked = null)
     {
         bool wasAction = IsAction(_activity);
         bool wasNotification = _mode == NotchMode.Notification;
+        // A new notification starts as the pet's wide eyes; hovering reveals the card (at once if the pointer is already here).
+        if (current?.Kind == ActivityKind.Notification && !ReferenceEquals(current.Payload, _activity?.Payload)) _notifyRevealed = Root.IsMouseOver;
         _activity = current;
         _secondary = secondary;
+        _ranked = ranked ?? (current is null ? Array.Empty<Activity>() : new[] { current });
+        if (_petPreferred is { } preferred && !_ranked.Any(a => a.Id == preferred)) _petPreferred = null;
         Recompute();
         UpdateBubble();
         FlashForActivity();
@@ -370,7 +409,9 @@ public partial class NotchWindow : Window
     /// show"). Hovering must not expand the notch over them, or the thing to click disappears.
     /// </summary>
     static bool IsAction(Activity? a) =>
-        a is { Click: not null, Kind: ActivityKind.Message or ActivityKind.DownloadComplete };
+        a is { Click: not null, Kind: ActivityKind.Message or ActivityKind.DownloadComplete }
+        // A finished timer the pet is jumping about (it was a message before it had a costume).
+        || a is { Click: not null, Payload: Modules.Productivity.TimerDoneContent };
 
     /// <summary>
     /// Holds or releases by id, so a release still finds the right pill after something with a higher
@@ -443,6 +484,7 @@ public partial class NotchWindow : Window
     {
         ((CompactView)_compactActive.El).RefreshMedia(_services.Media);
         if (Expanded.IsVisible) Expanded.Refresh();
+        RefreshPet();
         UpdateBubble();
 
         _restView.RefreshMedia();
@@ -656,11 +698,13 @@ public partial class NotchWindow : Window
                 : NotchMode.Hidden;
         else if (_dragging) mode = NotchMode.Drop;
         else if (_cardOpen) mode = NotchMode.Card;
-        else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded) mode = NotchMode.Notification;
+        else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded)
+            mode = !_notifyRevealed && PetFor(_activity) is not null ? NotchMode.Compact : NotchMode.Notification;
         else if (_hoverExpanded) mode = NotchMode.Expanded;
         else if (_peeking) mode = NotchMode.Peek;
-        // Music at rest is shown by the pet (swaying, with the song beside it), not the old music pill.
-        else if (_activity is not null && _activity.Kind != ActivityKind.NowPlaying) mode = NotchMode.Compact;
+        // Music, like every live activity the pet can wear, shows as the pet in costume (ActivityView); a paused
+        // song with nothing to show rests.
+        else if (_activity is not null && (_activity.Kind != ActivityKind.NowPlaying || PetFor(_activity) is not null)) mode = NotchMode.Compact;
         else mode = NotchMode.Idle;
 
         // Typing in the open notch ends when the notch stops being open (closed, a card or a notification took over).
@@ -677,6 +721,8 @@ public partial class NotchWindow : Window
     void PrepareCompact()
     {
         var a = _activity!;
+        if (PreparePet(a)) return;
+        _petShowing = false;
         var current = (CompactView)_compactActive.El;
         if (current.ShownId == a.Id && current.ShownKind == a.Kind && _compactActive.Active)
         {
@@ -695,6 +741,7 @@ public partial class NotchWindow : Window
         NotchMode.Hidden => (150, 0, 0),
         NotchMode.Idle => (RestView.RestWidth, RestView.RestHeight, 12),
         NotchMode.Peek => (PeekView.PeekWidth, PeekView.PeekHeight, 26),
+        NotchMode.Compact when _petShowing => (ActivityView.ViewWidth, ActivityView.ViewHeight, ActivityView.Radius),
         NotchMode.Compact => (_compactWidth, 32, 12),
         NotchMode.Notification => (460, 92, 30),
         NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
@@ -711,7 +758,7 @@ public partial class NotchWindow : Window
     {
         NotchMode.Idle => _rest,
         NotchMode.Peek => _peek,
-        NotchMode.Compact => _compactActive,
+        NotchMode.Compact => _petShowing ? _petCompact : _compactActive,
         NotchMode.Notification => _notification,
         NotchMode.Card => _card,
         NotchMode.Expanded => _expanded,
@@ -779,7 +826,12 @@ public partial class NotchWindow : Window
 
     void UpdateBubble()
     {
-        bool show = _secondary is not null && _mode is NotchMode.Compact or NotchMode.Idle;
+        // The pet's compact notch has the action circle and dot instead of the side bubble.
+        bool pet = _mode == NotchMode.Compact && _petShowing;
+        if (pet) _chrome.Set(_petOwner, _fullscreen ? null : _petDot, PetGlow);
+        else _chrome.Hide();
+        _petTick.IsEnabled = pet;
+        bool show = !pet && _secondary is not null && _mode is NotchMode.Compact or NotchMode.Idle;
         if (show)
         {
             BubbleContent.Content = _secondary!.Kind switch
@@ -799,6 +851,116 @@ public partial class NotchWindow : Window
         }
         _bubbleOpacity.AnimateTo(show ? 1 : 0, 0.35, 1);
         _bubbleScale.AnimateTo(show ? 1 : 0.4, 0.45, show ? 0.65 : 1);
+    }
+
+    // ---- The pet wears the activity ---------------------------------------------------------------
+
+    PetLive? PetFor(Activity? a, DateTime? now = null) => a is null ? null : PetActivitySource.From(a, _services, now ?? DateTime.UtcNow);
+
+    /// <summary>Music playing: the notch glows in the album's colour.</summary>
+    bool PetGlow => _petOwner?.State is { Costume: PetCostume.Music, Playing: true };
+
+    /// <summary>
+    /// Puts the pet in <paramref name="current"/>'s costume (or the one the user swapped to) and picks the dot; false
+    /// when it isn't something the pet wears (a volume HUD, a keyboard pill, a message), which keeps its own pill.
+    /// Over a fullscreen app only what broke through shows, with no dot.
+    /// </summary>
+    bool PreparePet(Activity current)
+    {
+        var now = DateTime.UtcNow;
+        if (PetFor(current, now) is not { } first) return false;
+        var lives = new List<PetLive> { first };
+        if (!_fullscreen)
+            foreach (var a in _ranked)
+                if (a.Id != current.Id && PetFor(a, now) is { } live) lives.Add(live);
+        var stage = PetActivities.Stage(lives.Select(l => l.State).ToList(), _fullscreen ? null : _petPreferred);
+        _petOwner = lives.FirstOrDefault(l => l.State.Id == stage.Owner) ?? first;
+        _petDot = stage.Dot is null ? null : lives.FirstOrDefault(l => l.State.Id == stage.Dot);
+        _activityView.Show(_petOwner, _services.Settings.PetEnabled);
+        _petShowing = true;
+        return true;
+    }
+
+    /// <summary>Once a second while the pet wears something, and right after its circle is used: live values.</summary>
+    void RefreshPet()
+    {
+        if (_mode != NotchMode.Compact || !_petShowing || _activity is null)
+        {
+            _petTick.IsEnabled = false;
+            return;
+        }
+        if (!PreparePet(_activity))
+        {
+            Recompute();
+            return;
+        }
+        _chrome.Set(_petOwner, _fullscreen ? null : _petDot, PetGlow);
+        if (_petOwner is not null) _chrome.Refresh(_petOwner);
+    }
+
+    void RunCircle(CircleAction action)
+    {
+        if (_petOwner is not { } owner) return;
+        try
+        {
+            owner.Run?.Invoke(action);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Action circle {action} on {owner.Activity.Id} failed", ex);
+        }
+        // Opening or dismissing a one-off moment is the end of it.
+        if (action is CircleAction.Open or CircleAction.Dismiss && !PetActivities.IsOngoing(owner.State)) ActionClicked?.Invoke(owner.Activity.Id);
+        RefreshPet();
+    }
+
+    /// <summary>
+    /// The pet itself was clicked: a notification shows its card, a finished timer or download runs its own click
+    /// (dismiss, the download card), and anything ongoing opens the notch (its one action is on the circle).
+    /// </summary>
+    void PetBodyClicked()
+    {
+        var owner = _petOwner;
+        if (owner is null || !PetActivities.BodyClickRunsActivity(owner.State) || owner.Activity.Click is not { } click)
+        {
+            OpenFromHover();
+            return;
+        }
+        if (owner.State.Costume == PetCostume.Notify)
+        {
+            _notifyRevealed = true;
+            Recompute();
+            return;
+        }
+        click();
+        if (IsAction(owner.Activity) || !PetActivities.IsOngoing(owner.State)) ActionClicked?.Invoke(owner.Activity.Id);
+    }
+
+    internal string DescribeCircle()
+    {
+        var o = _petOwner;
+        var pet = _activityView.Pet;
+        return $"mode={_mode} petCompact={(_mode == NotchMode.Compact && _petShowing ? "yes" : "no")} petOn={_services.Settings.PetEnabled} " +
+               $"owner={(o is null ? "-" : $"{o.Activity.Id}:{o.State.Costume}")} face={pet.Face?.ToString() ?? "-"} " +
+               $"label='{_activityView.LabelText}' value='{_activityView.ValueText}' {_chrome.Describe()} " +
+               $"preferred={_petPreferred ?? "-"} notifyRevealed={_notifyRevealed} mouth={pet.MouthOpen:0.00} fullscreen={_fullscreen}";
+    }
+
+    /// <summary>Test hook: click the action circle, or with "dot" the dot (as a user would).</summary>
+    internal string ClickCircle(string what)
+    {
+        if (_mode != NotchMode.Compact || !_petShowing) return "error: no pet activity on the notch";
+        if (what.Trim() == "dot")
+        {
+            if (_chrome.DotId is not { } id) return "error: no dot";
+            _petPreferred = id;
+            Recompute();
+            return DescribeCircle();
+        }
+        if (_chrome.Circle is not { } spec) return "error: no circle";
+        if (!spec.Enabled) return $"disabled: {spec.Description}";
+        RunCircle(spec.Action);
+        return $"ran {spec.Action}; {DescribeCircle()}";
     }
 
     // ---- Per-frame rendering ------------------------------------------------------------------
@@ -834,6 +996,7 @@ public partial class NotchWindow : Window
             if (!layer.Active && o <= 0.003 && layer.El.Visibility == Visibility.Visible) layer.El.Visibility = Visibility.Collapsed;
         }
 
+        _chrome.Apply(Cx, w, h, r);
         Bubble.Opacity = _bubbleOpacity.Value;
         BubbleScale.ScaleX = BubbleScale.ScaleY = _bubbleScale.Value;
         Canvas.SetLeft(Bubble, Cx + w / 2 + 10);
@@ -868,6 +1031,12 @@ public partial class NotchWindow : Window
         _wiggle.Reset();
         _restView.Mood.Noticed();
         if (_mode == NotchMode.Card) return;
+        // The pet's wide eyes said something arrived; hovering shows what (the notification card).
+        if (_mode == NotchMode.Compact && _petShowing && _activity?.Kind == ActivityKind.Notification && !_notifyRevealed)
+        {
+            _notifyRevealed = true;
+            Recompute();
+        }
         // Hovering a notification holds it on screen (to read or click) instead of opening the card.
         if (_mode == NotchMode.Notification)
         {
@@ -891,8 +1060,9 @@ public partial class NotchWindow : Window
     /// </summary>
     void StartHoverIn()
     {
-        if (!CanHover || Bubble.IsMouseOver) return;
-        bool clickable = _mode == NotchMode.Compact && _activity is { Click: not null, Kind: not ActivityKind.NowPlaying };
+        if (!CanHover || Bubble.IsMouseOver || _chrome.IsMouseOver) return;
+        // The pet's own body opens the notch (its action is on the circle), so it peeks like the resting notch.
+        bool clickable = _mode == NotchMode.Compact && !_petShowing && _activity is { Click: not null, Kind: not ActivityKind.NowPlaying };
         _intent.Reset();
         // Settings: the hover speed sets the waits; with the peek off the notch opens after the whole wait.
         _intent.SpeedSetting = _services.Settings.HoverSpeed;
@@ -923,7 +1093,7 @@ public partial class NotchWindow : Window
 
     void SampleHover()
     {
-        if (!Root.IsMouseOver || !CanHover || Bubble.IsMouseOver || _hoverExpanded)
+        if (!Root.IsMouseOver || !CanHover || Bubble.IsMouseOver || _chrome.IsMouseOver || _hoverExpanded)
         {
             _hoverIn.Stop();
             return;
@@ -1096,6 +1266,7 @@ public partial class NotchWindow : Window
             _services.Settings.Save();
         }
         _restView.SetPetEnabled(on);
+        RefreshPet();
     }
 
     /// <summary>Force the pet's mood for testing ("auto" follows the real inputs again).</summary>

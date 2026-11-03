@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Shammy.Core.Notch;
 using Shammy.Core.Productivity;
 using Shammy.Views;
 
@@ -82,9 +83,10 @@ internal sealed class RunningClock
 
 /// <summary>
 /// The compact ears for a clock: a draining ring and glyph (plus label) on the left, the time on the
-/// right. The same instance stays posted and only its own text and ring change each second.
+/// right. The same instance stays posted and only its own text and ring change each second. The pet wears it
+/// as the timer costume (eyes circling a ticking clock), and the action circle pauses and resumes.
 /// </summary>
-internal sealed class ClockContent : ICompactContent
+internal sealed class ClockContent : ICompactContent, IPetActivity
 {
     const string PauseGlyph = "\uE769";
 
@@ -94,6 +96,23 @@ internal sealed class ClockContent : ICompactContent
     bool _hours;
 
     public ClockContent(RunningClock clock) => _clock = clock;
+
+    /// <summary>Pauses or resumes the clock (set by the module, which owns the tick).</summary>
+    public Action? TogglePause { get; set; }
+
+    public PetActivityState Describe(DateTime utcNow) => new()
+    {
+        Costume = PetCostume.Timer,
+        Label = _clock.Label.Length > 0 ? _clock.Label : _clock.Kind.ToString(),
+        Value = _clock.Display(utcNow),
+        Paused = _clock.Paused,
+        Progress = _clock.IsCountdown ? Math.Clamp(_clock.Remaining(utcNow).TotalSeconds / Math.Max(1, _clock.Total.TotalSeconds), 0, 1) : null,
+    };
+
+    public void RunCircle(CircleAction action)
+    {
+        if (action is CircleAction.Pause or CircleAction.Resume) TogglePause?.Invoke();
+    }
 
     public double Build(ContentControl left, ContentControl right)
     {
