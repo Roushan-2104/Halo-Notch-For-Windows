@@ -80,6 +80,19 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
         ctx.AddPipeCommand("clipboard-copy", PipeCopy);
         ctx.AddPipeCommand("clipboard-screenshot", PipeScreenshot);
         ctx.AddPipeCommand("clipboard-state", _ => State());
+        // "screenshot-action lens|text|phone|open-card": the screenshot card's actions on the last capture.
+        ctx.AddPipeCommand("screenshot-action", arg =>
+        {
+            if (_capture is not { } c) return "error: no screenshot yet (clipboard-screenshot <png> first)";
+            switch (arg.Trim().ToLowerInvariant())
+            {
+                case "lens": return SearchCaptureWithLens(c) ? "ok" : "error: couldn't read the image";
+                case "text": CopyCaptureText(c); return "started (see the notch message)";
+                case "phone": return SendCaptureToPhone(c) ? "ok (see phone-state)" : "error: not sent";
+                case "open-card": OpenCard(c); return "ok";
+                default: return "error: usage screenshot-action lens|text|phone|open-card";
+            }
+        });
         ctx.AddPipeCommand("clipboard-open", _ =>
         {
             OpenTabHeld();
@@ -446,6 +459,80 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
         if (!c.HasFile) return false;
         CloseCard();
         _ctx.Open(Shammy.Interop.Native.ExplorerPath, $"/select,\"{c.Path}\"");
+        return true;
+    }
+
+    /// <summary>The capture as PNG bytes at full resolution (the clipboard snip, or the file re-read).</summary>
+    byte[]? CapturePng(Capture c)
+    {
+        try
+        {
+            if (c.Png is not null) return c.Png;
+            if (c.Full is not null) return c.Png = ClipImages.EncodePng(c.Full);
+            if (c.HasFile && c.Path is { } file)
+            {
+                var bytes = File.ReadAllBytes(file);
+                return Path.GetExtension(file).Equals(".png", StringComparison.OrdinalIgnoreCase) ? bytes : ClipImages.EncodePng(ClipImages.Decode(bytes));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or FormatException)
+        {
+            _ctx.Warn("Reading the screenshot failed", ex);
+        }
+        return null;
+    }
+
+    /// <summary>Google Lens on the screenshot, the same results card as circling it on screen.</summary>
+    internal bool SearchCaptureWithLens(Capture c)
+    {
+        if (CapturePng(c) is not { } png) return false;
+        CloseCard();
+        _ = _ctx.SearchImageAsync(png);
+        return true;
+    }
+
+    /// <summary>Reads the screenshot's text with Windows OCR (offline) and copies it.</summary>
+    internal bool CopyCaptureText(Capture c)
+    {
+        _ = CopyCaptureTextAsync(c);
+        return false;
+    }
+
+    async Task CopyCaptureTextAsync(Capture c)
+    {
+        BitmapSource? image = c.Full;
+        if (image is null && CapturePng(c) is { } png)
+        {
+            try { image = ClipImages.Decode(png); }
+            catch (Exception ex) when (ex is NotSupportedException or FormatException or IOException) { _ctx.Warn("Decoding the screenshot failed", ex); }
+        }
+        if (image is null) return;
+        if (!Search.OcrService.IsAvailable)
+        {
+            CloseCard();
+            _ctx.ShowMessage("", "No OCR language installed", error: true);
+            return;
+        }
+        var text = await Search.OcrService.ReadTextAsync(image);
+        CloseCard();
+        if (text.Length == 0)
+        {
+            _ctx.ShowMessage("", "No text in that screenshot", error: true);
+            return;
+        }
+        var data = new DataObject();
+        data.SetText(text);
+        if (!SetClipboard(data, echo: false)) return;
+        int words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        _ctx.ShowMessage("", words == 1 ? "Copied 1 word" : $"Copied text · {words} words", seconds: 2.5);
+    }
+
+    /// <summary>The QR card for the phone (a clipboard-only snip is saved as a file first).</summary>
+    internal bool SendCaptureToPhone(Capture c)
+    {
+        if (Connect.Links.Phone is not { } phone || EnsureFile(c) is not { } path) return false;
+        CloseCard();
+        _ = phone.SendAsync(new[] { path });
         return true;
     }
 

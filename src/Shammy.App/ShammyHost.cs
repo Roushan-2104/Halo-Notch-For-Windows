@@ -235,6 +235,7 @@ internal sealed class ShammyHost : IDisposable
         _keys.VolumeKey += dir => _volume?.Step(dir);
         Safe("keyboard pills", () => _keyboardPills = new KeyboardIndicators(_keys, _ui, Post));
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
+        _modules.SearchImage = png => _search.SearchImageAsync(png);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
         _notch.ExpandedView.SearchRequested += _search.OpenTyping;
         // The v2 open notch, for scripted checks: "v2-state", "v2-open <id|chip label>", "v2-back".

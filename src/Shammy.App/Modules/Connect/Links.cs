@@ -22,6 +22,13 @@ internal interface IClipboardLink
     void CopyBack(Shammy.Core.Clipboard.ClipEntry entry);
 }
 
+/// <summary>What the phone-send module offers others (screenshot card, downloads card).</summary>
+internal interface IPhoneLink
+{
+    /// <summary>Shows the QR card: one file as is, several or a folder as one zip. Reports problems itself.</summary>
+    Task SendAsync(IReadOnlyList<string> paths);
+}
+
 internal static class LinkExtensions
 {
     /// <summary>A command's confirmation as a short notch message (for context-menu actions that aren't commands).</summary>
@@ -38,6 +45,8 @@ internal static class Links
     public static INotesLink? Notes { get; set; }
 
     public static IClipboardLink? Clipboard { get; set; }
+
+    public static IPhoneLink? Phone { get; set; }
 
     /// <summary>Opens a card's detail (or "shelf", "alerts") in the open notch. One place, so it can move to ctx.OpenCard later.</summary>
     public static bool OpenCard(ModuleContext ctx, string id) => ctx.Notch.OpenView(id);

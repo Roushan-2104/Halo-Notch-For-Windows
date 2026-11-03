@@ -108,6 +108,9 @@ internal sealed class ModuleRegistry
     /// <summary>Raised when a module's vocabulary changed (e.g. the app list finished indexing).</summary>
     public event Action? VocabularyChanged;
 
+    /// <summary>The circle-to-search image path (Google Lens on a PNG); set by the host once search exists.</summary>
+    public Func<byte[], Task>? SearchImage { get; set; }
+
     internal void OnVocabularyChanged() => VocabularyChanged?.Invoke();
 }
 
@@ -219,6 +222,9 @@ internal sealed class ModuleContext
         Notch.ShowCard(content, width, height, interactive, breaksFullscreen);
 
     public void CloseCard() => Notch.CloseCard();
+
+    /// <summary>Searches an image with Google Lens in the results card, exactly like circling it on screen.</summary>
+    public Task SearchImageAsync(byte[] png) => _registry.SearchImage?.Invoke(png) ?? Task.CompletedTask;
 
     /// <summary>Keep the notch's edge lit in a colour while a state lasts; null removes it.</summary>
     public void SetGlow(Color? color) => Notch.SetGlow(color);
