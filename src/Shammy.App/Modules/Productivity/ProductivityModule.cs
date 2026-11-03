@@ -24,8 +24,9 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         FocusGlyph = "\uE708", BellGlyph = "\uEA8F", NoteGlyph = "\uE70B", PauseGlyph = "\uE769", PlayGlyph = "\uE768";
 
     static readonly TimeSpan AlertTime = TimeSpan.FromSeconds(8);
-    static readonly TimeSpan CardTime = TimeSpan.FromSeconds(30);
-    static readonly TimeSpan SnoozeTime = TimeSpan.FromMinutes(10);
+    // Settings: ReminderCardSeconds and SnoozeMinutes.
+    TimeSpan CardTime => TimeSpan.FromSeconds(_ctx.Settings.ReminderCardSeconds);
+    TimeSpan SnoozeTime => TimeSpan.FromMinutes(_ctx.Settings.SnoozeMinutes);
 
     readonly List<RunningClock> _clocks = new();
     readonly Queue<ReminderItem> _cardQueue = new();
@@ -35,7 +36,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     readonly DispatcherTimer _tick = new(DispatcherPriority.Normal);
     readonly DispatcherTimer _reminders = new(DispatcherPriority.Normal);
     readonly DispatcherTimer _glowOff = new(DispatcherPriority.Normal) { Interval = AlertTime };
-    readonly DispatcherTimer _cardClose = new(DispatcherPriority.Normal) { Interval = CardTime };
+    readonly DispatcherTimer _cardClose = new(DispatcherPriority.Normal);
 
     ModuleContext _ctx = null!;
     ProductivityStore _store = new();
@@ -43,6 +44,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     TimerCard _timerCard = null!;
     bool _timerCardRelevant;
     ReminderCard? _card;
+    Alarms.AlarmController _alarms = null!;
     bool _glowing;
     int _nextId;
 
@@ -55,6 +57,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // A hand-edited file can say "Reminders": null.
         _store.Reminders ??= new();
         _store.Notes ??= new();
+        _store.Alarms ??= new();
         // Fired reminders stay listed for a week, then quietly go.
         _store.Reminders.RemoveAll(r => r.FiredAt is { } fired && fired < DateTime.Now.AddDays(-7)
                                         || r.DoneAt is { } done && done < DateTime.Now.AddDays(-7));
@@ -112,10 +115,15 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // Reminders that fell due while Shammy wasn't running fire shortly after start.
         _reminders.Interval = TimeSpan.FromSeconds(3);
         _reminders.Start();
+
+        // Real alarms (separate from reminders since v2): ringing, snooze, missed-after-sleep, the Alarms card.
+        _alarms = new Alarms.AlarmController(ctx, () => _store, Save);
+        _alarms.Start();
     }
 
     public void Dispose()
     {
+        _alarms?.Dispose();
         _tick.Stop();
         _reminders.Stop();
         _cardClose.Stop();
@@ -143,6 +151,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             ProductivityAction.Note or ProductivityAction.ShowNotes => NoteGlyph,
             ProductivityAction.StartFocus or ProductivityAction.StopFocus => FocusGlyph,
             ProductivityAction.StartPomodoro or ProductivityAction.StopPomodoro or ProductivityAction.SkipPomodoro => PomodoroGlyph,
+            ProductivityAction.SetAlarm or ProductivityAction.ShowAlarms or ProductivityAction.DeleteAlarm or ProductivityAction.DisableAlarms
+                or ProductivityAction.EnableAlarms or ProductivityAction.StopAlarm or ProductivityAction.SnoozeAlarm => Alarms.AlarmController.Glyph,
             ProductivityAction.StartStopwatch or ProductivityAction.StopStopwatch or ProductivityAction.PauseStopwatch
                 or ProductivityAction.ResumeStopwatch => StopwatchGlyph,
             _ => TimerGlyph,
@@ -169,8 +179,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             ProductivityAction.StartFocus => StartFocus(c.Duration),
             ProductivityAction.StopFocus => StopFocus(),
             ProductivityAction.Remind => AddReminder(c.Due, c.Text),
+            ProductivityAction.ReminderNeedsTime when c.Text == "Alarm" => new CommandResult(BellGlyph, "What time should it ring?",
+                "Try \u201Calarm at 7 am every weekday\u201D", IsError: true),
             ProductivityAction.ReminderNeedsTime => new CommandResult(BellGlyph, "When should I remind you?",
                 "Try \u201Cremind me in 20 minutes to \u2026\u201D", IsError: true),
+            ProductivityAction.SetAlarm or ProductivityAction.ShowAlarms or ProductivityAction.DeleteAlarm or ProductivityAction.DisableAlarms
+                or ProductivityAction.EnableAlarms or ProductivityAction.StopAlarm or ProductivityAction.SnoozeAlarm => _alarms.Run(c, typed),
             ProductivityAction.Note => AddNote(c.Text),
             ProductivityAction.ShowNotes => ShowNotes(typed),
             _ => new CommandResult(TimerGlyph, "Not supported yet", IsError: true),
@@ -543,7 +557,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         {
             var reminder = _cardQueue.Dequeue();
             if (!_store.Reminders.Contains(reminder)) continue; // deleted while it waited
-            var card = new ReminderCard(reminder, () => Done(reminder), () => Snooze(reminder));
+            var card = new ReminderCard(reminder, () => Done(reminder), () => Snooze(reminder), _ctx.Settings.SnoozeMinutes);
             _card = card;
             bool seen = false;
             // The notch closes interactive cards itself on an outside click; notice that and move on.
@@ -560,6 +574,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             Glow();
             Chime();
             _cardClose.Stop();
+            _cardClose.Interval = CardTime;
             _cardClose.Start();
             return;
         }
