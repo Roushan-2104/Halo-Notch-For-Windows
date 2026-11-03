@@ -30,10 +30,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     readonly List<RunningClock> _clocks = new();
     readonly Queue<ReminderItem> _cardQueue = new();
     readonly FocusSession _focus = new();
-    readonly DispatcherTimer _tick = new();
-    readonly DispatcherTimer _reminders = new();
-    readonly DispatcherTimer _glowOff = new() { Interval = AlertTime };
-    readonly DispatcherTimer _cardClose = new() { Interval = CardTime };
+    // Normal, not the default Background: a busy UI thread (animations, a flood of window messages) starves
+    // Background timers, and a timer or alarm that doesn't ring is worse than one that ticks a little late.
+    readonly DispatcherTimer _tick = new(DispatcherPriority.Normal);
+    readonly DispatcherTimer _reminders = new(DispatcherPriority.Normal);
+    readonly DispatcherTimer _glowOff = new(DispatcherPriority.Normal) { Interval = AlertTime };
+    readonly DispatcherTimer _cardClose = new(DispatcherPriority.Normal) { Interval = CardTime };
 
     ModuleContext _ctx = null!;
     ProductivityStore _store = new();

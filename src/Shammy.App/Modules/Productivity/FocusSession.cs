@@ -33,7 +33,9 @@ internal sealed class FocusSession : IDisposable
         }
         catch (Exception ex)
         {
-            Status = $"failed ({ex.GetType().Name}: {ex.Message})";
+            // One line: the message for a missing limited-access feature spans several, which broke the log
+            // line and the state pipe's reply.
+            Status = $"failed ({ex.GetType().Name}: {System.Text.RegularExpressions.Regex.Replace(ex.Message, @"[\s\p{C}]+", " ").Trim()})";
             return false;
         }
     }
