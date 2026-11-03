@@ -48,6 +48,9 @@ internal sealed class ClipboardCard
 
     public FrameworkElement Compact => _compact;
 
+    /// <summary>"Save as note" on a text item in the detail; returns whether it was saved.</summary>
+    public Func<ClipEntry, bool>? SaveAsNote { get; init; }
+
     // ---- Compact ---------------------------------------------------------------------------------
 
     void BuildCompactFrame()
@@ -338,6 +341,17 @@ internal sealed class ClipboardCard
         copyLabel = (copy.Child as StackPanel)?.Children.OfType<TextBlock>().LastOrDefault();
         DockPanel.SetDock(copy, Dock.Right);
         footer.Children.Add(copy);
+        if (e.Kind == ClipKind.Text && SaveAsNote is { } save)
+        {
+            Border? note = null;
+            note = CardKit.RoundButton("", () =>
+            {
+                if (save(e) && note?.Child is TextBlock glyph) glyph.Text = "";
+            }, 26, "Save as note", 11);
+            note.Margin = new Thickness(0, 0, 6, 0);
+            DockPanel.SetDock(note, Dock.Right);
+            footer.Children.Add(note);
+        }
         if (shape == ClipShape.Link)
         {
             var open = CardKit.RoundButton("", () => _open(e.Text.Trim()), 26, "Open link", 11);

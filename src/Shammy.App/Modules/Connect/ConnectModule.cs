@@ -49,7 +49,11 @@ internal sealed class ConnectModule : IShammyModule
             OnBluetoothChanged();
         }
 
+        // "Save as note" on a calculator answer.
+        ctx.Notch.AnswerView.SaveNoteRequested += SaveAsNote;
+
         ctx.AddPipeCommand("connect-state", _ => State());
+        ctx.AddPipeCommand("save-note-test", text => SaveAsNote(text) ? "ok" : "error: nothing to save");
         // "earbuds-test Airdopes 311 Pro|18": a reading through the same alert rule (address "TEST").
         ctx.AddPipeCommand("earbuds-test", arg =>
         {
@@ -72,6 +76,16 @@ internal sealed class ConnectModule : IShammyModule
         _meeting.Stop();
         _earbudsPoll.Stop();
         if (_bluetooth is not null) _bluetooth.Changed -= OnBluetoothChanged;
+        _ctx.Notch.AnswerView.SaveNoteRequested -= SaveAsNote;
+    }
+
+    /// <summary>Keeps a text (an answer, a copied snippet) as a note; true when it was saved.</summary>
+    internal bool SaveAsNote(string text)
+    {
+        if (ConnectText.NoteFrom(text) is not { } note || Links.Notes is not { } notes) return false;
+        var result = notes.SaveNote(note);
+        _ctx.ShowResult(result);
+        return !result.IsError;
     }
 
     // ---- Quiet during calendar meetings -----------------------------------------------------------

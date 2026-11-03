@@ -62,7 +62,7 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
         _expiry = new DispatcherTimer(TimeSpan.FromMinutes(10), DispatcherPriority.Background,
             (_, _) => _history.Expire(DateTime.Now - KeepFor), ctx.Ui);
 
-        _card2 = new ClipboardCard(_history, CopyBack, OpenLink);
+        _card2 = new ClipboardCard(_history, CopyBack, OpenLink) { SaveAsNote = SaveAsNote };
         // A chip-only card (v2): reached from the chips row, never pushed onto the home row by itself.
         ctx.AddCard(new NotchCard
         {
@@ -460,6 +460,16 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
         CloseCard();
         _ctx.Open(Shammy.Interop.Native.ExplorerPath, $"/select,\"{c.Path}\"");
         return true;
+    }
+
+    /// <summary>"Save as note" on a copied text in the clipboard detail.</summary>
+    bool SaveAsNote(ClipEntry entry)
+    {
+        if (entry.Kind != ClipKind.Text || Shammy.Core.Connect.ConnectText.NoteFrom(entry.Text) is not { } text) return false;
+        if (Connect.Links.Notes is not { } notes) return false;
+        var result = notes.SaveNote(text);
+        _ctx.ShowMessage(result.Glyph, result.IsError ? result.Title : "Saved as note", result.IsError, seconds: 2);
+        return !result.IsError;
     }
 
     /// <summary>The capture as PNG bytes at full resolution (the clipboard snip, or the file re-read).</summary>

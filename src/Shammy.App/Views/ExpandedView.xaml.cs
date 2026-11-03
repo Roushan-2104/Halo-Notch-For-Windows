@@ -728,6 +728,30 @@ public partial class ExpandedView : UserControl
         if ((sender as FrameworkElement)?.DataContext is Notifications.ShammyNotification n) NotificationOpened?.Invoke(n);
     }
 
+    /// <summary>"Remind me in 1 hour" on a notification row's right-click menu.</summary>
+    internal event Action<Notifications.ShammyNotification>? NotificationRemindRequested;
+
+    void OnAlertRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Notifications.ShammyNotification n) return;
+        var menu = new ContextMenu();
+        void Add(string header, Action run)
+        {
+            var mi = new MenuItem { Header = header };
+            mi.Click += (_, _) => run();
+            menu.Items.Add(mi);
+        }
+        Add("Open", () => NotificationOpened?.Invoke(n));
+        Add("Remind me in 1 hour", () => NotificationRemindRequested?.Invoke(n));
+        Add("Dismiss", () => _s?.Notifications.History.Remove(n));
+        menu.PlacementTarget = (UIElement)sender;
+        // Keep the notch open while the menu is up, as the shelf's menu does.
+        ShelfDragging?.Invoke(true);
+        menu.Closed += (_, _) => ShelfDragging?.Invoke(false);
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
     void OnDismissAlert(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is Notifications.ShammyNotification n) _s?.Notifications.History.Remove(n);

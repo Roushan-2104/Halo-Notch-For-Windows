@@ -172,6 +172,15 @@ internal sealed class ShammyHost : IDisposable
                 return $"quiet={QuietState.IsQuiet} ({QuietState.Describe()}) held={_held}";
             };
             _modules.PipeCommands["quiet-state"] = _ => $"quiet={QuietState.IsQuiet} ({QuietState.Describe()}) held={_held}";
+            // Right-click a pop-up or a Notifications row: "Remind me in 1 hour".
+            _notch.NotificationView.RemindRequested += n => RemindAboutNotification(n);
+            _notch.ExpandedView.NotificationRemindRequested += n => RemindAboutNotification(n);
+            // "notify-remind": the same for the newest notification in the list.
+            _modules.PipeCommands["notify-remind"] = _ =>
+            {
+                if (_notifications.History.Count == 0) return "error: no notifications (notify-test App|Title|Body first)";
+                return RemindAboutNotification(_notifications.History[0]);
+            };
             if (_settings.ShowNotifications) _ = StartNotificationsAsync();
         });
 
@@ -392,6 +401,19 @@ internal sealed class ShammyHost : IDisposable
         {
             Click = () => OpenNotificationApp(n),
         });
+    }
+
+    /// <summary>A reminder in an hour with the app and what it said (read from the list, since a private pop-up hid the text).</summary>
+    string RemindAboutNotification(ShammyNotification n)
+    {
+        var original = _notifications.History.FirstOrDefault(h => h.Id == n.Id) ?? n;
+        if (Modules.Connect.Links.Notes is not { } notes) return "error: reminders unavailable";
+        var text = Shammy.Core.Connect.ConnectText.NotificationReminder(original.AppName, original.Title, original.Body);
+        var result = notes.AddReminder(DateTime.Now.AddHours(1), text);
+        _activities.Remove("notification");
+        Post(new Activity("notification-remind", ActivityKind.Message, PriorityMessage,
+            new MessagePayload("", result.IsError ? result.Title : "Reminder in 1 hour", result.IsError), In(2.5)));
+        return result.IsError ? "error: " + result.Title : "ok: " + (PrivacyState.Presenting ? "(hidden)" : text);
     }
 
     void ShowDownloadCard(string path)
