@@ -23,7 +23,8 @@ public enum NotchMode { Hidden, Idle, Compact, Notification, Card, Expanded, Dro
 /// </summary>
 public partial class NotchWindow : Window
 {
-    public const double WindowWidth = 760;
+    // Wide enough for the open notch (1012) plus its hit margin and shadow on both sides.
+    public const double WindowWidth = 1100;
     const double ShadowPad = 64;
     const double Cx = WindowWidth / 2;
 
@@ -90,6 +91,11 @@ public partial class NotchWindow : Window
         }, Dispatcher) { IsEnabled = false };
 
         Expanded.Attach(services);
+        // Opening a view in place makes the open notch taller (and Back shorter again).
+        Expanded.HeightChanged += () =>
+        {
+            if (_mode == NotchMode.Expanded) Transition(NotchMode.Expanded);
+        };
         Expanded.ShelfDragging += dragging =>
         {
             _holdOpen += dragging ? 1 : -1;
@@ -398,6 +404,14 @@ public partial class NotchWindow : Window
         Open(() => Expanded.ShowTab(panel), hold);
     }
 
+    /// <summary>Open the notch on a view by id or chip label (see ExpandedView.OpenView); false if there's no such view.</summary>
+    internal bool OpenView(string idOrLabel, bool hold = true)
+    {
+        if (!Expanded.CanOpen(idOrLabel)) return false;
+        Open(() => Expanded.OpenView(idOrLabel), hold);
+        return true;
+    }
+
     void Open(Action selectTab, bool hold)
     {
         selectTab();
@@ -580,7 +594,7 @@ public partial class NotchWindow : Window
         NotchMode.Compact => (_compactWidth, 32, 12),
         NotchMode.Notification => (460, 92, 30),
         NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
-        NotchMode.Expanded => (480, 204, 32),
+        NotchMode.Expanded => (ExpandedView.OpenWidth, Expanded.Height, 36),
         NotchMode.Drop => (480, 150, 32),
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => (420, 54, 27),
         NotchMode.Typing => (560, 58 + _paletteHeight, _paletteHeight > 0 ? 30 : 29),

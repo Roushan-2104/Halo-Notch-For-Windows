@@ -197,7 +197,7 @@ internal sealed class ModuleContext
     /// <summary>Call when a card's <see cref="NotchCard.IsRelevant"/> answer may have changed.</summary>
     public void CardsChanged() => Notch.ExpandedView.CardsChanged();
 
-    /// <summary>A tab in the expanded notch (the card is 480×204; your panel gets about 436×150).</summary>
+    /// <summary>A chip in the open notch that shows your panel (about 436×150) in its 924×248 view area; prefer <see cref="AddCard"/>.</summary>
     public void AddTab(string glyph, string tooltip, FrameworkElement panel) => Notch.ExpandedView.AddTab(glyph, tooltip, panel);
 
     /// <summary>
