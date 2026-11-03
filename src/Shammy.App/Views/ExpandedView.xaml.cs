@@ -47,6 +47,7 @@ public partial class ExpandedView : UserControl
     Border? _shelfBadge;
     TextBlock? _shelfBadgeText;
     string? _openId;
+    int _alertsNewAtOpen;
     Grid? _pressedFrame;
     Point _pressedAt;
 
@@ -216,6 +217,8 @@ public partial class ExpandedView : UserControl
         }
         if (Resolve(query) is not { } view) return false;
 
+        // Leaving the Alerts view: what it listed has been seen.
+        if (_openId == AlertsId && view.Id != AlertsId) _s?.Notifications.MarkAllSeen();
         _openId = view.Id;
         ClearTabHover();
         DetailContent.Content = null;
@@ -245,6 +248,9 @@ public partial class ExpandedView : UserControl
             case ViewKind.Alerts:
                 AlertsView.Visibility = Visibility.Visible;
                 RebuildAlertRows();
+                // "N new" counts what arrived since the view was last open; from now on those count as seen.
+                _alertsNewAtOpen = _s?.Notifications.UnreadCount ?? 0;
+                _s?.Notifications.MarkAllSeen();
                 break;
         }
         DetailTitle.Text = view.Title.ToUpperInvariant();
@@ -269,6 +275,7 @@ public partial class ExpandedView : UserControl
     void GoHome(bool animate)
     {
         bool wasOpen = _openId is not null;
+        if (_openId == AlertsId) _s?.Notifications.MarkAllSeen();
         _openId = null;
         // Let go of the card's detail so it (and anything it subscribed to) can be collected.
         DetailContent.Content = null;
@@ -294,7 +301,7 @@ public partial class ExpandedView : UserControl
         foreach (var c in _cards)
             if (Is(c.Id)) return CardView(c);
         if (Is(ShelfId)) return new View(ShelfId, "Shelf", ViewKind.Shelf);
-        if (Is(AlertsId) || Is("notifications")) return new View(AlertsId, "Notifications", ViewKind.Alerts);
+        if (Is(AlertsId) || Is("notifications")) return new View(AlertsId, "Alerts", ViewKind.Alerts);
         foreach (var (id, label, panel) in _tabs)
             if (Is(id)) return new View(id, label, ViewKind.Tab, Panel: panel);
         // By label: the chip's label first (a card may have taken a tab's chip), then any card's title.
@@ -640,7 +647,8 @@ public partial class ExpandedView : UserControl
 
         var n = _s.Notifications;
         int alertCount = n.History.Count;
-        AlertsCount.Text = alertCount.ToString();
+        // New since the view was last open: what was new when it opened, plus anything that arrived while open.
+        AlertsCount.Text = (_openId == AlertsId ? _alertsNewAtOpen + n.UnreadCount : n.UnreadCount).ToString();
         AlertsNote.Text = !n.IsAvailable ? n.Problem ?? "Notifications are starting…"
             : PrivacyState.Presenting ? "Messages are hidden while you share your screen"
             : "Click one to open its app";

@@ -48,6 +48,7 @@ internal sealed class NotificationService : IDisposable
 
     readonly Dispatcher _ui;
     readonly HashSet<uint> _known = new();
+    readonly Shammy.Core.Notifications.UnreadTracker _unread = new();
     readonly Dictionary<string, ImageSource?> _icons = new();
     readonly DispatcherTimer _poll;
     UserNotificationListener? _listener;
@@ -65,6 +66,24 @@ internal sealed class NotificationService : IDisposable
     public event Action<ShammyNotification>? Arrived;
 
     public ObservableCollection<ShammyNotification> History { get; } = new();
+
+    /// <summary>Apps the user muted (by app id): their toasts are dropped before they reach the history.</summary>
+    public Func<string, bool>? IsMuted { get; set; }
+
+    /// <summary>History entries that arrived since the Alerts view was last open.</summary>
+    public int UnreadCount => _unread.CountUnread(History.Select(n => n.Id));
+
+    /// <summary>The user has seen the whole history (the Alerts view is open).</summary>
+    public void MarkAllSeen() => _unread.MarkSeen(History.Select(n => n.Id));
+
+    /// <summary>An app was just muted: what it already posted leaves the history too.</summary>
+    public void RemoveApp(string appId)
+    {
+        if (appId.Length == 0) return;
+        foreach (var n in History.Where(n => n.AppId == appId).ToList()) History.Remove(n);
+    }
+
+    bool Muted(ShammyNotification n) => n.AppId.Length > 0 && IsMuted?.Invoke(n.AppId) == true;
 
     public bool IsAvailable { get; private set; }
     public string? Problem { get; private set; }
@@ -97,8 +116,9 @@ internal sealed class NotificationService : IDisposable
         foreach (var n in existing.OrderByDescending(n => n.CreationTime))
         {
             _known.Add(n.Id);
-            if (Convert(n) is { } h) AddToHistory(h, atEnd: true);
+            if (Convert(n) is { } h && !Muted(h)) AddToHistory(h, atEnd: true);
         }
+        MarkAllSeen();
 
         try
         {
@@ -192,7 +212,8 @@ internal sealed class NotificationService : IDisposable
             foreach (var n in fresh)
             {
                 _known.Add(n.Id);
-                if (Convert(n) is not { } h) continue;
+                // A muted app's toasts never reach the history (or the pop-up).
+                if (Convert(n) is not { } h || Muted(h)) continue;
                 AddToHistory(h, atEnd: false);
                 Arrived?.Invoke(h);
             }
@@ -291,6 +312,7 @@ internal sealed class NotificationService : IDisposable
     /// <summary>Test pipe: a made-up toast through the same path as a real one (history, then pop-up).</summary>
     internal void InjectForTest(ShammyNotification n)
     {
+        if (Muted(n)) return;
         AddToHistory(n, atEnd: false);
         Arrived?.Invoke(n);
     }

@@ -136,6 +136,7 @@ internal sealed class ShammyHost : IDisposable
         Safe("notifications", () =>
         {
             _notifications.Arrived += OnNotification;
+            _notifications.IsMuted = appId => _settings.MutedNotificationApps.Contains(appId);
             _notch.NotificationHovered += hovered =>
             {
                 // Hold the notification while it's being read; give a moment after the pointer leaves.
@@ -156,6 +157,7 @@ internal sealed class ShammyHost : IDisposable
                     _settings.MutedNotificationApps.Add(n.AppId);
                     _settings.Save();
                 }
+                _notifications.RemoveApp(n.AppId);
                 _activities.Remove("notification");
                 Post(new Activity("muted", ActivityKind.Message, PriorityMessage, new MessagePayload("", $"Muted {n.AppName}"), In(2.5)));
             };
@@ -512,17 +514,17 @@ internal sealed class ShammyHost : IDisposable
                 _settings.MutedNotificationApps.Clear();
                 _settings.Save();
                 return "ok";
-            // "notifications list": the rows the Notifications tab shows right now (text hidden while private).
+            // "notifications list": the rows the Alerts view shows right now (text hidden while private).
             case "notifications" when arg.Trim() == "list":
                 return $"presenting={PrivacyState.Presenting} rows={_notifications.History.Count} {_notch.ExpandedView.DescribeAlertRows()}";
-            // "notify-test App|Title|Body": a made-up toast through the real path (history, pop-up, privacy).
+            // "notify-test App|Title|Body[|appId]": a made-up toast through the real path (mute filter, history, pop-up, privacy).
             case "notify-test":
             {
                 var f = arg.Split('|');
                 _notifications.InjectForTest(new ShammyNotification
                 {
                     Id = (uint)Random.Shared.Next(1 << 30, int.MaxValue),
-                    AppId = "",
+                    AppId = f.Length > 3 ? f[3].Trim() : "",
                     AppName = f[0].Trim().Length > 0 ? f[0].Trim() : "Test",
                     Title = f.Length > 1 ? f[1].Trim() : "Test",
                     Body = f.Length > 2 ? f[2].Trim() : "",
@@ -531,7 +533,7 @@ internal sealed class ShammyHost : IDisposable
                 return "ok";
             }
             case "notifications":
-                return $"available={_notifications.IsAvailable} problem={_notifications.Problem ?? "-"} history={_notifications.History.Count} " +
+                return $"available={_notifications.IsAvailable} problem={_notifications.Problem ?? "-"} history={_notifications.History.Count} unread={_notifications.UnreadCount} " +
                        $"muted={_settings.MutedNotificationApps.Count} presenting={PrivacyState.Presenting} " +
                        $"shown={(_activities.Get("notification") is { Payload: NotificationPayload p } ? $"{p.Notification.Title} | {p.Notification.Body}" : "-")}";
             case "state":
