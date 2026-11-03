@@ -23,7 +23,7 @@ namespace Shammy.Modules.Settings;
 /// </summary>
 internal sealed class SettingsView : Grid
 {
-    readonly ModuleContext _ctx;
+    readonly Action<bool> _setPet;
     readonly AppSettings _s;
     readonly Func<IReadOnlyList<string>> _modules;
     readonly Action _done;
@@ -35,10 +35,11 @@ internal sealed class SettingsView : Grid
     static string _tab = SettingsCatalog.Sections[0];
     bool _changing, _hooked, _rebuildQueued;
 
-    public SettingsView(ModuleContext ctx, Func<IReadOnlyList<string>> modules, Action done, string? tab = null)
+    /// <param name="setPet">Shows or hides the pet on the notch (and saves it).</param>
+    public SettingsView(AppSettings settings, Func<IReadOnlyList<string>> modules, Action done, Action<bool> setPet, string? tab = null)
     {
-        _ctx = ctx;
-        _s = ctx.Settings;
+        _setPet = setPet;
+        _s = settings;
         _modules = modules;
         _done = done;
         if (tab is not null && SettingsCatalog.Sections.Contains(tab)) _tab = tab;
@@ -412,7 +413,7 @@ internal sealed class SettingsView : Grid
             _changing = true;
             try
             {
-                _ctx.Notch.SetPetEnabled(on);
+                _setPet(on);
                 _s.NotifyChanged(nameof(AppSettings.PetEnabled));
             }
             finally { _changing = false; }
@@ -476,7 +477,7 @@ internal sealed class SettingsView : Grid
             Set(nameof(AppSettings.PetName), name, $"Hi, I’m {name}!");
             nameHint.Text = NameHint(name);
             presetSeg.Index = presets.IndexOf(name);
-            if (preview.Tag is TrackedText label) label.Text = name.ToUpperInvariant();
+            if (preview.Tag is SpacedText label) label.Text = name.ToUpperInvariant();
             face.Mood = FaceMood.Happy;
         }
         box.KeyDown += (_, e) =>
@@ -527,7 +528,7 @@ internal sealed class SettingsView : Grid
         SetColumn(face, 1);
         grid.Children.Add(face);
         var now = DateTime.Now;
-        var value = ScreenKit.Text(AlarmText.Temperature(HostLinks.WeatherGlance()) ?? ClockPreference.Format(now), 13, Weight.Bold);
+        var value = ScreenKit.Text(AlarmText.Temperature(HostLinks.WeatherGlance()) ?? ClockPreference.Parts(now.Hour, now.Minute).Time, 13, Weight.Bold);
         value.HorizontalAlignment = HorizontalAlignment.Right;
         SetColumn(value, 2);
         grid.Children.Add(value);

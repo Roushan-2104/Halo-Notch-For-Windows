@@ -20,6 +20,15 @@ public static class TourScript
         _ => new("Everything else · 5 of 5", "Hover me for the rest", "Music, calendar, weather, clipboard: all one hover away. Pick a name for me first?"),
     };
 
+    static readonly string[] Phrases = { "tour", "help", "show the tour", "show tour", "show me the tour", "welcome tour", "take the tour", "replay the tour", "how does this work" };
+
+    /// <summary>"tour", "help", "show the tour" (any case, a trailing ?/! ignored): typed or said, it replays the tour.</summary>
+    public static bool IsTourCommand(string? text)
+    {
+        var t = (text ?? "").Trim().TrimEnd('?', '!', '.').Trim().ToLowerInvariant();
+        return Phrases.Contains(t);
+    }
+
     public static TourPage Finished(string name) =>
         new("All set", "See you up there!", $"I’m {name}. Hover the notch any time, or hold Right Alt and just say hi.");
 

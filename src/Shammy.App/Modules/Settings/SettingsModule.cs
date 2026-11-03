@@ -81,7 +81,7 @@ internal sealed class SettingsModule : IShammyModule
 
     FrameworkElement BuildDetail()
     {
-        _view = new SettingsView(_ctx, () => _ctx.ModuleNames, () => _ctx.OpenCard("home"));
+        _view = new SettingsView(_ctx.Settings, () => _ctx.ModuleNames, () => _ctx.OpenCard("home"), _ctx.Notch.SetPetEnabled);
         return _view;
     }
 

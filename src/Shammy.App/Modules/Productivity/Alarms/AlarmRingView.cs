@@ -20,7 +20,7 @@ internal sealed class AlarmRingView : Grid
     const double Radius = 32;
 
     readonly Alarm _alarm;
-    readonly TrackedText _ringing = ScreenKit.Label("");
+    readonly SpacedText _ringing = ScreenKit.Label("");
     readonly DispatcherTimer _tick = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
     readonly Border _pulse;
     readonly ScaleTransform _pulseScale = new(1, 1);
@@ -55,6 +55,7 @@ internal sealed class AlarmRingView : Grid
         var top = new Grid();
         top.Children.Add(ScreenKit.Label(AlarmText.RingDate(DateTime.Now)));
         _ringing.HorizontalAlignment = HorizontalAlignment.Right;
+        _ringing.Tabular = true;
         top.Children.Add(_ringing);
         content.Children.Add(top);
 
@@ -74,8 +75,9 @@ internal sealed class AlarmRingView : Grid
         if (suffix.Length > 0)
         {
             var am = ScreenKit.Display(suffix, 34, Weight.Bold, -0.02);
-            am.VerticalAlignment = VerticalAlignment.Bottom;
-            am.Margin = new Thickness(10, 0, 0, 2);
+            // On the big number's baseline, like the design's flex baseline row.
+            am.VerticalAlignment = VerticalAlignment.Top;
+            am.Margin = new Thickness(10, -14 + big.Baseline - am.Baseline, 0, 0);
             timeRow.Children.Add(am);
         }
         var label = ScreenKit.Text(alarm.Label.Length > 0 ? "Alarm · " + alarm.Label : "Alarm", 17, Weight.SemiBold, ScreenKit.Fg2);

@@ -60,6 +60,10 @@ internal sealed class ShammyPet : Grid
         _particleTimer.Tick += (_, _) => SpawnParticle();
 
         IsVisibleChanged += (_, _) => UpdateRunning();
+        Screens.PetLook.Changed += () =>
+        {
+            if (IsVisible) ApplyMood();
+        };
         ApplyMood();
     }
 
@@ -140,7 +144,8 @@ internal sealed class ShammyPet : Grid
         _pose.X = _pose.Y = 0;
         _lid.ScaleY = 1;
 
-        var white = Res("CardText");
+        // The eye colour and shape chosen in Settings (PetLook); white round pills by default.
+        var white = Screens.PetLook.Solid();
         switch (Mood)
         {
             case PetMood.Music:
@@ -193,6 +198,7 @@ internal sealed class ShammyPet : Grid
 
     void SetEyes(EyeShape shape, double w, double h, Brush brush)
     {
+        if (shape == EyeShape.Pill) (w, h, _) = Shammy.Core.Notch.PetLooks.Restyle(Screens.PetLook.Style, w, h);
         _leftEye.Show(shape, w, h, brush);
         _rightEye.Show(shape, w, h, brush);
     }
@@ -396,7 +402,7 @@ internal sealed class ShammyPet : Grid
             {
                 EyeShape.Droopy => new CornerRadius(2, 2, w / 2, w / 2),
                 EyeShape.Lid => new CornerRadius(h / 2),
-                _ => new CornerRadius(w / 2),
+                _ => new CornerRadius(Screens.PetLook.Style == Shammy.Core.Notch.PetEyeStyle.Pixel ? 1.5 : w / 2),
             };
         }
     }

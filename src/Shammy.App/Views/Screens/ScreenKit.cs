@@ -56,7 +56,7 @@ internal static class ScreenKit
         return (family, weight);
     }
 
-    /// <summary>Plain text in the wall's face (tabular figures on, so times don't wobble).</summary>
+    /// <summary>Plain text in the wall's face, the right embedded file per weight.</summary>
     public static TextBlock Text(string text, double size, Weight w = Weight.Regular, Brush? brush = null)
     {
         var (family, weight) = Font(w);
@@ -70,7 +70,6 @@ internal static class ScreenKit
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        System.Windows.Documents.Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
         return t;
     }
 
@@ -89,11 +88,11 @@ internal static class ScreenKit
     }
 
     /// <summary>The design's small uppercase label: 11 px semibold, tracked 0.12 em, secondary grey.</summary>
-    public static TrackedText Label(string text, Brush? brush = null, double size = 11) =>
+    public static SpacedText Label(string text, Brush? brush = null, double size = 11) =>
         new() { Text = text.ToUpperInvariant(), FontSize = size, Weight = Weight.SemiBold, Foreground = brush ?? Fg2, Tracking = 0.12 };
 
     /// <summary>A big tight display line (times, titles): letter-spacing in em, usually negative.</summary>
-    public static TrackedText Display(string text, double size, Weight w = Weight.ExtraBold, double tracking = -0.03, Brush? brush = null) =>
+    public static SpacedText Display(string text, double size, Weight w = Weight.ExtraBold, double tracking = -0.03, Brush? brush = null) =>
         new() { Text = text, FontSize = size, Weight = w, Foreground = brush ?? ScreenKit.Fg, Tracking = tracking };
 
     // ---- Icons -----------------------------------------------------------------------------------
@@ -737,7 +736,7 @@ internal sealed class SlimSlider : Grid
 /// numbers at −0.03 to −0.05 em) and tabular digits. Cheap: a handful of FormattedText runs, re-made only
 /// when the text or style changes.
 /// </summary>
-internal sealed class TrackedText : FrameworkElement
+internal sealed class SpacedText : FrameworkElement
 {
     string _text = "";
     double _size = 13, _tracking;
@@ -746,7 +745,7 @@ internal sealed class TrackedText : FrameworkElement
     List<(FormattedText Text, double X)>? _runs;
     double _width, _height, _baseline;
 
-    public TrackedText()
+    public SpacedText()
     {
         IsHitTestVisible = false;
         VerticalAlignment = VerticalAlignment.Center;
@@ -761,8 +760,8 @@ internal sealed class TrackedText : FrameworkElement
     /// <summary>Letter-spacing in em.</summary>
     public double Tracking { get => _tracking; set { _tracking = value; Invalidate(); } }
 
-    /// <summary>Equal-width digits (on by default) so a countdown never jiggles.</summary>
-    public bool Tabular { get; set; } = true;
+    /// <summary>Equal-width digits for live values (a countdown) so they never jiggle; off for static text.</summary>
+    public bool Tabular { get; set; }
 
     /// <summary>Distance from the top to the baseline, for lining up a big number with its small suffix.</summary>
     public double Baseline

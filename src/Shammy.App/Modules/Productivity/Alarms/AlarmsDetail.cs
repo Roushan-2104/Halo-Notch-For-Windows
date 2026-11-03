@@ -196,8 +196,8 @@ internal sealed class AlarmsDetail : Grid
             "Gentle wake: the sound swells over 30 seconds");
         var breaks = SwitchRow("Break through fullscreen", "", _host.BreaksFullscreen, on => _host.BreaksFullscreen = on,
             "Ring over games, videos and slides");
-        var hint = ScreenKit.Para("Same snooze as the “Usual” button when it rings.", 12);
-        return ScreenKit.Column(12, ScreenKit.Column(6, ScreenKit.Label("Snooze length"), snooze), breaks, gentle, hint);
+
+        return ScreenKit.Column(12, ScreenKit.Column(6, ScreenKit.Label("Snooze length"), snooze), breaks, gentle);
     }
 
     static FrameworkElement SwitchRow(string title, string aside, bool on, Action<bool> set, string tip)

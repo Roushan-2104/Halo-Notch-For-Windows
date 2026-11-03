@@ -15,7 +15,7 @@ internal sealed class SnoozedPill : ICompactContent
 {
     readonly Alarm _alarm;
     readonly Action _turnOff;
-    TrackedText? _countdown;
+    SpacedText? _countdown;
     DispatcherTimer? _tick;
 
     public SnoozedPill(Alarm alarm, Action turnOff)
@@ -28,7 +28,7 @@ internal sealed class SnoozedPill : ICompactContent
 
     public double Build(ContentControl left, ContentControl right)
     {
-        var face = new PetFace(0.62, FaceMood.Sleep) { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(-4, 0, 2, 0) };
+        var face = new PetFace(0.62, FaceMood.Sleep) { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(-4, 0, 6, 0) };
         var label = ScreenKit.Label("Snoozed", size: 10.5);
         var l = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         l.Children.Add(face);
@@ -36,6 +36,7 @@ internal sealed class SnoozedPill : ICompactContent
         left.Content = l;
 
         _countdown = ScreenKit.Display("", 14, Weight.Bold, 0);
+        _countdown.Tabular = true;
         var off = ScreenKit.Round(ScreenKit.Paths.BellOff, _turnOff, 24, 12, ScreenKit.Tile,
             $"Turn off the {AlarmText.Time(_alarm)} alarm for today");
         off.Margin = new Thickness(8, 0, 0, 0);
@@ -89,7 +90,7 @@ internal sealed class StoppedPill(string greeting, string value) : ICompactConte
 {
     public double Build(ContentControl left, ContentControl right)
     {
-        var face = new PetFace(0.62, FaceMood.Stretch) { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(-4, 0, 2, 0) };
+        var face = new PetFace(0.62, FaceMood.Stretch) { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(-4, 0, 6, 0) };
         var l = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         l.Children.Add(face);
         l.Children.Add(ScreenKit.Label(greeting, size: 10.5));
