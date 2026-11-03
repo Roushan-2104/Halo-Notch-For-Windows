@@ -307,7 +307,7 @@ internal sealed class TimerCard
                 _state.Foreground = _card._accent;
                 _name.Text = Name(c);
                 _ends.Text = c.IsCountdown
-                    ? TimerCardText.Ends(c.EndsLocal(now) ?? DateTime.Now, c.Paused, display)
+                    ? TimerCardText.Ends(c.EndsLocal(now) ?? DateTime.Now, c.Paused, display, Shammy.Modules.Kit.CardKit.H24)
                     : c.Paused ? "Paused" : "Running";
             }
 

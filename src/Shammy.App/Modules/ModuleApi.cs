@@ -83,7 +83,9 @@ internal sealed record ResultChip(string Label, Func<SelectionInfo?, bool> IsVis
 
 internal sealed record ShelfAction(string Label, Action<ShelfItem> Run);
 
-internal sealed record ModuleTrayItem(string Text, Action? OnClick = null, Func<bool>? IsChecked = null, Action<bool>? SetChecked = null);
+/// <param name="IsVisible">Asked each time the tray menu opens; null = always shown.</param>
+internal sealed record ModuleTrayItem(string Text, Action? OnClick = null, Func<bool>? IsChecked = null, Action<bool>? SetChecked = null,
+    Func<bool>? IsVisible = null);
 
 /// <summary>Everything modules register; the host and the search flow read from here.</summary>
 internal sealed class ModuleRegistry
@@ -187,7 +189,9 @@ internal sealed class ModuleContext
     public void AddSelectionHandler(ISelectionHandler handler) => _registry.SelectionHandlers.Add(handler);
     public void AddResultChip(ResultChip chip) => _registry.ResultChips.Add(chip);
     public void AddShelfAction(ShelfAction action) => _registry.ShelfActions.Add(action);
-    public void AddTrayItem(string text, Action onClick) => _registry.TrayItems.Add(new ModuleTrayItem(text, onClick));
+    /// <summary>A tray menu item; with <paramref name="visible"/> it shows only while that says so (e.g. "Disconnect" while connected).</summary>
+    public void AddTrayItem(string text, Action onClick, Func<bool>? visible = null) =>
+        _registry.TrayItems.Add(new ModuleTrayItem(text, onClick, IsVisible: visible));
 
     public void AddTrayToggle(string text, Func<bool> isChecked, Action<bool> setChecked) =>
         _registry.TrayItems.Add(new ModuleTrayItem(text, null, isChecked, setChecked));

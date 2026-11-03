@@ -174,6 +174,9 @@ internal static class CardKit
         return p;
     }
 
+    /// <summary>Whether the user's region writes times on a 24-hour clock ("14:30"); read fresh, it's cheap.</summary>
+    public static bool H24 => Shammy.Core.Cards.ClockFormat.Uses24Hour(System.Globalization.CultureInfo.CurrentCulture);
+
     public static void AutomationName(DependencyObject d, string? name)
     {
         if (!string.IsNullOrEmpty(name)) System.Windows.Automation.AutomationProperties.SetName(d, name);

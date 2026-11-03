@@ -24,9 +24,9 @@ public static class TimerCardText
     /// <summary>A stopwatch has no end, so its ring sweeps once a minute.</summary>
     public static double StopwatchRing(TimeSpan elapsed) => elapsed.TotalSeconds % 60 / 60;
 
-    /// <summary>"Ends at 10:24 AM", "Paused · 4:32 left".</summary>
-    public static string Ends(DateTime endsLocal, bool paused, string display) =>
-        paused ? $"Paused \u00B7 {display} left" : "Ends at " + endsLocal.ToString("h:mm tt", CultureInfo.InvariantCulture);
+    /// <summary>"Ends at 10:24 AM" (or "Ends at 10:24" on a 24-hour clock), "Paused · 4:32 left".</summary>
+    public static string Ends(DateTime endsLocal, bool paused, string display, bool twentyFourHour = false) =>
+        paused ? $"Paused \u00B7 {display} left" : "Ends at " + endsLocal.ToString(twentyFourHour ? "HH:mm" : "h:mm tt", CultureInfo.InvariantCulture);
 
     /// <summary>"of 5:00": the length under the big digits.</summary>
     public static string Of(TimeSpan total) => "of " + TimeFormat.Countdown(total);

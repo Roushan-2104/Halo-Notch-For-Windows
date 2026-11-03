@@ -100,7 +100,7 @@ public static class BuiltInGlances
          local.ToString("ddd d", CultureInfo.InvariantCulture));
 
     /// <summary>Whether the user's culture writes times on a 24-hour clock.</summary>
-    public static bool Uses24Hour(CultureInfo culture) => culture.DateTimeFormat.ShortTimePattern.Contains('H');
+    public static bool Uses24Hour(CultureInfo culture) => Cards.ClockFormat.Uses24Hour(culture);
 
     /// <summary>"Charging 64%" or "28% battery"; null when the battery isn't worth mentioning.</summary>
     public static string? Battery(bool hasBattery, int percent, bool charging)

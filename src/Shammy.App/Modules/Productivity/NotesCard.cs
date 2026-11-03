@@ -67,7 +67,7 @@ internal sealed class NotesCard
     }
 
     static string When(DateTime due, DateTime now) =>
-        due.Date == now.Date ? due.ToString("h:mm tt", Inv) : TimeFormat.When(due, now);
+        due.Date == now.Date ? Shammy.Core.Cards.ClockFormat.Time(due, CardKit.H24) : TimeFormat.When(due, now, CardKit.H24);
 
     // ---- Compact ---------------------------------------------------------------------------------
 

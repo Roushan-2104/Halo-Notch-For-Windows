@@ -32,10 +32,11 @@ public static class TimeFormat
         return parts.Count == 0 ? "0 s" : string.Join(" ", parts);
     }
 
-    /// <summary>"6:00 PM", "Tomorrow 9:00 AM", "Fri 9:00 AM", "12 Nov 9:00 AM", relative to <paramref name="now"/>.</summary>
-    public static string When(DateTime at, DateTime now)
+    /// <summary>"Today 6:00 PM", "Tomorrow 9:00 AM", "Fri 9:00 AM", "12 Nov 9:00 AM" (or "Fri 09:00" on a 24-hour
+    /// clock), relative to <paramref name="now"/>.</summary>
+    public static string When(DateTime at, DateTime now, bool twentyFourHour = false)
     {
-        var time = at.ToString("h:mm tt", Invariant);
+        var time = at.ToString(twentyFourHour ? "HH:mm" : "h:mm tt", Invariant);
         int days = (at.Date - now.Date).Days;
         return days switch
         {

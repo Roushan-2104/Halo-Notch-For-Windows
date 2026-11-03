@@ -64,6 +64,9 @@ internal sealed class CalendarModule : IShammyModule
     internal DateTime? FetchedAt => _store.FetchedAt;
     internal string? LastError => _lastError;
 
+    /// <summary>"Couldn't refresh · last updated 10:20 AM" while the last fetch of a connected calendar failed; else null.</summary>
+    internal string? SyncProblem => Connected ? CalendarText.SyncProblem(_lastError, _store.FetchedAt, DateTime.Now, CardKit.H24) : null;
+
     public void Start(ModuleContext ctx)
     {
         _ctx = ctx;
@@ -89,8 +92,9 @@ internal sealed class CalendarModule : IShammyModule
         // "calendar", "my meetings", "what's next": before the launcher, which would open Windows' Calendar app.
         ctx.AddCommandFirst(new CalendarCommand(this));
 
-        ctx.AddTrayItem("Connect Google Calendar…", OpenSetup);
-        ctx.AddTrayItem("Disconnect calendar", Disconnect);
+        // One or the other, never both: connecting again while connected would only replace the address.
+        ctx.AddTrayItem("Connect Google Calendar…", OpenSetup, visible: () => !Connected);
+        ctx.AddTrayItem("Disconnect calendar", Disconnect, visible: () => Connected);
 
         ctx.AddPipeCommand("cal-state", _ => State());
         ctx.AddPipeCommand("cal-load-ics", LoadIcsFile);
@@ -160,6 +164,7 @@ internal sealed class CalendarModule : IShammyModule
         url ??= _store.Url;
         if (url is null || _fetching) return url is null ? "Not connected" : null;
         _fetching = true;
+        var errorBefore = _lastError;
         try
         {
             using var response = await Http.Value.GetAsync(url);
@@ -201,6 +206,8 @@ internal sealed class CalendarModule : IShammyModule
         finally
         {
             _fetching = false;
+            // A refresh that failed (or worked again) changes what the card says about it.
+            if (_lastError != errorBefore) _card.Refresh();
         }
     }
 
@@ -254,6 +261,7 @@ internal sealed class CalendarModule : IShammyModule
             return;
         }
         _store = new CalendarStore();
+        _lastError = null;
         Agenda = _store.Cache;
         _ctx.Save(_store);
         _fetch.Stop();
@@ -332,7 +340,7 @@ internal sealed class CalendarModule : IShammyModule
 
     GlanceItem? Glance()
     {
-        if (CalendarAgenda.Glance(_store.Cache, DateTime.Now) is not { } g) return null;
+        if (CalendarAgenda.Glance(_store.Cache, DateTime.Now, CardKit.H24) is not { } g) return null;
         var item = g.Item;
         return new GlanceItem(g.Text, NotchPalette.Calendar, g.Priority, item.HasLink ? () => Join(item) : null,
             StartsAt: new DateTimeOffset(DateTime.SpecifyKind(item.Start, DateTimeKind.Local)));
@@ -354,7 +362,8 @@ internal sealed class CalendarModule : IShammyModule
             $"events={items.Count} today={CalendarAgenda.OnDay(items, now).Count} next={nextText} " +
             $"relevant={_notchCard.IsRelevant()} pill={(_pill is null ? "off" : "on")} " +
             $"glance={(glance is null ? "-" : $"\"{glance.Text}\"/{glance.Priority}")} " +
-            $"tick={(_tick.IsEnabled ? $"{_tick.Interval.TotalSeconds:0}s" : "off")} error={_lastError ?? "-"}");
+            $"tick={(_tick.IsEnabled ? $"{_tick.Interval.TotalSeconds:0}s" : "off")} error={_lastError ?? "-"} " +
+            $"problem={SyncProblem ?? "-"} timeline={CalendarAgenda.TimelineHours(items, now)} h24={CardKit.H24}");
     }
 
     /// <summary>Loads a local .ics into the card (in memory only; the next fetch of a connected calendar replaces it).</summary>
@@ -402,7 +411,8 @@ internal sealed class CalendarModule : IShammyModule
         if (!Connected && _store.Cache.Count == 0) return new CommandResult(Glyph, "Calendar", "Not connected yet · paste your Google Calendar address");
         var now = DateTime.Now;
         if (CalendarAgenda.Next(_store.Cache, now) is not { } next) return new CommandResult(Glyph, "Nothing coming up", "Your week is clear");
-        var at = next.Start.Date == now.Date ? CalendarText.ClockAmPm(next.Start) : $"{next.Start.ToString("ddd", CultureInfo.InvariantCulture)} {CalendarText.ClockAmPm(next.Start)}";
+        bool h24 = CardKit.H24;
+        var at = next.Start.Date == now.Date ? CalendarText.ClockAmPm(next.Start, h24) : $"{next.Start.ToString("ddd", CultureInfo.InvariantCulture)} {CalendarText.ClockAmPm(next.Start, h24)}";
         return new CommandResult(Glyph, next.Title, $"{at} · {CalendarText.Until(next.Start, next.End, now)}" + (next.Provider is { } p ? $" · {p}" : ""));
     }
 

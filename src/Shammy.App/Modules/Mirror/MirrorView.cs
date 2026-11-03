@@ -299,7 +299,7 @@ internal sealed class MirrorView : Grid
     {
         var now = DateTime.Now;
         if (CalendarAgenda.Next(CalendarModule.Agenda, now) is not { } next || next.Start - now > TimeSpan.FromMinutes(60)) return null;
-        var text = CardKit.Label($"Ready for your {CalendarText.Clock(next.Start)} {next.Title}", 12, FontWeights.SemiBold);
+        var text = CardKit.Label($"Ready for your {CalendarText.Clock(next.Start, CardKit.H24)} {next.Title}", 12, FontWeights.SemiBold);
         text.TextWrapping = TextWrapping.Wrap;
         text.TextTrimming = TextTrimming.CharacterEllipsis;
         text.MaxHeight = 34;

@@ -48,7 +48,7 @@ internal sealed class ReminderCard : Grid
         header.Children.Add(new TextBlock { Text = "Reminder", FontSize = 11.5, Foreground = Res("Fg2") });
         header.Children.Add(new TextBlock
         {
-            Text = reminder.Due.ToString("h:mm tt", CultureInfo.InvariantCulture),
+            Text = Shammy.Core.Cards.ClockFormat.Time(reminder.Due, Kit.CardKit.H24),
             FontSize = 11.5,
             Foreground = Res("Fg3"),
             HorizontalAlignment = HorizontalAlignment.Right,

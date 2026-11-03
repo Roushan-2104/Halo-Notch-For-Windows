@@ -177,23 +177,28 @@ public static class CalendarUrl
     public static bool IsPrivate(string url) => url.Contains("/private-", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Short texts for the card, the glance and the meeting pill.</summary>
+/// <summary>
+/// Short texts for the card, the glance and the meeting pill. Times follow the user's clock: pass
+/// <c>h24</c> = true where the culture writes "14:30" (then there's no AM/PM anywhere).
+/// </summary>
 public static class CalendarText
 {
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    /// <summary>"10:30" (12-hour, no AM/PM; the card shows that separately).</summary>
-    public static string Clock(DateTime t) => t.ToString("h:mm", Inv);
+    /// <summary>"10:30" (12-hour, no AM/PM; the card shows that separately) or "14:30".</summary>
+    public static string Clock(DateTime t, bool h24 = false) => t.ToString(h24 ? "HH:mm" : "h:mm", Inv);
 
-    public static string AmPm(DateTime t) => t.ToString("tt", Inv);
+    /// <summary>"AM"/"PM"; empty on a 24-hour clock.</summary>
+    public static string AmPm(DateTime t, bool h24 = false) => h24 ? "" : t.ToString("tt", Inv);
 
-    /// <summary>"11:00 AM".</summary>
-    public static string ClockAmPm(DateTime t) => t.ToString("h:mm tt", Inv);
+    /// <summary>"11:00 AM" or "11:00".</summary>
+    public static string ClockAmPm(DateTime t, bool h24 = false) => t.ToString(h24 ? "HH:mm" : "h:mm tt", Inv);
 
-    /// <summary>"10:30 – 10:45", "2 – 3 PM", "11:30 AM – 12:15 PM".</summary>
-    public static string Range(DateTime start, DateTime end)
+    /// <summary>"10:30 – 10:45", "2 – 3 PM", "11:30 AM – 12:15 PM"; on a 24-hour clock "14:00 – 15:00".</summary>
+    public static string Range(DateTime start, DateTime end, bool h24 = false)
     {
         static string Short(DateTime t) => t.Minute == 0 ? t.ToString("%h", Inv) : t.ToString("h:mm", Inv);
+        if (h24) return end <= start ? Clock(start, true) : $"{Clock(start, true)} – {Clock(end, true)}";
         if (end <= start) return ClockAmPm(start);
         bool sameHalf = start.Hour < 12 == end.Hour < 12 && start.Date == end.Date;
         if (sameHalf)
@@ -232,14 +237,34 @@ public static class CalendarText
     }
 
     /// <summary>"Standup 10:30" in at most <paramref name="max"/> characters, trimming the title rather than the time.</summary>
-    public static string Glance(string title, DateTime start, int max = 18)
+    public static string Glance(string title, DateTime start, int max = 18, bool h24 = false)
     {
-        var time = Clock(start);
+        var time = Clock(start, h24);
         int room = max - time.Length - 1;
         title = title.Trim();
         if (room < 2) return time;
         if (title.Length > room) title = title[..(room - 1)].TrimEnd() + "…";
         return $"{title} {time}";
+    }
+
+    /// <summary>The timeline's hour labels: "8 AM", "12 PM", "6 PM", or "08:00", "18:00" on a 24-hour clock.</summary>
+    public static string HourLabel(int hour, bool h24 = false)
+    {
+        hour = ((hour % 24) + 24) % 24;
+        if (h24) return $"{hour:00}:00";
+        return hour == 0 ? "12 AM" : hour == 12 ? "12 PM" : hour < 12 ? $"{hour} AM" : $"{hour - 12} PM";
+    }
+
+    /// <summary>
+    /// "Couldn't refresh · last updated 10:20 AM" (with the day when it wasn't today) while the last fetch failed;
+    /// null when it worked.
+    /// </summary>
+    public static string? SyncProblem(string? error, DateTime? fetchedAt, DateTime now, bool h24 = false)
+    {
+        if (string.IsNullOrEmpty(error)) return null;
+        if (fetchedAt is not { } at) return "Couldn't refresh";
+        var when = at.Date == now.Date ? ClockAmPm(at, h24) : $"{at.ToString("ddd", Inv)} {ClockAmPm(at, h24)}";
+        return $"Couldn't refresh · last updated {when}";
     }
 
     /// <summary>"Standup in 2 min", "Standup now" for the meeting pill.</summary>
@@ -279,17 +304,36 @@ public static class CalendarAgenda
     public static DateTime? NextPillAt(IEnumerable<CalendarOccurrence> items, DateTime now) =>
         items.Where(o => !o.AllDay && o.HasLink && o.Start - PillLead > now).Select(o => (DateTime?)(o.Start - PillLead)).Min();
 
+    /// <summary>The detail timeline's whole hours: 8 AM to 8 PM, stretched (in 2-hour steps) to take in earlier or later events that day.</summary>
+    public static (int Start, int End) TimelineHours(IEnumerable<CalendarOccurrence> items, DateTime day)
+    {
+        const int DefaultStart = 8, DefaultEnd = 20;
+        int start = DefaultStart, end = DefaultEnd;
+        var dayStart = day.Date;
+        foreach (var o in OnDay(items, day).Where(o => !o.AllDay))
+        {
+            double s = Math.Max(0, (o.Start - dayStart).TotalHours);
+            double e = Math.Min(24, ((o.End > o.Start ? o.End : o.Start) - dayStart).TotalHours);
+            start = Math.Min(start, (int)Math.Floor(s));
+            end = Math.Max(end, (int)Math.Ceiling(e));
+        }
+        // Even hours keep the labels on the same 2-hour grid as the default.
+        start -= start % 2;
+        end += end % 2;
+        return (Math.Clamp(start, 0, DefaultStart), Math.Clamp(end, DefaultEnd, 24));
+    }
+
     /// <summary>
     /// The glance: the next meeting today ("Standup 10:30"), priority 50 within the hour, else 20; null when
     /// nothing timed is left today.
     /// </summary>
-    public static (string Text, int Priority, CalendarOccurrence Item)? Glance(IEnumerable<CalendarOccurrence> items, DateTime now)
+    public static (string Text, int Priority, CalendarOccurrence Item)? Glance(IEnumerable<CalendarOccurrence> items, DateTime now, bool h24 = false)
     {
         var next = items.Where(o => !o.AllDay && o.End > now && (o.Start.Date == now.Date || o.Start <= now.AddHours(1)))
             .OrderBy(o => o.Start).FirstOrDefault();
         if (next is null) return null;
         int priority = next.Start - now <= TimeSpan.FromMinutes(60) ? 50 : 20;
-        return (CalendarText.Glance(next.Title, next.Start), priority, next);
+        return (CalendarText.Glance(next.Title, next.Start, h24: h24), priority, next);
     }
 
     /// <summary>The Monday-first week containing <paramref name="today"/>.</summary>

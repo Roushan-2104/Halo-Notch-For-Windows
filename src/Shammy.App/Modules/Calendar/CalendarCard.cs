@@ -10,14 +10,14 @@ namespace Shammy.Modules.Calendar;
 
 /// <summary>
 /// The calendar card from the v2 mockup. Compact (260×176): the week with event dots, then the next meeting's
-/// time, title, "in 10 min" and a Join button. Detail (924×248): today's 8 AM–8 PM timeline with a red
-/// now-line, and the next three days.
+/// time, title, "in 10 min" and a Join button. Detail (924×248): today's timeline (8 AM–8 PM, stretched to
+/// take in earlier or later events) with a red now-line, and the next three days. Times follow the user's
+/// 12/24-hour clock; a failed refresh says so (with when it last worked) on both.
 /// </summary>
 internal sealed class CalendarCard
 {
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     static readonly string[] Shades = { NotchPalette.Calendar, "#2F74E0", "#8AB9FF" };
-    const double DayStart = 8, DaySpan = 12; // the timeline runs 8 AM to 8 PM
 
     readonly CalendarModule _module;
     readonly Grid _compact = new() { Margin = new Thickness(14) };
@@ -59,10 +59,11 @@ internal sealed class CalendarCard
             return;
         }
 
+        bool h24 = CardKit.H24;
         var next = CalendarAgenda.Next(items, now);
         if (next is null)
         {
-            _next.Children.Add(CardKit.Caption("Next"));
+            _next.Children.Add(WithProblem(CardKit.Caption("Next")));
             _next.Children.Add(CardKit.Label("Nothing coming up", 16, FontWeights.Bold));
             _next.Children.Add(CardKit.Label("Your week is clear", 12, FontWeights.Medium, CardKit.Text2));
             AutomationName("Calendar: nothing coming up");
@@ -70,10 +71,10 @@ internal sealed class CalendarCard
         }
 
         var caption = CardKit.Row(6, CardKit.Dot(6, CardKit.Brush(NotchPalette.Calendar)), CardKit.Caption("Next"));
-        _next.Children.Add(caption);
+        _next.Children.Add(WithProblem(caption));
         var time = new StackPanel { Orientation = Orientation.Horizontal };
-        time.Children.Add(CardKit.Big(next.Start.Date == now.Date ? CalendarText.Clock(next.Start) : next.Start.ToString("ddd", Inv)));
-        var small = CardKit.Label(next.Start.Date == now.Date ? CalendarText.AmPm(next.Start) : CalendarText.ClockAmPm(next.Start), 12, FontWeights.SemiBold, CardKit.Text2);
+        time.Children.Add(CardKit.Big(next.Start.Date == now.Date ? CalendarText.Clock(next.Start, h24) : next.Start.ToString("ddd", Inv)));
+        var small = CardKit.Label(next.Start.Date == now.Date ? CalendarText.AmPm(next.Start, h24) : CalendarText.ClockAmPm(next.Start, h24), 12, FontWeights.SemiBold, CardKit.Text2);
         small.VerticalAlignment = VerticalAlignment.Bottom;
         small.Margin = new Thickness(5, 0, 0, 6);
         time.Children.Add(small);
@@ -92,7 +93,16 @@ internal sealed class CalendarCard
             line.Margin = new Thickness(0, 0, 0, 0);
             time.Margin = new Thickness(0, 0, 80, 0);
         }
-        AutomationName($"Calendar: next {next.Title} at {CalendarText.ClockAmPm(next.Start)}, {until}");
+        AutomationName($"Calendar: next {next.Title} at {CalendarText.ClockAmPm(next.Start, h24)}, {until}");
+    }
+
+    /// <summary>The caption, plus "· Couldn't refresh" in the alarm colour while the last fetch failed (the detail says when it last worked).</summary>
+    FrameworkElement WithProblem(FrameworkElement caption)
+    {
+        if (_module.SyncProblem is not { } problem) return caption;
+        var note = CardKit.Label("· Couldn't refresh", 11, FontWeights.SemiBold, CardKit.Brush(NotchPalette.Alarm));
+        note.ToolTip = problem;
+        return CardKit.Row(6, caption, note);
     }
 
     void AutomationName(string name) => CardKit.AutomationName(_compact, name);
@@ -160,6 +170,7 @@ internal sealed class CalendarCard
     {
         var panel = new DockPanel { LastChildFill = true };
 
+        bool h24 = CardKit.H24;
         // Header: the date on the left, the next meeting and Join on the right.
         var header = new DockPanel { LastChildFill = false };
         var date = new StackPanel();
@@ -180,7 +191,7 @@ internal sealed class CalendarCard
                 CardKit.Caption($"Next · {CalendarText.Until(next.Start, next.End, now)}"));
             cap.HorizontalAlignment = HorizontalAlignment.Right;
             info.Children.Add(cap);
-            var what = CardKit.Label($"{next.Title} · {CalendarText.Clock(next.Start)}" + (next.Provider is { } p ? $" · {p}" : ""), 13, FontWeights.SemiBold);
+            var what = CardKit.Label($"{next.Title} · {CalendarText.ClockAmPm(next.Start, h24)}" + (next.Provider is { } p ? $" · {p}" : ""), 13, FontWeights.SemiBold);
             what.HorizontalAlignment = HorizontalAlignment.Right;
             what.MaxWidth = 300;
             info.Children.Add(what);
@@ -193,11 +204,14 @@ internal sealed class CalendarCard
         // Footer: source and the now marker legend.
         var footer = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
         var src = CardKit.Row(6, CardKit.Glyph("", 11, CardKit.Text2), CardKit.Label("From your Google Calendar", 11, FontWeights.Medium, CardKit.Text2));
-        if (_module.FetchedAt is { } f && now - f > TimeSpan.FromMinutes(30))
-            src.Children.Add(CardKit.Label($" · updated {f.ToString("h:mm tt", Inv)}", 11, FontWeights.Medium, CardKit.Text2));
+        // Why it's out of date, or when it last updated if that was a while ago.
+        if (_module.SyncProblem is { } problem)
+            src.Children.Add(CardKit.Label($" · {problem}", 11, FontWeights.SemiBold, CardKit.Brush(NotchPalette.Alarm)));
+        else if (_module.FetchedAt is { } f && now - f > TimeSpan.FromMinutes(30))
+            src.Children.Add(CardKit.Label($" · updated {CalendarText.ClockAmPm(f, h24)}", 11, FontWeights.Medium, CardKit.Text2));
         footer.Children.Add(src);
         var nowLegend = CardKit.Row(5, new Border { Width = 8, Height = 2, CornerRadius = new CornerRadius(1), Background = CardKit.Brush(NotchPalette.Alarm) },
-            CardKit.Label($"Now {CalendarText.Clock(now)}", 11, FontWeights.Medium, CardKit.Text2));
+            CardKit.Label($"Now {CalendarText.ClockAmPm(now, h24)}", 11, FontWeights.Medium, CardKit.Text2));
         nowLegend.HorizontalAlignment = HorizontalAlignment.Right;
         footer.Children.Add(nowLegend);
         DockPanel.SetDock(footer, Dock.Bottom);
@@ -205,7 +219,7 @@ internal sealed class CalendarCard
 
         var today = CalendarAgenda.OnDay(items, now).Where(o => !o.AllDay).ToList();
         var allDay = CalendarAgenda.OnDay(items, now).Where(o => o.AllDay).ToList();
-        var timeline = new Timeline(today, now) { Margin = new Thickness(4, 14, 4, 0), VerticalAlignment = VerticalAlignment.Top };
+        var timeline = new Timeline(today, now, CalendarAgenda.TimelineHours(today, now), h24) { Margin = new Thickness(4, 14, 4, 0), VerticalAlignment = VerticalAlignment.Top };
         var middle = new StackPanel();
         middle.Children.Add(timeline);
         if (allDay.Count > 0)
@@ -239,7 +253,7 @@ internal sealed class CalendarCard
             if (list.Count == 0) continue;
             var first = list.FirstOrDefault(o => !o.AllDay) ?? list[0];
             int more = list.Count - 1;
-            string meta = first.AllDay ? "All day" : CalendarText.ClockAmPm(first.Start);
+            string meta = first.AllDay ? "All day" : CalendarText.ClockAmPm(first.Start, CardKit.H24);
             meta += more > 0 ? $" · {more} more {(more == 1 ? "event" : "events")}" : first.Provider is { } p ? $" · {p}" : $" · {CalendarText.Length(first)}";
             stack.Children.Add(UpcomingRow(day, first.Title, meta, Shades[shown % Shades.Length]));
             shown++;
@@ -292,17 +306,21 @@ internal sealed class CalendarCard
         };
     }
 
-    /// <summary>Hour labels, the 8 AM–8 PM bar with event blocks and the red now-line, and event labels under it; lays itself out by width.</summary>
+    /// <summary>Hour labels, the day's bar (8 AM–8 PM or wider) with event blocks and the red now-line, and event labels under it; lays itself out by width.</summary>
     sealed class Timeline : Grid
     {
         readonly List<CalendarOccurrence> _events;
         readonly DateTime _now;
+        readonly int _startHour, _endHour;
+        readonly bool _h24;
         readonly Canvas _hours = new() { Height = 14 }, _bar = new() { Height = 34, ClipToBounds = false }, _labels = new() { Height = 34 };
 
-        public Timeline(List<CalendarOccurrence> events, DateTime now)
+        public Timeline(List<CalendarOccurrence> events, DateTime now, (int Start, int End) hours, bool h24)
         {
             _events = events;
             _now = now;
+            (_startHour, _endHour) = hours;
+            _h24 = h24;
             RowDefinitions.Add(new RowDefinition { Height = new GridLength(14) });
             RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
             RowDefinitions.Add(new RowDefinition { Height = new GridLength(34) });
@@ -336,17 +354,20 @@ internal sealed class CalendarCard
             _bar.Children.Clear();
             _labels.Children.Clear();
             if (width <= 0) return;
-            double X(double hour) => Math.Clamp((hour - DayStart) / DaySpan, 0, 1) * width;
+            double dayStart = _startHour, daySpan = Math.Max(2, _endHour - _startHour);
+            double X(double hour) => Math.Clamp((hour - dayStart) / daySpan, 0, 1) * width;
 
-            foreach (var h in new[] { 8, 10, 12, 14, 16, 18, 20 })
+            // A label every 2 hours (every 4 on a stretched day, so they never crowd).
+            int step = daySpan > 12 ? 4 : 2;
+            for (int h = _startHour; h <= _endHour; h += step)
             {
-                var label = CardKit.Label(h == 12 ? "12 PM" : h < 12 ? $"{h} AM" : $"{h - 12} PM", 10, FontWeights.SemiBold, CardKit.Text2);
+                var label = CardKit.Label(CalendarText.HourLabel(h, _h24), 10, FontWeights.SemiBold, CardKit.Text2);
                 label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 double lw = label.DesiredSize.Width;
                 double x = X(h);
-                Canvas.SetLeft(label, h == 8 ? 0 : h == 20 ? x - lw : x - lw / 2);
+                Canvas.SetLeft(label, h == _startHour ? 0 : h >= _endHour ? x - lw : x - lw / 2);
                 _hours.Children.Add(label);
-                if (h is > 8 and < 20)
+                if (h > _startHour && h < _endHour)
                 {
                     var line = new Border { Width = 1, Height = 34, Background = CardKit.Brush("#232326") };
                     Canvas.SetLeft(line, x);
@@ -359,7 +380,7 @@ internal sealed class CalendarCard
             {
                 var e = _events[i];
                 double s = Hours(e.Start, _now), en = Hours(e.End, _now);
-                if (en <= DayStart || s >= DayStart + DaySpan) continue;
+                if (en <= dayStart || s >= dayStart + daySpan) continue;
                 double left = X(s), right = X(en);
                 var block = new Border
                 {
@@ -368,7 +389,7 @@ internal sealed class CalendarCard
                     CornerRadius = new CornerRadius(6),
                     Background = CardKit.Brush(Shades[i % Shades.Length]),
                     Opacity = e.End <= _now ? 0.45 : 1,
-                    ToolTip = $"{e.Title} · {CalendarText.Range(e.Start, e.End)}",
+                    ToolTip = $"{e.Title} · {CalendarText.Range(e.Start, e.End, _h24)}",
                 };
                 Canvas.SetLeft(block, left);
                 Canvas.SetTop(block, 5);
@@ -377,7 +398,7 @@ internal sealed class CalendarCard
                 // Labels go under their block; one that would collide with the previous is skipped (the tooltip has it).
                 var label = new StackPanel();
                 label.Children.Add(CardKit.Label(e.Title, 12, FontWeights.SemiBold));
-                label.Children.Add(CardKit.Label(CalendarText.Range(e.Start, e.End), 11, FontWeights.Medium, CardKit.Text2));
+                label.Children.Add(CardKit.Label(CalendarText.Range(e.Start, e.End, _h24), 11, FontWeights.Medium, CardKit.Text2));
                 label.Measure(new Size(160, double.PositiveInfinity));
                 double lw = Math.Min(160, label.DesiredSize.Width);
                 label.MaxWidth = 160;
@@ -389,7 +410,7 @@ internal sealed class CalendarCard
             }
 
             double nowH = Hours(_now, _now);
-            if (nowH >= DayStart && nowH <= DayStart + DaySpan)
+            if (nowH >= dayStart && nowH <= dayStart + daySpan)
             {
                 var red = CardKit.Brush(NotchPalette.Alarm);
                 var line = new Border { Width = 2, Height = 46, CornerRadius = new CornerRadius(1), Background = red };

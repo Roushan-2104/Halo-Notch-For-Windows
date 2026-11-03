@@ -198,7 +198,7 @@ internal sealed class WeatherFeature : IDisposable
 
         // A refresh that failed (offline) leaves an old report; say how old instead of passing it off as now.
         var stale = _updatedUtc is { } at && DateTime.UtcNow - at > TimeSpan.FromHours(2)
-            ? $" \u00B7 as of {at.ToLocalTime():h:mm tt}" : "";
+            ? $" \u00B7 as of {Shammy.Core.Cards.ClockFormat.Time(at.ToLocalTime(), Kit.CardKit.H24)}" : "";
         return new CommandResult(WeatherCodes.Glyph(r.Code, r.IsDay), $"{WeatherText.Temp(r.Temperature)} {WeatherCodes.Describe(r.Code)}",
             $"{City} \u00B7 feels {WeatherText.Temp(r.FeelsLike)} \u00B7 H {WeatherText.Temp(r.TodayHigh)} L {WeatherText.Temp(r.TodayLow)}{stale}");
     }
