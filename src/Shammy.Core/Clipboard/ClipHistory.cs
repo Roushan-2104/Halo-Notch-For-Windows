@@ -38,6 +38,9 @@ public sealed class ClipEntry
     public int Width { get; set; }
     public int Height { get; set; }
 
+    /// <summary>The app it was copied from, as a friendly name ("Chrome"); empty when unknown.</summary>
+    public string Source { get; set; } = "";
+
     /// <summary>Whatever the app keeps alongside (encoded image, thumbnail); never serialized.</summary>
     [JsonIgnore]
     public object? Tag { get; set; }
@@ -83,6 +86,7 @@ public sealed class ClipHistory
             _items.Remove(stored);
             stored.Time = entry.Time;
             stored.Tag ??= entry.Tag;
+            if (entry.Source.Length > 0) stored.Source = entry.Source;
         }
         else
         {

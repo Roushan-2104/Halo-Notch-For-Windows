@@ -25,6 +25,11 @@ internal sealed class PhoneSendModule : IShammyModule
             if (Send(item.Path) is { } error) ctx.ShowMessage(PhoneGlyph, error, error: true);
         }));
         ctx.AddCommand(new SendCommand(this));
+        // "Send to phone" on the drop zone: one file goes as is; several (or a folder) go as one zip.
+        ctx.Notch.DropZone.ActionDropped += (action, files) =>
+        {
+            if (action == Shammy.Core.DropActions.DropAction.Phone) _ = SendDroppedAsync(files);
+        };
 
         ctx.AddPipeCommand("phone-send", arg =>
         {
@@ -64,6 +69,38 @@ internal sealed class PhoneSendModule : IShammyModule
         {
             return ex.Message;
         }
+    }
+
+    async Task SendDroppedAsync(string[] files)
+    {
+        if (_ctx is null) return;
+        var items = files.Where(f => File.Exists(f) || Directory.Exists(f)).ToList();
+        if (items.Count == 0) return;
+        string path = items[0];
+        if (items.Count > 1 || Directory.Exists(path))
+        {
+            try
+            {
+                // A zip in Shammy's own temp folder: nothing appears next to the user's files.
+                var dir = Path.Combine(Path.GetTempPath(), "Shammy", "phone-send");
+                Directory.CreateDirectory(dir);
+                _ctx.ShowMessage(PhoneGlyph, "Zipping for your phone…", seconds: 30);
+                path = await Task.Run(() =>
+                {
+                    var zip = Shammy.Core.DropActions.DropPlan.ZipPath(items, _ => false);
+                    zip = Shammy.Core.DropActions.DropPlan.Unique(dir, Path.GetFileNameWithoutExtension(zip), ".zip", File.Exists);
+                    DropActions.DropFiles.Zip(items, zip);
+                    return zip;
+                });
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                _ctx.Warn("Zipping for the phone failed", ex);
+                _ctx.ShowMessage(PhoneGlyph, "Couldn't zip that", error: true);
+                return;
+            }
+        }
+        if (Send(path) is { } error) _ctx.ShowMessage(PhoneGlyph, error, error: true);
     }
 
     /// <summary>Shelf entries that are files (folders can't be sent), oldest first like the shelf.</summary>
