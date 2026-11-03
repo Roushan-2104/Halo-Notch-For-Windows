@@ -117,7 +117,7 @@ public class PlayIntentTests
     [Theory]
     [InlineData("Kesariya bajao", MusicAction.PlayYouTubeMusic, "Kesariya")]
     [InlineData("tum hi ho spotify pe bajao", MusicAction.PlaySpotify, "tum hi ho")]
-    [InlineData("arijit singh ke gaane sunao", MusicAction.PlayYouTubeMusic, "arijit singh ke gaane")]
+    [InlineData("arijit singh ke gaane sunao", MusicAction.PlayYouTubeMusic, "arijit singh")]
     [InlineData("channa mereya play karo", MusicAction.PlayYouTubeMusic, "channa mereya")]
     [InlineData("bajao pasoori", MusicAction.PlayYouTubeMusic, "pasoori")]
     [InlineData("Kesariya Bajau.", MusicAction.PlayYouTubeMusic, "Kesariya")]

@@ -65,6 +65,8 @@ public static class MusicCommand
     static readonly Regex OnSpotify = new(@"(?:\s+(?:on|in|from|with|using)\s+spotify|\s+spotify\s+(?:pe|par|mein|me))$", Opts);
     static readonly Regex OnYouTube = new(@"(?:\s+(?:on|in|from|with|using)\s+(?:youtube\s+music|yt\s+music|youtube)|" +
         @"\s+(?:youtube\s+music|yt\s+music|youtube)\s+(?:pe|par|mein|me))$", Opts);
+    // "arijit ke gaane bajao" searches for "arijit": "ke gaane" just means "songs of".
+    static readonly Regex SongsOf = new(@"\s+(?:ke|ka|ki|wale|vale|wala|vala)\s+(?:gaane|gane|gaana|gana|songs?)$", Opts);
     static readonly Regex Please = new(@"(?:^please\s+|[\s,]+please$)", Opts);
 
     // "play store", "play station 5 price" are searches, not songs.
@@ -101,6 +103,7 @@ public static class MusicCommand
         }
         q = q.Trim();
         if (q.Length > 1 && IsQuote(q[0]) && IsQuote(q[^1])) q = q[1..^1].Trim();
+        if (hindi) q = SongsOf.Replace(q, "").Trim();
         if (q.Length == 0 || NotASong.IsMatch(q) || (hindi && NoSongNamed.IsMatch(q))) return null;
         // "play spotify" alone means the app, not a song called "spotify".
         if (q.Equals("spotify", StringComparison.OrdinalIgnoreCase) || q.Equals("youtube music", StringComparison.OrdinalIgnoreCase)) return null;
