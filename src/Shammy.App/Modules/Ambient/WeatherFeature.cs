@@ -53,6 +53,7 @@ internal sealed class WeatherFeature : IDisposable
             Compact = _card.Compact,
             Detail = _card.BuildDetail,
             Order = 40,
+            Chip = true,
             IsRelevant = () => _card.IsRelevant,
         });
         _ctx.AddGlance("weather", _card.Glance);

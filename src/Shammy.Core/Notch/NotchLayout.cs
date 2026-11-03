@@ -47,8 +47,9 @@ public sealed record ChipSpec(string Label, string ViewId);
 /// </summary>
 public static class NotchChips
 {
-    /// <summary>The design's chip order; anything else follows in the order it was registered.</summary>
-    static readonly string[] Preferred = { "Clipboard", "Shelf", "Notes", "Alerts", "System", "Mirror" };
+    /// <summary>The design's chip order, then the cards that gained a chip so every card has a way in (Calendar…
+    /// Weather); anything else follows in the order it was registered. What doesn't fit goes under "More".</summary>
+    static readonly string[] Preferred = { "Clipboard", "Shelf", "Notes", "Alerts", "System", "Mirror", "Calendar", "Timers", "Music", "Weather" };
 
     public static IReadOnlyList<ChipSpec> Build(IEnumerable<LegacyView> legacy, IEnumerable<ChipCard> cards)
     {
@@ -74,6 +75,40 @@ public static class NotchChips
             return i < 0 ? Preferred.Length : i;
         }
         return chips.OrderBy(Rank).ToList();
+    }
+}
+
+/// <summary>
+/// How many chips the top row shows. A chip cut in half looks broken, so chips show whole or not at all, in
+/// order; when they don't all fit, a "More" chip takes the end of the row and lists the rest, so every card
+/// stays one click (and a menu) away.
+/// </summary>
+public static class ChipFit
+{
+    /// <returns>How many of the chips (in order) show, and whether the "More" chip is needed for the rest.</returns>
+    public static (int Shown, bool More) Fit(IReadOnlyList<double> widths, double available, double gap, double moreWidth)
+    {
+        static int Prefix(IReadOnlyList<double> widths, double room, double gap)
+        {
+            double x = 0;
+            int n = 0;
+            foreach (var w in widths)
+            {
+                double next = n == 0 ? w : x + gap + w;
+                // Half a pixel of slack for layout rounding.
+                if (next > room + 0.5) break;
+                x = next;
+                n++;
+            }
+            return n;
+        }
+
+        if (widths.Count == 0) return (0, false);
+        int all = Prefix(widths, available, gap);
+        if (all == widths.Count) return (all, false);
+        int shown = Prefix(widths, available - moreWidth - gap, gap);
+        // Not even "More" fits after nothing: show what fits without it rather than a lone "More".
+        return available >= moreWidth ? (shown, true) : (all, false);
     }
 }
 

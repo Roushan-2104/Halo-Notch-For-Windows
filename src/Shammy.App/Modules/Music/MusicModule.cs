@@ -88,6 +88,7 @@ internal sealed class MusicModule : IShammyModule
             Compact = _card.Compact,
             Detail = _card.BuildDetail,
             Order = 10,
+            Chip = true,
             IsRelevant = () => _card.IsRelevant,
         });
         ctx.AddGlance("music", _card.Glance);

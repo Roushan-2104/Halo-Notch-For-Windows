@@ -39,6 +39,8 @@ public partial class ExpandedView : UserControl
     readonly List<(string Id, string Label, FrameworkElement Panel)> _tabs = new();
     readonly Dictionary<NotchCard, Grid> _frames = new();
     readonly Dictionary<string, RadioButton> _chipButtons = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<UIElement, ChipSpec> _chipIds = new();
+    RadioButton? _moreChip;
     IReadOnlyList<ChipSpec> _chips = Array.Empty<ChipSpec>();
     IReadOnlyList<string> _homeIds = Array.Empty<string>();
     readonly NotchCard _nowPlaying;
@@ -100,7 +102,8 @@ public partial class ExpandedView : UserControl
         RebuildRow(force: true);
     }
 
-    /// <summary>Raised while a file is being dragged off the shelf, so the notch stays open.</summary>
+    /// <summary>Raised while the pointer has to leave the notch for something it started (a file dragged off the shelf,
+    /// a menu), so the notch stays open.</summary>
     internal event Action<bool>? ShelfDragging;
 
     /// <summary>A notification in the history list was clicked.</summary>
@@ -358,6 +361,7 @@ public partial class ExpandedView : UserControl
     void ClearTabHover()
     {
         foreach (var chip in _chipButtons.Values) TabHover.Clear(chip);
+        if (_moreChip is not null) TabHover.Clear(_moreChip);
     }
 
     /// <summary>Chips for the built-in views, older tabs and cards that asked for one (see <see cref="NotchChips"/>).</summary>
@@ -371,6 +375,7 @@ public partial class ExpandedView : UserControl
 
         ChipStrip.Children.Clear();
         _chipButtons.Clear();
+        _chipIds.Clear();
         _shelfBadge = null;
         foreach (var spec in chips)
         {
@@ -385,10 +390,46 @@ public partial class ExpandedView : UserControl
             TabHover.Track(chip);
             ChipStrip.Children.Add(chip);
             _chipButtons[id] = chip;
+            _chipIds[chip] = spec;
         }
+        ChipStrip.Children.Add(MoreChip);
+        ChipStrip.More = MoreChip;
         SyncChips();
         RefreshShelf();
     }
+
+    /// <summary>The overflow chip: lists the chips that don't fit in the row (ChipPanel decides which).</summary>
+    RadioButton MoreChip => _moreChip ??= CreateMoreChip();
+
+    RadioButton CreateMoreChip()
+    {
+        var more = new RadioButton { Style = (Style)FindResource("V2Chip"), GroupName = "V2More", Content = "More", ToolTip = "More views" };
+        more.Click += (_, _) => ShowMoreMenu(more);
+        TabHover.Track(more);
+        return more;
+    }
+
+    void ShowMoreMenu(RadioButton more)
+    {
+        SyncChips();
+        var menu = new ContextMenu { PlacementTarget = more, Placement = PlacementMode.Bottom };
+        foreach (var chip in ChipStrip.Hidden)
+        {
+            if (!_chipIds.TryGetValue(chip, out var spec)) continue;
+            var item = new MenuItem { Header = spec.Label, IsChecked = string.Equals(spec.ViewId, _openId, StringComparison.OrdinalIgnoreCase) };
+            string id = spec.ViewId;
+            item.Click += (_, _) => OpenByClick(id);
+            menu.Items.Add(item);
+        }
+        if (menu.Items.Count == 0) return;
+        // Keep the notch open while the menu is up (the pointer leaves the notch to reach it).
+        ShelfDragging?.Invoke(true);
+        menu.Closed += (_, _) => ShelfDragging?.Invoke(false);
+        menu.IsOpen = true;
+    }
+
+    /// <summary>The chips that didn't fit the row, for the test pipe.</summary>
+    internal IEnumerable<string> HiddenChips => ChipStrip.Hidden.Select(c => _chipIds.TryGetValue(c, out var s) ? s.Label : "?");
 
     /// <summary>"Shelf" plus the number of files on it, in a small purple badge.</summary>
     object ShelfChipContent(string label)
@@ -424,6 +465,9 @@ public partial class ExpandedView : UserControl
     {
         foreach (var (id, chip) in _chipButtons)
             chip.IsChecked = _openId is not null && string.Equals(id, _openId, StringComparison.OrdinalIgnoreCase);
+        // "More" lights when the open view's own chip is one of those tucked under it.
+        MoreChip.IsChecked = _openId is not null && ChipStrip.Hidden.Any(c => _chipIds.TryGetValue(c, out var s)
+            && string.Equals(s.ViewId, _openId, StringComparison.OrdinalIgnoreCase));
     }
 
     // ---- Registration -------------------------------------------------------------------------
@@ -568,7 +612,7 @@ public partial class ExpandedView : UserControl
 
     /// <summary>One line for the test pipe: chips, the home row's card ids and the open view.</summary>
     internal string DescribeV2() =>
-        $"chips=[{string.Join(",", _chips.Select(c => c.Label))}] home=[{string.Join(",", ComputeRow())}] " +
+        $"chips=[{string.Join(",", _chips.Select(c => c.Label))}] more=[{string.Join(",", HiddenChips)}] home=[{string.Join(",", ComputeRow())}] " +
         $"detail={_openId ?? "-"} cards=[{string.Join(",", Cards.Select(c => c.Id))}] height={Height}";
 
     // ---- Refresh --------------------------------------------------------------------------------

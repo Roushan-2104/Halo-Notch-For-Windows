@@ -90,6 +90,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             Compact = _timerCard.Compact,
             Detail = _timerCard.BuildDetail,
             Order = 20,
+            // The quick-start chips live in the detail, so it must open with no timer running (off the home row).
+            Chip = true,
             IsRelevant = () => _timerCard.IsRelevant,
         });
         ctx.AddGlance("timer", _timerCard.Glance);

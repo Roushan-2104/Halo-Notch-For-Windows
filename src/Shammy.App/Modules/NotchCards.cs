@@ -29,12 +29,17 @@ public sealed class NotchCard
 
     /// <summary>
     /// Whether the card earns a place on the home row right now (music only while something plays, a timer only
-    /// while one runs…). Cards that aren't relevant are still reachable from the chips. Call
+    /// while one runs…). A card that isn't relevant (or doesn't fit the row) can only be opened from its chip or
+    /// a command, so a card that is ever left off the row should set <see cref="Chip"/>. Call
     /// <see cref="ModuleContext.CardsChanged"/> when the answer changes.
     /// </summary>
     public Func<bool> IsRelevant { get; init; } = () => true;
 
-    /// <summary>Show a chip for this card in the top row too (for cards people open on purpose: Clipboard, Mirror…).</summary>
+    /// <summary>
+    /// Show a chip for this card in the top row, so it can be opened whether or not it's on the home row (cards
+    /// people open on purpose, like Clipboard and Mirror, and any card that comes and goes, like Timers). Chips
+    /// that don't fit the row are listed under "More". Without a chip, a card off the row is unreachable by mouse.
+    /// </summary>
     public bool Chip { get; init; }
 }
 
