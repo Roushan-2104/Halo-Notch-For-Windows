@@ -4,7 +4,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using Path = System.Windows.Shapes.Path;
 using Shammy.Core.Notch;
@@ -27,8 +26,10 @@ internal sealed class ActivityChrome
         Hairline = Color.FromRgb(0x26, 0x28, 0x2E), HoverRing = Color.FromRgb(0x4A, 0x4C, 0x55), Ground = Color.FromRgb(0x0B, 0x0B, 0x0D),
         Warm = Color.FromRgb(0xF0, 0xA2, 0x7A), RecRed = Color.FromRgb(0xFF, 0x45, 0x3A);
 
-    readonly NotchShape _glow;
-    readonly DropShadowEffect _glowEffect = new() { BlurRadius = 26, ShadowDepth = 8, Direction = 270, Opacity = 0.85 };
+    // A soft gradient pool under the notch rather than a blur effect: effects are re-rasterised on every repaint
+    // of the (software-rendered, layered) window, a gradient is nearly free.
+    readonly Rectangle _glow = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed, Height = 30 };
+    readonly RadialGradientBrush _glowBrush = new() { Center = new Point(0.5, 0), GradientOrigin = new Point(0.5, 0), RadiusX = 0.55, RadiusY = 1 };
     readonly Path _bridge, _dotBridge;
     readonly Border _circle, _disc, _dot, _dotInner;
     readonly Ellipse _dotLight;
@@ -44,7 +45,7 @@ internal sealed class ActivityChrome
 
     public ActivityChrome(Canvas root, UIElement shape, Brush notchFill)
     {
-        _glow = new NotchShape { Width = root.Width, Height = root.Height, IsHitTestVisible = false, Opacity = 0, Visibility = Visibility.Collapsed, Effect = _glowEffect };
+        _glow.Fill = _glowBrush;
         root.Children.Insert(root.Children.IndexOf(shape), _glow);
 
         _bridge = new Path
@@ -151,7 +152,8 @@ internal sealed class ActivityChrome
         _dotId = dot?.Activity.Id;
         if (dot is not null)
         {
-            _dotLight.Fill = Solid(DotColour(dot));
+            // Called every second: only a new colour repaints the dot.
+            if (_dotLight.Fill is not SolidColorBrush { Color: var was } || was != DotColour(dot)) _dotLight.Fill = Solid(DotColour(dot));
             AutomationProperties.SetName(_dot, $"Also live: {dot.State.Label}. Give it the circle");
             _dot.ToolTip = $"{Describe(dot)} · click to swap";
             if (newDot || _dotPop.Target == 0) Bubble(_dotPop, delay: 0.25);
@@ -294,33 +296,17 @@ internal sealed class ActivityChrome
         if (on && colour != _glowColor)
         {
             _glowColor = colour;
-            _glowEffect.Color = colour;
+            _glowBrush.GradientStops = new GradientStopCollection
+            {
+                new(Color.FromArgb(0xC0, colour.R, colour.G, colour.B), 0),
+                new(Color.FromArgb(0x55, colour.R, colour.G, colour.B), 0.45),
+                new(Color.FromArgb(0, colour.R, colour.G, colour.B), 1),
+            };
         }
         if (on == _glowOn) return;
         _glowOn = on;
-        if (on)
-        {
-            _glow.Visibility = Visibility.Visible;
-            if (Reduced)
-            {
-                _glow.Opacity = 0.8;
-                return;
-            }
-            // Breathes gently, 2.4 s, like the board.
-            var breathe = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2.4), RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(breathe, 20);
-            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-            breathe.KeyFrames.Add(new EasingDoubleKeyFrame(0.55, KeyTime.FromPercent(0), ease));
-            breathe.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromPercent(0.5), ease));
-            breathe.KeyFrames.Add(new EasingDoubleKeyFrame(0.55, KeyTime.FromPercent(1), ease));
-            _glow.BeginAnimation(UIElement.OpacityProperty, breathe);
-        }
-        else
-        {
-            _glow.BeginAnimation(UIElement.OpacityProperty, null);
-            _glow.Opacity = 0;
-            _glow.Visibility = Visibility.Collapsed;
-        }
+        // Still, not breathing: a breathing glow would repaint the window continuously.
+        _glow.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ---- Per frame ---------------------------------------------------------------------------------
@@ -330,8 +316,10 @@ internal sealed class ActivityChrome
     {
         if (_glowOn)
         {
-            _glow.CenterX = cx;
-            _glow.Update(w, h, r);
+            // Spills from under the notch's lower half.
+            _glow.Width = w + 24;
+            Canvas.SetLeft(_glow, cx - w / 2 - 12);
+            Canvas.SetTop(_glow, h * 0.55);
         }
 
         double right = cx + w / 2;

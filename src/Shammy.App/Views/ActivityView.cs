@@ -37,6 +37,9 @@ internal sealed class ActivityView : Grid
     PetCostume? _markerFor;
     bool _markerPlaying;
     VisualizerBars? _bars;
+    Color _barsColor;
+    Action? _pulse;
+    readonly System.Windows.Threading.DispatcherTimer _burstEnd;
     Rectangle? _batteryFill;
 
     public ActivityView(ShammyServices services)
@@ -61,6 +64,23 @@ internal sealed class ActivityView : Grid
         _right.Children.Add(_marker);
         _right.Children.Add(_value);
         Children.Add(_left);
+        // Music's eq bars move with the pet's sway bursts and hold still between them (see ActivityPet.Burst).
+        _burstEnd = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background);
+        _burstEnd.Tick += (_, _) =>
+        {
+            _burstEnd.Stop();
+            if (_bars is not null) _bars.Frozen = true;
+        };
+        Pet.Burst += seconds =>
+        {
+            // The recording dot pulses along with the ninja's burst.
+            _pulse?.Invoke();
+            if (_bars is null) return;
+            _bars.Frozen = false;
+            _burstEnd.Stop();
+            _burstEnd.Interval = TimeSpan.FromSeconds(Math.Max(1.2, seconds));
+            _burstEnd.Start();
+        };
         SetColumn(Pet, 1);
         Children.Add(Pet);
         SetColumn(_right, 2);
@@ -133,7 +153,8 @@ internal sealed class ActivityView : Grid
         bool playing = s.Costume == PetCostume.Music && s.Playing;
         if (_markerFor == s.Costume && _markerPlaying == playing)
         {
-            if (_bars is not null && live.Art is { } art) _bars.Color = Lighter(art);
+            // Called every second: only a new album colour repaints the bars.
+            if (_bars is not null && live.Art is { } art && Lighter(art) != _barsColor) _bars.Color = _barsColor = Lighter(art);
             if (_batteryFill is not null) _batteryFill.Width = 12 * Math.Clamp(s.Progress ?? 0, 0, 1);
             return;
         }
@@ -141,6 +162,7 @@ internal sealed class ActivityView : Grid
         _markerPlaying = playing;
         _bars = null;
         _batteryFill = null;
+        _pulse = null;
         FrameworkElement? marker = s.Costume switch
         {
             PetCostume.Music when playing => _bars = new VisualizerBars
@@ -148,7 +170,10 @@ internal sealed class ActivityView : Grid
                 BarCount = 3,
                 Height = 12,
                 Source = _services.Visualizer.Level,
-                Color = Lighter(live.Art ?? Colors.White),
+                Color = _barsColor = Lighter(live.Art ?? Colors.White),
+                // A few steps a second: the notch's layered window makes every repaint costly.
+                MaxFps = 10,
+                Frozen = true,
                 Active = true,
             },
             PetCostume.Recording => RecDot(),
@@ -169,7 +194,7 @@ internal sealed class ActivityView : Grid
         return Color.FromRgb((byte)(c.R + (255 - c.R) * t), (byte)(c.G + (255 - c.G) * t), (byte)(c.B + (255 - c.B) * t));
     }
 
-    static FrameworkElement RecDot()
+    FrameworkElement RecDot()
     {
         var dot = new Ellipse
         {
@@ -180,24 +205,24 @@ internal sealed class ActivityView : Grid
         dot.RenderTransform = scale;
         if (SystemParameters.ClientAreaAnimation)
         {
-            var pulse = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1.4), RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(pulse, 30);
+            var pulse = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1.0), FillBehavior = FillBehavior.Stop };
+            Timeline.SetDesiredFrameRate(pulse, 12);
             var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
             pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromPercent(0), ease));
             pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1.45, KeyTime.FromPercent(0.5), ease));
             pulse.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromPercent(1), ease));
-            var fade = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1.4), RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(fade, 30);
+            var fade = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(1.0), FillBehavior = FillBehavior.Stop };
+            Timeline.SetDesiredFrameRate(fade, 12);
             fade.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromPercent(0), ease));
             fade.KeyFrames.Add(new EasingDoubleKeyFrame(0.55, KeyTime.FromPercent(0.5), ease));
             fade.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromPercent(1), ease));
-            // Started once it's on screen and dropped with it, so a hidden notch runs no clock.
-            dot.IsVisibleChanged += (_, e) =>
+            // One pulse per pet burst while on screen (a still dot in between costs nothing).
+            _pulse = () =>
             {
-                bool on = (bool)e.NewValue;
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, on ? pulse : null);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, on ? pulse : null);
-                dot.BeginAnimation(OpacityProperty, on ? fade : null);
+                if (!dot.IsVisible) return;
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
+                dot.BeginAnimation(OpacityProperty, fade);
             };
         }
         return dot;

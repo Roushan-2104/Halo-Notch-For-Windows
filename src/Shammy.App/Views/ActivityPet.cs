@@ -14,7 +14,13 @@ namespace Shammy.Views;
 /// call, happy ^ ^ eyes and notes to music, eyes circling a tiny clock for a timer, a ninja mask while the screen
 /// is shared, a progress bar it holds for a download, and so on. Drawn in a 72 × 38 column; accessories may
 /// spill out of it. Every animation is a WPF clock that is stopped as soon as the pet leaves the screen or
-/// changes face, loops run at 30 fps, and with Windows animations turned off it holds a still pose.
+/// changes face, and with Windows animations turned off it holds a still pose.
+/// The notch is a layered, software-rendered window where each repaint costs real CPU, and an isolated repaint
+/// costs several times one inside a running animation. So nothing loops: everything hangs off the once-a-second
+/// refresh that already repaints the value (<see cref="Second"/>). A blink closes the eyes on that frame, the
+/// call's lean and the timer's hand move on it, and each costume's ambient motion (a sway, a nod) plays as a short
+/// low-frame-rate burst starting on it every few seconds, then rests with no clock running. The call mouth
+/// redraws only when the mic level changes noticeably.
 /// </summary>
 internal sealed class ActivityPet : Canvas
 {
@@ -25,8 +31,25 @@ internal sealed class ActivityPet : Canvas
         Pink = Color.FromRgb(0xFF, 0x6B, 0x8A), MouthInside = Color.FromRgb(0x3A, 0x1F, 0x28), Bolt = Color.FromRgb(0xFF, 0xC2, 0x33),
         Mask = Color.FromRgb(0x4A, 0x4A, 0x57), MaskDark = Color.FromRgb(0x2C, 0x2C, 0x35);
 
+    /// <summary>Ambient motion's frame rate: smooth enough for a 1-3 px sway, and cheap on a layered window.</summary>
+    const int AmbientFps = 10;
+
+    /// <summary>Talk sampling: quick while speaking, slow while quiet (a silent mouth never redraws).</summary>
+    static readonly TimeSpan TalkFast = TimeSpan.FromMilliseconds(110), TalkSlow = TimeSpan.FromMilliseconds(300);
+
     readonly List<(IAnimatable Target, DependencyProperty Property)> _running = new();
+    readonly List<(IAnimatable Target, DependencyProperty Property, AnimationTimeline Animation)> _cycle = new();
+    readonly List<ScaleTransform> _blinks = new();
+    readonly List<DispatcherTimer> _timers = new();
+    readonly Random _random = new();
     readonly DispatcherTimer _levelTimer;
+    double _rest = 6;
+    int _ticks, _nextBlink = 3, _cycleEvery, _cycleAt;
+    long _lastSecond;
+    TranslateTransform? _lean;
+    RotateTransform? _leanTilt, _hand;
+    int _mouthStep = -1;
+    bool _mouthTalking;
     readonly TalkMeter _talk = new();
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -47,7 +70,7 @@ internal sealed class ActivityPet : Canvas
         Height = ColumnHeight;
         ClipToBounds = false;
         IsHitTestVisible = false;
-        _levelTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(50) };
+        _levelTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TalkSlow };
         _levelTimer.Tick += (_, _) => SampleLevel();
         IsVisibleChanged += (_, _) =>
         {
@@ -57,6 +80,12 @@ internal sealed class ActivityPet : Canvas
     }
 
     public PetFace? Face => _face;
+
+    /// <summary>
+    /// The costume's ambient burst started (its length in seconds): the eq bars beside it move only meanwhile,
+    /// so music repaints in short bursts rather than all the time.
+    /// </summary>
+    public event Action<double>? Burst;
 
     /// <summary>How open the mouth is on a call (0..1), for the test pipe.</summary>
     public double MouthOpen => _talk.Open;
@@ -70,7 +99,11 @@ internal sealed class ActivityPet : Canvas
         _progress = Math.Clamp(progress ?? 0, 0, 1);
         if (_barFill is not null) _barFill.Width = 24 * _progress;
         var newArt = art ?? Ink;
-        if (face == _face && paused == _paused && newArt == _art) return;
+        if (face == _face && paused == _paused && newArt == _art)
+        {
+            Second();
+            return;
+        }
         _face = face;
         _paused = paused;
         _art = newArt;
@@ -87,8 +120,18 @@ internal sealed class ActivityPet : Canvas
     void Stop()
     {
         _levelTimer.Stop();
+        foreach (var t in _timers) t.Stop();
+        _timers.Clear();
         foreach (var (target, property) in _running) target.BeginAnimation(property, null);
         _running.Clear();
+        _cycle.Clear();
+        _blinks.Clear();
+        _rest = 6;
+        _cycleEvery = 0;
+        _lean = null;
+        _leanTilt = _hand = null;
+        _mouthStep = -1;
+        _mouthTalking = false;
         Children.Clear();
         _barFill = null;
         _talkMouth = _smileMouth = null;
@@ -117,6 +160,91 @@ internal sealed class ActivityPet : Canvas
             case PetFace.Earbuds: BuildEarbuds(); break;
             default: BuildNotify(); break;
         }
+        StartCycle();
+    }
+
+    /// <summary>
+    /// Plays the costume's ambient motion as a burst after its entrance, then again every few seconds from
+    /// <see cref="Second"/> (<see cref="_rest"/> seconds of stillness between). Between bursts no clock runs.
+    /// </summary>
+    void StartCycle()
+    {
+        if (_cycle.Count == 0 || Reduced) return;
+        double length = CycleLength;
+        _cycleEvery = (int)Math.Ceiling(length + _rest);
+        _cycleAt = _ticks + _cycleEvery;
+        After(0.6, PlayCycle);
+    }
+
+    double CycleLength => _cycle.Count == 0 ? 0 : _cycle.Max(c => (c.Animation.BeginTime ?? TimeSpan.Zero).TotalSeconds + c.Animation.Duration.TimeSpan.TotalSeconds
+        * (c.Animation.RepeatBehavior.HasCount ? c.Animation.RepeatBehavior.Count : 1));
+
+    void PlayCycle()
+    {
+        if (!IsVisible) return;
+        foreach (var (target, property, animation) in _cycle) target.BeginAnimation(property, animation);
+        Burst?.Invoke(CycleLength);
+    }
+
+    /// <summary>
+    /// Once a second, from the window's refresh (which repaints the value anyway): blink now and then, step the
+    /// lean or the clock hand, and start the next ambient burst, all on that same repaint.
+    /// </summary>
+    void Second()
+    {
+        long now = _clock.ElapsedMilliseconds;
+        if (now - _lastSecond < 900 || !IsVisible || Reduced) return;
+        _lastSecond = now;
+        _ticks++;
+        if (_blinks.Count > 0 && _ticks >= _nextBlink)
+        {
+            _nextBlink = _ticks + 4 + _random.Next(3);
+            foreach (var b in _blinks)
+            {
+                b.ScaleY = 0.1;
+                b.ScaleX = 1.2;
+            }
+            After(0.12, () =>
+            {
+                foreach (var b in _blinks)
+                {
+                    b.ScaleY = 1;
+                    b.ScaleX = 1;
+                }
+            });
+        }
+        if (_lean is not null && _leanTilt is not null && _ticks % 4 == 0)
+        {
+            bool leanIn = _lean.X == 0;
+            _lean.X = leanIn ? 1 : 0;
+            _leanTilt.Angle = leanIn ? 2 : 0;
+        }
+        if (_hand is not null && !_paused) _hand.Angle = (_hand.Angle + 30) % 360;
+        if (_cycleEvery > 0 && _ticks >= _cycleAt)
+        {
+            _cycleAt = _ticks + _cycleEvery;
+            PlayCycle();
+        }
+    }
+
+    DispatcherTimer Every(double seconds, Action run)
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(seconds) };
+        timer.Tick += (_, _) => run();
+        timer.Start();
+        _timers.Add(timer);
+        return timer;
+    }
+
+    void After(double seconds, Action run)
+    {
+        DispatcherTimer? timer = null;
+        timer = Every(seconds, () =>
+        {
+            timer!.Stop();
+            _timers.Remove(timer);
+            run();
+        });
     }
 
     // ---- Faces ------------------------------------------------------------------------------------
@@ -158,9 +286,9 @@ internal sealed class ActivityPet : Canvas
         headset.Children.Add(At(new Ellipse { Width = 3.4, Height = 3.4, Fill = Solid(Ink) }, 13.3, 24.3));
         DropOn(headset, 0.5, 10);
         face.Children.Add(At(headset, Cx - 23, row - 9));
-        // Leans in a little, like listening.
-        Loop(faceT.Translate, TranslateTransform.XProperty, 2.4, 0, (0, 0), (0.5, 1), (1, 0));
-        Loop(faceT.Rotate, RotateTransform.AngleProperty, 2.4, 0, (0, 0), (0.5, 2), (1, 0));
+        // Leans in a little now and then, like listening.
+        _lean = faceT.Translate;
+        _leanTilt = faceT.Rotate;
     }
 
     void BuildMusic()
@@ -177,7 +305,8 @@ internal sealed class ActivityPet : Canvas
         face.Children.Add(At(Note(c2, 0.78), Cx - 16 - 12, row + 4));
         NoteUp((FrameworkElement)face.Children[^2], 0);
         NoteUp((FrameworkElement)face.Children[^1], 0.9);
-        // Sways to the beat.
+        // Sways to the beat, then a breather while the eq bars keep the rhythm.
+        _rest = 5;
         Loop(faceT.Translate, TranslateTransform.YProperty, 0.9, 0, (0, 0), (0.5, -3), (1, 0));
         Loop(faceT.Rotate, RotateTransform.AngleProperty, 0.9, 0, (0, -7), (0.5, 7), (1, -7));
         Loop(faceT.Scale, ScaleTransform.ScaleXProperty, 0.9, 0, (0, 1.04), (0.5, 0.97), (1, 1.04));
@@ -207,13 +336,13 @@ internal sealed class ActivityPet : Canvas
         clock.Children.Add(hand);
         face.Children.Add(At(clock, Cx - 15 + shift + 37, 11));
         if (_paused) return;
-        // Eyes follow the hand round; the hand ticks in twelve steps.
-        Loop(eyes.Translate, TranslateTransform.XProperty, 6, 0, (0, 2), (0.25, 3), (0.5, 2), (0.75, 1), (1, 2));
-        Loop(eyes.Translate, TranslateTransform.YProperty, 6, 0, (0, -1.5), (0.25, 0), (0.5, 1.5), (0.75, 0), (1, -1.5));
+        // Eyes follow the hand round now and then; the hand ticks once a second (with the countdown's own redraw).
+        eyes.Translate.X = 2;
+        eyes.Translate.Y = -1.5;
+        Loop(eyes.Translate, TranslateTransform.XProperty, 3, 0, (0, 2), (0.25, 3), (0.5, 2), (0.75, 1), (1, 2));
+        Loop(eyes.Translate, TranslateTransform.YProperty, 3, 0, (0, -1.5), (0.25, 0), (0.5, 1.5), (0.75, 0), (1, -1.5));
         if (Reduced) return;
-        var tick = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(6), RepeatBehavior = RepeatBehavior.Forever };
-        for (int i = 0; i <= 12; i++) tick.KeyFrames.Add(new DiscreteDoubleKeyFrame(i * 30, KeyTime.FromPercent(i / 12.0)));
-        Run(spin, RotateTransform.AngleProperty, tick);
+        _hand = spin;
     }
 
     void BuildTimerDone()
@@ -229,6 +358,8 @@ internal sealed class ActivityPet : Canvas
         };
         face.Children.Add(At(grin, Cx - 5.5, mouth));
         // Jumps for joy.
+        // An alert you asked for, on screen for seconds: it keeps jumping with only a short pause.
+        _rest = 0.4;
         (double, double)[] y = { (0, 0), (0.18, 2), (0.40, -8), (0.60, 0), (0.75, -1), (0.88, 0), (1, 0) };
         Loop(faceT.Translate, TranslateTransform.YProperty, 1.1, 0, y);
         Loop(faceT.Scale, ScaleTransform.ScaleXProperty, 1.1, 0, (0, 1), (0.18, 1.22), (0.40, 0.86), (0.60, 1.18), (0.75, 0.95), (0.88, 1), (1, 1));
@@ -284,7 +415,8 @@ internal sealed class ActivityPet : Canvas
         face.Children.Add(At(band, left + 4, top + 2));
         // Narrowed eyes dart side to side.
         var eyes = AddEyes(face, top + 4.5, 7);
-        Loop(eyes.Translate, TranslateTransform.XProperty, 3.2, 0, (0, 0), (0.40, 0), (0.50, -3), (0.65, -3), (0.75, 3), (0.90, 3), (1, 0));
+        _rest = 8;
+        Loop(eyes.Translate, TranslateTransform.XProperty, 2, 0, (0, 0), (0.2, -3), (0.45, -3), (0.6, 3), (0.85, 3), (1, 0));
     }
 
     void BuildDownload()
@@ -476,11 +608,20 @@ internal sealed class ActivityPet : Canvas
         catch (Exception) { peak = 0; }
         double open = _talk.Sample(peak, _clock.Elapsed);
         bool talking = _talk.Speaking;
+        // Sample quickly only while there's speech; a quiet call polls the meter a few times a second.
+        var interval = talking ? TalkFast : TalkSlow;
+        if (_levelTimer.Interval != interval) _levelTimer.Interval = interval;
+        // Four mouth sizes: only a real change redraws (the window is expensive to repaint).
+        int step = talking ? (int)Math.Round(open * 4) : -1;
+        if (step == _mouthStep && talking == _mouthTalking) return;
+        _mouthStep = step;
+        _mouthTalking = talking;
         _talkMouth.Opacity = talking ? 1 : 0;
         _smileMouth.Opacity = talking ? 0 : 1;
         // Closed it's a flat oval (1.15 × 0.35), fully open a tall "o".
-        _talkScale.ScaleX = 1.15 - 0.15 * open;
-        _talkScale.ScaleY = 0.35 + 0.8 * open;
+        double o = Math.Max(0, step) / 4.0;
+        _talkScale.ScaleX = 1.15 - 0.15 * o;
+        _talkScale.ScaleY = 0.35 + 0.8 * o;
     }
 
     // ---- Parts ------------------------------------------------------------------------------------
@@ -610,13 +751,12 @@ internal sealed class ActivityPet : Canvas
 
     // ---- Motion vocabulary --------------------------------------------------------------------------
 
+    /// <summary>Gives the eye a scale for blinking; <see cref="Second"/> closes and reopens it now and then.</summary>
     void Blink(Border eye)
     {
         var s = new ScaleTransform();
         eye.RenderTransform = s;
-        // Two blinks in five seconds, at slightly irregular moments, like the board.
-        LoopLinear(s, ScaleTransform.ScaleYProperty, 5, 0, (0, 1), (0.44, 1), (0.47, 0.1), (0.50, 1), (0.84, 1), (0.87, 0.1), (0.90, 1), (1, 1));
-        LoopLinear(s, ScaleTransform.ScaleXProperty, 5, 0, (0, 1), (0.44, 1), (0.47, 1.2), (0.50, 1), (0.84, 1), (0.87, 1.2), (0.90, 1), (1, 1));
+        _blinks.Add(s);
     }
 
     /// <summary>Drops onto the head from above with a little bounce.</summary>
@@ -670,7 +810,7 @@ internal sealed class ActivityPet : Canvas
             Duration = TimeSpan.FromSeconds(seconds),
             BeginTime = TimeSpan.FromSeconds(delay),
         };
-        Timeline.SetDesiredFrameRate(a, 30);
+        Timeline.SetDesiredFrameRate(a, 20);
         var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
         foreach (var (at, value) in frames)
         {
@@ -684,14 +824,13 @@ internal sealed class ActivityPet : Canvas
     void Loop(IAnimatable target, DependencyProperty property, double seconds, double delay, params (double At, double Value)[] frames) =>
         LoopKeys(target, property, Keys(seconds, delay, false, frames));
 
-    void LoopLinear(IAnimatable target, DependencyProperty property, double seconds, double delay, params (double At, double Value)[] frames) =>
-        LoopKeys(target, property, Keys(seconds, delay, true, frames));
-
     void LoopKeys(IAnimatable target, DependencyProperty property, DoubleAnimationUsingKeyFrames a)
     {
         if (Reduced) return;
-        a.RepeatBehavior = RepeatBehavior.Forever;
-        Run(target, property, a);
+        a.FillBehavior = FillBehavior.Stop;
+        Timeline.SetDesiredFrameRate(a, AmbientFps);
+        _cycle.Add((target, property, a));
+        _running.Add((target, property));
     }
 
     /// <summary>A one-shot that holds its last value; with Windows animations off it jumps straight there.</summary>

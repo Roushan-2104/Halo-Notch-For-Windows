@@ -32,6 +32,7 @@ internal sealed class ShammyPet : Grid
     readonly SpringValue _followX = new(0, 0.01);
     readonly DispatcherTimer _blinkTimer, _glanceTimer, _pointerTimer, _particleTimer;
     readonly Random _random = new();
+    readonly List<DispatcherTimer> _waits = new();
     readonly Func<double> _musicLevel;
     IDisposable? _swayFrames;
     double _swayTime;
@@ -104,6 +105,10 @@ internal sealed class ShammyPet : Grid
             _glanceTimer.Stop();
             _pointerTimer.Stop();
             _particleTimer.Stop();
+            foreach (var w in _waits) w.Stop();
+            _waits.Clear();
+            _lid.ScaleY = 1;
+            _glance.X = 0;
             StopSway();
             _following = false;
             _followX.Snap(0);
@@ -206,6 +211,7 @@ internal sealed class ShammyPet : Grid
     static void Repeat(Animatable target, DependencyProperty property, double periodMs, params (double Ms, double Value)[] frames)
     {
         var a = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever, Duration = TimeSpan.FromMilliseconds(periodMs) };
+        Timeline.SetDesiredFrameRate(a, 20);
         var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
         foreach (var (ms, value) in frames) a.KeyFrames.Add(new EasingDoubleKeyFrame(value, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(ms)), ease));
         target.BeginAnimation(property, a);
@@ -215,6 +221,7 @@ internal sealed class ShammyPet : Grid
     void Perk()
     {
         var a = new DoubleAnimationUsingKeyFrames();
+        Timeline.SetDesiredFrameRate(a, 20);
         a.KeyFrames.Add(new EasingDoubleKeyFrame(1.18, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180))));
         a.KeyFrames.Add(new EasingDoubleKeyFrame(1.06, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(400))));
         _perk.BeginAnimation(ScaleTransform.ScaleXProperty, a);
@@ -276,13 +283,14 @@ internal sealed class ShammyPet : Grid
 
         var duration = TimeSpan.FromMilliseconds(ms);
         var fade = new DoubleAnimationUsingKeyFrames { Duration = duration };
+        Timeline.SetDesiredFrameRate(fade, 20);
         fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.25)));
         fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
         fade.Completed += (_, _) => _overlay.Children.Remove(particle);
         var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
         var move = (TranslateTransform)particle.RenderTransform;
-        move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, dx, duration) { EasingFunction = ease });
-        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(4, dy, duration) { EasingFunction = ease });
+        move.BeginAnimation(TranslateTransform.XProperty, Lean(new DoubleAnimation(0, dx, duration) { EasingFunction = ease }));
+        move.BeginAnimation(TranslateTransform.YProperty, Lean(new DoubleAnimation(4, dy, duration) { EasingFunction = ease }));
         particle.BeginAnimation(OpacityProperty, fade);
     }
 
@@ -290,20 +298,41 @@ internal sealed class ShammyPet : Grid
 
     bool Blinks => Mood is PetMood.Idle or PetMood.MeetingSoon or PetMood.Listening or PetMood.Notify or PetMood.Tired;
 
+    /// <summary>
+    /// A blink is two repaints (shut, open), not an animation: the notch is a layered, software-rendered window
+    /// where each animated frame costs real CPU, and at this size a 120 ms close reads as a blink anyway.
+    /// </summary>
     void Blink()
     {
         _blinkTimer.Interval = EyeLogic.NextBlink(_random, Mood == PetMood.Sleepy);
         if (!Blinks) return;
-        var blink = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
-        blink.KeyFrames.Add(new EasingDoubleKeyFrame(0.1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(70))));
-        blink.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150))));
-        if (EyeLogic.DoubleBlink(_random))
+        _lid.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _lid.ScaleY = 0.1;
+        bool twice = EyeLogic.DoubleBlink(_random);
+        Later(120, () =>
         {
-            blink.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(230))));
-            blink.KeyFrames.Add(new EasingDoubleKeyFrame(0.1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300))));
-            blink.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(380))));
-        }
-        _lid.BeginAnimation(ScaleTransform.ScaleYProperty, blink);
+            _lid.ScaleY = 1;
+            if (!twice) return;
+            Later(110, () =>
+            {
+                _lid.ScaleY = 0.1;
+                Later(110, () => _lid.ScaleY = 1);
+            });
+        });
+    }
+
+    /// <summary>One short wait on the UI thread (blinks, glances); dropped when the pet leaves the screen.</summary>
+    void Later(int ms, Action run)
+    {
+        var t = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(ms) };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            _waits.Remove(t);
+            if (IsVisible) run();
+        };
+        _waits.Add(t);
+        t.Start();
     }
 
     /// <summary>A glance to one side and back, only while idle and not following the pointer.</summary>
@@ -311,13 +340,14 @@ internal sealed class ShammyPet : Grid
     {
         _glanceTimer.Interval = EyeLogic.NextGlance(_random);
         if (_following || Mood != PetMood.Idle) return;
+        // A glance is a look aside and back: two repaints, not 1.4 s of animation.
         double to = EyeLogic.GlanceDirection(_random);
-        var look = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
-        var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-        look.KeyFrames.Add(new EasingDoubleKeyFrame(to, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(260)), ease));
-        look.KeyFrames.Add(new EasingDoubleKeyFrame(to, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
-        look.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400)), ease));
-        _glance.BeginAnimation(TranslateTransform.XProperty, look);
+        _glance.BeginAnimation(TranslateTransform.XProperty, null);
+        _glance.X = to;
+        Later(1100, () =>
+        {
+            if (!_following) _glance.X = 0;
+        });
     }
 
     /// <summary>
@@ -356,6 +386,7 @@ internal sealed class ShammyPet : Grid
     {
         if (!IsVisible || Mood == PetMood.TimerDone) return;
         var hop = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
+        Timeline.SetDesiredFrameRate(hop, 20);
         var up = new QuadraticEase { EasingMode = EasingMode.EaseOut };
         var down = new QuadraticEase { EasingMode = EasingMode.EaseIn };
         hop.KeyFrames.Add(new EasingDoubleKeyFrame(-4, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(120)), up));
@@ -418,5 +449,12 @@ internal sealed class ShammyPet : Grid
                 _ => new CornerRadius(Screens.PetLook.Style == Shammy.Core.Notch.PetEyeStyle.Pixel ? 1.5 : w / 2),
             };
         }
+    }
+
+    /// <summary>The notch is a layered, software-rendered window: every frame costs CPU, so small motions run at 20 fps.</summary>
+    static AnimationTimeline Lean(AnimationTimeline a)
+    {
+        Timeline.SetDesiredFrameRate(a, 20);
+        return a;
     }
 }

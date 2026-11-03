@@ -18,6 +18,8 @@ internal sealed class VisualizerBars : FrameworkElement
     Spring[] _springs = Array.Empty<Spring>();
     readonly double[] _shape = { 0.75, 1.0, 0.85, 0.95, 0.7, 0.9, 0.8 };
     IDisposable? _frames;
+    System.Windows.Threading.DispatcherTimer? _slow;
+    readonly System.Diagnostics.Stopwatch _since = new();
     bool _active;
     Brush _brush = Brushes.White;
     double _time;
@@ -40,6 +42,27 @@ internal sealed class VisualizerBars : FrameworkElement
             InvalidateVisual();
         }
     }
+
+    /// <summary>
+    /// Redraws at most this often (0 = every frame). The notch is a layered, software-rendered window where each
+    /// frame costs real CPU, so the compact notch's small bars step a few times a second on their own timer
+    /// instead of riding the render loop.
+    /// </summary>
+    public int MaxFps { get; set; }
+
+    /// <summary>Holds the bars still where they are (no settling, no repaints) until unfrozen.</summary>
+    public bool Frozen
+    {
+        get => _frozen;
+        set
+        {
+            _frozen = value;
+            if (value) Release();
+            else UpdateSubscription();
+        }
+    }
+
+    bool _frozen;
 
     /// <summary>Level for bar i in 0..1.</summary>
     public Func<int, float>? Source { get; set; }
@@ -67,8 +90,26 @@ internal sealed class VisualizerBars : FrameworkElement
 
     void UpdateSubscription()
     {
-        if (IsVisible && (_active || !_springs.All(s => s.IsSettled && Math.Abs(s.Value - IdleLevel) < 0.01)))
-            _frames ??= Animator.Subscribe(OnFrame);
+        bool run = IsVisible && !_frozen && (_active || !_springs.All(s => s.IsSettled && Math.Abs(s.Value - IdleLevel) < 0.01));
+        if (run && MaxFps > 0)
+        {
+            if (_slow is null)
+            {
+                _slow = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+                {
+                    Interval = TimeSpan.FromSeconds(1.0 / MaxFps),
+                };
+                _slow.Tick += (_, _) =>
+                {
+                    double dt = Math.Min(0.25, _since.Elapsed.TotalSeconds);
+                    _since.Restart();
+                    OnFrame(dt);
+                };
+                _since.Restart();
+                _slow.Start();
+            }
+        }
+        else if (run) _frames ??= Animator.Subscribe(OnFrame);
         else if (!IsVisible) Release();
     }
 
@@ -76,12 +117,14 @@ internal sealed class VisualizerBars : FrameworkElement
     {
         _frames?.Dispose();
         _frames = null;
+        _slow?.Stop();
+        _slow = null;
     }
 
     void OnFrame(double dt)
     {
         _time += dt;
-        bool allRest = true;
+        bool allRest = true, moved = false;
         for (int i = 0; i < _springs.Length; i++)
         {
             double target = IdleLevel;
@@ -93,10 +136,13 @@ internal sealed class VisualizerBars : FrameworkElement
                 target = Math.Clamp(IdleLevel + (1 - IdleLevel) * level * _shape[i % _shape.Length] + wobble * level, IdleLevel, 1);
             }
             _springs[i].Target = target;
+            double before = _springs[i].Value;
             _springs[i].Step(dt);
+            if (Math.Abs(_springs[i].Value - before) > 0.04) moved = true;
             if (!_springs[i].IsSettled) allRest = false;
         }
-        InvalidateVisual();
+        // Nothing visibly moved (silence, or settled): don't repaint.
+        if (moved) InvalidateVisual();
         if (!_active && allRest) Release();
     }
 

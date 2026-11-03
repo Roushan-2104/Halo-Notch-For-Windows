@@ -176,15 +176,16 @@ internal sealed class RestView : Grid
         if (old is not null)
         {
             var fade = new DoubleAnimation(0, duration) { EasingFunction = ease };
+            Timeline.SetDesiredFrameRate(fade, 20);
             fade.Completed += (_, _) => _glanceHost.Children.Remove(old);
             old.BeginAnimation(OpacityProperty, fade);
-            ((TranslateTransform)old.RenderTransform).BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-8, duration) { EasingFunction = ease });
+            ((TranslateTransform)old.RenderTransform).BeginAnimation(TranslateTransform.YProperty, Lean(new DoubleAnimation(-8, duration) { EasingFunction = ease }));
         }
         if (_slot is not null)
         {
-            _slot.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
+            _slot.BeginAnimation(OpacityProperty, Lean(new DoubleAnimation(0, 1, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop }));
             ((TranslateTransform)_slot.RenderTransform).BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(8, 0, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
+                Lean(new DoubleAnimation(8, 0, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop }));
         }
     }
 
@@ -289,5 +290,12 @@ internal sealed class RestView : Grid
         {
             return fallback ?? Colors.White;
         }
+    }
+
+    /// <summary>The notch is a layered, software-rendered window: every frame costs CPU, so small motions run at 20 fps.</summary>
+    static AnimationTimeline Lean(AnimationTimeline a)
+    {
+        Timeline.SetDesiredFrameRate(a, 20);
+        return a;
     }
 }
