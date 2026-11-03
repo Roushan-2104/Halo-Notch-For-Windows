@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Shammy.Core.Notch;
 using Shammy.Views.Screens;
+using PetFace = Shammy.Views.Screens.PetFace;
 
 namespace Shammy.Modules.Tour;
 

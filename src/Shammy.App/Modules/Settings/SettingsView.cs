@@ -11,6 +11,7 @@ using Shammy.Infrastructure;
 using Shammy.Modules.Connect;
 using Shammy.Search;
 using Shammy.Views.Screens;
+using PetFace = Shammy.Views.Screens.PetFace;
 
 namespace Shammy.Modules.Settings;
 
