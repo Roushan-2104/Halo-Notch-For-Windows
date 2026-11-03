@@ -233,6 +233,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
   - text on screen is read with Windows' own OCR.
 - **What leaves your PC:**
   - searches go to Google only when you ask;
+  - "weather in <city>" sends only that city name to Open-Meteo's free geocoder and forecast (no account, no key);
   - the notch shows a "Sent to Google" badge whenever an image is uploaded to Lens.
 - **The results browser:** it can only open web pages, so pages can't launch apps or files.
 - **Notifications:** their text is hidden, in pop-ups and in the Notifications tab, while an app uses your microphone or camera, or captures the screen. The tab shows it again when that ends.
