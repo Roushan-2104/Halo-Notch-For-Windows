@@ -391,6 +391,9 @@ internal sealed class SearchCoordinator
         if (command is null) return false;
 
         _phase = Phase.Processing;
+        // A command never uses the frozen screen; let it go now so a command that looks at the screen (a
+        // screenshot) sees the live one rather than the dimmed freeze.
+        DismissOverlay();
         _notch.SetSearchMode(NotchMode.Thinking);
         _notch.SearchBarView.ShowThinking($"“{clean}”");
         Modules.CommandResult result;

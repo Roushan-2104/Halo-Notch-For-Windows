@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using System.Windows.Threading;
 using Shammy.Search;
 
 namespace Shammy.Modules.Screenshot;
@@ -11,7 +10,10 @@ internal sealed class ScreenshotModule : IShammyModule, ITextCommand
         @"^(?:please\s+)?(?:take|grab|capture|save)\s+(?:a\s+|the\s+)?(?:screen\s*shot|screen|snapshot)(?:\s+of\s+(?:the\s+)?(?:screen|whole\s+screen|everything|this|page))?(?:\s+please)?$|^screen\s*shot(?:\s+(?:this|now|please))?$|^print\s*screen$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    const string Glyph = "";
+
     ModuleContext _ctx = null!;
+    string _last = "none";
 
     public string Name => "screenshot";
 
@@ -19,48 +21,58 @@ internal sealed class ScreenshotModule : IShammyModule, ITextCommand
     {
         _ctx = ctx;
         ctx.AddCommand(this);
-        ctx.AddPipeCommand("screenshot-now", _ =>
+        // "screenshot-now" captures in the background; "screenshot-state" says how the last one went.
+        ctx.AddPipeCommand("screenshot-now", arg =>
         {
-            Schedule();
-            return "ok";
+            _ = PipeCaptureAsync();
+            return "capturing";
         });
+        ctx.AddPipeCommand("screenshot-state", _ => _last);
     }
 
     public bool CanHandle(string text) => Phrase.IsMatch(text.Trim().TrimEnd('.', '!', '?').Trim());
 
-    public Task<CommandResult> RunAsync(string text)
+    /// <summary>Says "saved" only once the file is written; a failed capture or save says so instead.</summary>
+    public async Task<CommandResult> RunAsync(string text)
     {
-        Schedule();
-        return Task.FromResult(new CommandResult("", "Screenshot", "Saved to Pictures › Screenshots and copied"));
+        var path = await CaptureAsync();
+        return path is null
+            ? new CommandResult(Glyph, "Screenshot failed", "Couldn't capture or save the screen", IsError: true)
+            : new CommandResult(Glyph, "Screenshot", "Saved to Pictures › Screenshots and copied");
+    }
+
+    async Task PipeCaptureAsync()
+    {
+        var path = await CaptureAsync();
+        if (path is null) _ctx.ShowMessage(Glyph, "Screenshot failed", error: true);
+        else _ctx.ShowMessage(Glyph, "Screenshot saved", seconds: 2);
     }
 
     /// <summary>
-    /// Wait for the frozen-screen overlay (voice commands) to fade out first, and keep the notch's own
-    /// confirmation card out of the picture.
+    /// Waits for the frozen-screen overlay (voice commands) to fade out first, and keeps the notch itself (the
+    /// "thinking" bar) out of the picture. Runs on the UI thread. Returns the saved file, or null on failure.
     /// </summary>
-    void Schedule()
+    async Task<string?> CaptureAsync()
     {
-        var timer = new DispatcherTimer(DispatcherPriority.Normal, _ctx.Ui) { Interval = TimeSpan.FromMilliseconds(650) };
-        timer.Tick += (_, _) =>
+        await Task.Delay(650);
+        try
         {
-            timer.Stop();
-            try
-            {
-                _ctx.Notch.ExcludeFromCapture(true);
-                var shot = ScreenCapture.CaptureMonitorAtCursor();
-                ScreenshotSaver.Save(shot.Image);
-            }
-            catch (Exception ex)
-            {
-                _ctx.Warn("Screenshot failed", ex);
-                _ctx.ShowMessage("", "Screenshot failed", error: true);
-            }
-            finally
-            {
-                _ctx.Notch.ExcludeFromCapture(false);
-            }
-        };
-        timer.Start();
+            _ctx.Notch.ExcludeFromCapture(true);
+            var shot = ScreenCapture.CaptureMonitorAtCursor();
+            var path = ScreenshotSaver.Save(shot.Image);
+            _last = path is null ? "failed: couldn't save" : $"saved {Path.GetFileName(path)}";
+            return path;
+        }
+        catch (Exception ex)
+        {
+            _ctx.Warn("Screenshot failed", ex);
+            _last = "failed: " + ex.GetType().Name;
+            return null;
+        }
+        finally
+        {
+            _ctx.Notch.ExcludeFromCapture(false);
+        }
     }
 
     public void Dispose() { }
