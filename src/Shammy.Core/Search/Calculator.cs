@@ -15,6 +15,8 @@ public static class Calculator
 
     const int MaxLength = 256;
 
+    static readonly Regex IndianMultiplier = new(@"(?<n>\d+(?:\.\d+)?|\.\d+)\s*(?<w>lakhs?|lacs?|crores?|cr)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     static readonly Regex NotArithmetic = new(@"^(?:\d{4}-\d{1,2}(?:-\d{1,2})?|(?:19|20)\d{2}-\d{2}|\d{3,}-\d{3,}(?:-\d+)?)$", RegexOptions.CultureInvariant);
 
     public static bool TryEvaluate(string input, out double result, out string expression)
@@ -32,6 +34,9 @@ public static class Calculator
         text = Regex.Replace(text, @"\bdivided\s+by\b", "/", RegexOptions.IgnoreCase);
         text = Regex.Replace(text, @"\bof\b", "*", RegexOptions.IgnoreCase);
         text = Regex.Replace(text, @"(?<=\d),(?=\d{3}\b)", "");
+        // "5 lakh", "2.5 crore", "10 lakh + 5 lakh": Indian number words as their values, bracketed so "2 lakh^2"
+        // can't bind wrongly. A bare "5 lakh" is still a sum worth answering.
+        text = IndianMultiplier.Replace(text, m => "(" + m.Groups["n"].Value + "*" + (char.ToLowerInvariant(m.Groups["w"].Value[0]) == 'c' ? "10000000" : "100000") + ")");
 
         // The parser recurses per bracket/sign; a long hostile input ("((((…") would overflow the stack,
         // which kills the process. Real sums are far shorter than this.

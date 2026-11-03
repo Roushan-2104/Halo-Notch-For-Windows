@@ -111,6 +111,8 @@ public static class HinglishCommands
             var w = words[i];
             if (w == "aaj" || w == "aj") { day = "today"; continue; }
             if (w == "kal") { day = "tomorrow"; continue; }
+            // परसों: in a reminder or alarm it's the day after tomorrow.
+            if (w is "parso" or "parson" or "parsoon" or "parsun" or "parsom" or "parsoan") { day = "day after tomorrow"; continue; }
             if (PartOfDay(w) is { } p) { part = p; continue; }
             // "7 baje", "saade 7 baje"
             // "06:30" / "7:30 baje": a clock reading as is.

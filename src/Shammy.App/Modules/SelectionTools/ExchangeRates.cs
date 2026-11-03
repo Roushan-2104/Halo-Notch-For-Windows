@@ -62,6 +62,16 @@ internal sealed class ExchangeRates
         lock (_gate) return table ?? Usable();
     }
 
+    /// <summary>The rates already on hand (memory or disk), without fetching: for previews on a keystroke.</summary>
+    public RateTable? Cached()
+    {
+        lock (_gate)
+        {
+            LoadOnce();
+            return Usable();
+        }
+    }
+
     public string Describe()
     {
         lock (_gate)

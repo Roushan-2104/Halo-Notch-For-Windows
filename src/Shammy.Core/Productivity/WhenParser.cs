@@ -5,7 +5,7 @@ namespace Shammy.Core.Productivity;
 
 /// <summary>
 /// Points in time for reminders: "in 20 minutes", "at 6pm", "at 18:30", "tomorrow at 9", "tonight at 8",
-/// "on friday at 5pm", "tomorrow morning". Everything resolves against the <c>now</c> passed in (local time).
+/// "on friday at 5pm", "tomorrow morning", "day after tomorrow" / "parso at 5pm". Everything resolves against the <c>now</c> passed in (local time).
 /// </summary>
 public static class WhenParser
 {
@@ -150,6 +150,7 @@ public static class WhenParser
             return Ahead(now, later);
 
         bool tomorrow = false, today = false, nextWeek = false;
+        int daysAhead = 1; // with tomorrow: 2 for "day after tomorrow" / "parso"
         DayOfWeek? weekday = null;
         Part? part = null;
         Clock? clock = null;
@@ -192,6 +193,20 @@ public static class WhenParser
             {
                 if (today || tomorrow || weekday is not null) return null;
                 tomorrow = true;
+                i++;
+            }
+            // "day after tomorrow", "the day after tomorrow", and Hindi "parso" (परसों). For a reminder it can only be
+            // the future one, though in speech "parso" can also mean the day before yesterday.
+            else if ((word == "day" && next == "after" && i + 2 < n && w[i + 2] is "tomorrow" or "tmrw" or "tmr")
+                     || word is "parso" or "parson" or "parsoon" or "parsun")
+            {
+                if (today || tomorrow || weekday is not null) return null;
+                tomorrow = true;
+                daysAhead = 2;
+                i += word == "day" ? 3 : 1;
+            }
+            else if (word == "the" && next == "day" && i + 2 < n && w[i + 2] == "after")
+            {
                 i++;
             }
             else if (word is "on" or "this" or "next" && next is not null && Weekdays.ContainsKey(next))
@@ -248,7 +263,7 @@ public static class WhenParser
             if (today || tomorrow) return null;
             return ResolveDate(now, on, dateHasYear, part, clock);
         }
-        return Resolve(now, tomorrow, weekday, nextWeek, part, clock);
+        return Resolve(now, tomorrow ? daysAhead : 0, weekday, nextWeek, part, clock);
     }
 
     /// <summary>
@@ -284,13 +299,15 @@ public static class WhenParser
         _ => null,
     };
 
-    static DateTime? Resolve(DateTime now, bool tomorrow, DayOfWeek? weekday, bool nextWeek, Part? part, Clock? clock)
+    /// <summary><paramref name="daysAhead"/>: 0 for today/a weekday, 1 tomorrow, 2 the day after. Days are added to
+    /// the wall-clock date, so a DST change in between never shifts the hour.</summary>
+    static DateTime? Resolve(DateTime now, int daysAhead, DayOfWeek? weekday, bool nextWeek, Part? part, Clock? clock)
     {
         var date = now.Date;
         bool futureDay = false;
-        if (tomorrow)
+        if (daysAhead > 0)
         {
-            date = date.AddDays(1);
+            date = date.AddDays(daysAhead);
             futureDay = true;
         }
         else if (weekday is { } wd)

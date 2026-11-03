@@ -112,6 +112,8 @@ public static class Currency
         string? pre = null, post = null;
         if (m.Groups["pre"].Success && !TryFindCode(m.Groups["pre"].Value, out pre!)) return false;
         if (m.Groups["post"].Success && !TryFindCode(m.Groups["post"].Value, out post!)) return false;
+        // Lakh and crore are only ever rupees: "1.2 lakh in dollars".
+        if (pre is null && post is null && IsIndianMultiplier(m.Groups["mult"].Value)) post = "INR";
         if (pre is null && post is null) return false;
         if (pre is not null && post is not null && pre != post) return false;
 
@@ -127,6 +129,8 @@ public static class Currency
         money = new Money(amount, pre ?? post!);
         return true;
     }
+
+    static bool IsIndianMultiplier(string mult) => mult is "lakh" or "lakhs" or "lac" or "lacs" or "crore" or "crores" or "cr";
 
     /// <summary>"100 usd to inr", "convert 20 gbp to inr", "₹500 in dollars", "dollar to rupee". False for anything else.</summary>
     public static bool TryParseQuery(string text, out CurrencyQuery query)
