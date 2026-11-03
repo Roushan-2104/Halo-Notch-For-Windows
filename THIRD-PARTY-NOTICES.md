@@ -42,3 +42,10 @@ q5_0, giving `ggml-apex-hinglish-q5_0.bin` (SHA-256
 `9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13`). It is published as an asset of the
 `voice-models-1` pre-release of this repository, unchanged otherwise. The weights are Oriserve's work and
 remain under the Apache License 2.0; Shammy's MIT license doesn't apply to them.
+
+
+## Schibsted Grotesk (SIL Open Font License 1.1)
+
+Shammy's interface type. Copyright 2023 The Schibsted-Grotesk Project Authors
+(https://github.com/schibsted/schibsted-grotesk). Shipped as static weights (Regular, Medium, SemiBold, Bold,
+ExtraBold) instanced from the variable font; licence text in [LICENSES/OFL-SchibstedGrotesk.txt](LICENSES/OFL-SchibstedGrotesk.txt).

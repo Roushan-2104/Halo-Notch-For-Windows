@@ -21,6 +21,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Focus Wall type: Schibsted Grotesk (SIL OFL 1.1), static weights cut from the variable font. -->
+    <Resource Include="Assets\Fonts\*.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
     <!-- WPF projects leave System.IO out of implicit usings; nothing here uses Shapes.Path unqualified. -->

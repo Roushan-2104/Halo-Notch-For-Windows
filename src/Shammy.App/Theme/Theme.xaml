@@ -30,6 +30,19 @@
     <SolidColorBrush x:Key="CardStroke" Color="#FF1F1F23" />
     <SolidColorBrush x:Key="CardText" Color="#FFF5F5F7" />
     <SolidColorBrush x:Key="CardText2" Color="#FFA1A1A6" />
+
+    <!-- Focus Wall (the chosen design language; see .impeccable/surfaces and FOCUSWALL in the redesign notes):
+         a deep neutral ground, colour only from each tile's artwork, ONE accent for focus and the primary control. -->
+    <FontFamily x:Key="WallFont">pack://application:,,,/Assets/Fonts/#Schibsted Grotesk</FontFamily>
+    <FontFamily x:Key="WallFontMedium">pack://application:,,,/Assets/Fonts/#Schibsted Grotesk Medium</FontFamily>
+    <FontFamily x:Key="WallFontSemiBold">pack://application:,,,/Assets/Fonts/#Schibsted Grotesk SemiBold</FontFamily>
+    <FontFamily x:Key="WallFontExtraBold">pack://application:,,,/Assets/Fonts/#Schibsted Grotesk ExtraBold</FontFamily>
+    <SolidColorBrush x:Key="WallGround" Color="#FF0B0B0D" />
+    <SolidColorBrush x:Key="WallTile" Color="#FF16161A" />
+    <SolidColorBrush x:Key="WallHairline" Color="#FF26282E" />
+    <SolidColorBrush x:Key="WallText" Color="#FFF5F5F7" />
+    <SolidColorBrush x:Key="WallText2" Color="#FFA3A3AB" />
+    <SolidColorBrush x:Key="WallAccent" Color="#FFFF8A3D" />
     <SolidColorBrush x:Key="OnAccentBrush" Color="#FF000000" />
 
     <Style x:Key="Icon" TargetType="TextBlock">
