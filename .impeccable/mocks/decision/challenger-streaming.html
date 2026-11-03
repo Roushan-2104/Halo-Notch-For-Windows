@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>Shammy Focus Wall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#0B0B0D;--tile:#1C1C21;--text:#F5F5F7;--mute:#A3A3AB;--accent:#FF8A3D;--line:#2A2A31}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden}
+body{font-family:"Schibsted Grotesk",system-ui,sans-serif;background:#BFC2CA;color:var(--text);position:relative;font-variant-numeric:tabular-nums}
+button,input{font:inherit;color:inherit;border:0;background:none}
+button{cursor:pointer}
+/* desktop stand-in */
+.desk{position:absolute;inset:0;background:linear-gradient(160deg,#CACDD4,#B4B8C1);filter:blur(1.6px)}
+.win{position:absolute;top:92px;height:772px;background:#E4E5E9;border-radius:12px;box-shadow:0 18px 40px rgba(30,32,40,.14);overflow:hidden}
+.win .bar{height:34px;background:#D6D8DD;display:flex;align-items:center;gap:7px;padding:0 14px}
+.win .bar i{width:10px;height:10px;border-radius:50%;background:#B9BCC3}
+.ed{left:44px;width:648px}.ed .side{position:absolute;top:34px;bottom:0;left:0;width:150px;background:#DCDEE2}
+.ed .code{position:absolute;top:58px;left:176px;right:24px;display:grid;gap:13px}
+.ed .code b{display:block;height:7px;border-radius:4px;background:#C9CCD2}
+.br{left:720px;width:676px}.br .url{margin:12px 18px;height:28px;border-radius:14px;background:#D9DBE0}
+.br .hero{margin:20px 18px;height:250px;border-radius:10px;background:#D3D6DC}
+.br .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 18px}.br .cards i{height:170px;border-radius:10px;background:#D9DBE0}
+/* notch */
+.notch{position:absolute;top:0;left:220px;width:1000px;height:264px;background:var(--ground);border-radius:0 0 30px 30px;padding:12px 20px 0;box-shadow:0 22px 50px rgba(8,8,12,.35)}
+.top{display:flex;align-items:center;gap:6px;height:36px}
+.eyes{width:54px;height:32px;border-radius:16px;background:var(--tile);display:flex;align-items:center;justify-content:center;gap:9px;margin-right:6px}
+.eyes span{width:9px;height:14px;border-radius:5px;background:var(--text)}
+.chip{font-size:13px;font-weight:500;color:var(--mute);padding:7px 9px;border-radius:999px}
+.search{flex:1;margin-left:8px;height:32px;border-radius:10px;background:var(--tile);display:flex;align-items:center;gap:8px;padding:0 12px;color:#8E8E96}
+.search input{flex:1;font-size:13px;outline:0}.search input::placeholder{color:#8E8E96}
+/* focus wall rail */
+.rail{height:204px;display:flex;align-items:center;justify-content:center;gap:12px}
+.t{position:relative;width:168px;aspect-ratio:6/5;border-radius:14px;background:var(--tile);overflow:hidden;opacity:.55;flex:none;padding:12px}
+.t.l{transform:translateX(-6px)}.t.r{transform:translateX(6px)}
+.t.near.l{margin-right:12px}.t.near.r{margin-left:12px}
+.poster{font-weight:800;letter-spacing:-.03em;line-height:.9}
+.stamp{font-size:12px;font-weight:600;letter-spacing:.02em}
+.ico{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(245,245,247,.14)}
+/* weather: sky field */
+.sky{background:radial-gradient(60px 30px at 120px 30px,#56647D,transparent),radial-gradient(70px 30px at 40px 52px,#4B5770,transparent),linear-gradient(180deg,#36435A,#1F2632)}
+.sky .bars{position:absolute;left:12px;right:12px;bottom:12px;height:34px;display:flex;align-items:flex-end;gap:6px}
+.sky .bars i{flex:1;border-radius:3px 3px 1px 1px;background:rgba(245,245,247,.75)}
+/* calendar: date field */
+.date{background:linear-gradient(150deg,#17383A,#10211F)}
+.date .join{position:absolute;right:10px;bottom:10px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:var(--text);color:#0B0B0D}
+/* music: focused */
+.music{width:193px;opacity:1;padding:0;border:2px solid var(--accent);box-shadow:0 0 0 4px rgba(255,138,61,.16),0 18px 36px rgba(0,0,0,.55);
+  background:radial-gradient(90px 70px at 40px 30px,#9A3A2C,transparent),radial-gradient(110px 80px at 160px 40px,#5D1E58,transparent),linear-gradient(160deg,#3A1636,#1A1030)}
+.music .scrim{position:absolute;inset:auto 0 0 0;height:104px;background:linear-gradient(180deg,transparent,rgba(11,11,13,.92) 46%);padding:0 12px 10px;display:flex;flex-direction:column;justify-content:flex-end}
+.music h3{font-size:18px;font-weight:700;letter-spacing:-.01em}
+.music p{font-size:12px;color:#D4D4DA}
+.row{display:flex;align-items:center;justify-content:space-between}
+.ctl{display:flex;gap:6px;align-items:center}.ctl .play{width:30px;height:30px;border-radius:50%;background:var(--text);display:grid;place-items:center}
+.prog{display:flex;align-items:center;gap:6px;font-size:11px;color:#D4D4DA;margin-top:7px}
+.prog .track{flex:1;height:3px;border-radius:2px;background:rgba(245,245,247,.25)}.prog .track i{display:block;width:44%;height:100%;border-radius:2px;background:var(--text)}
+.eq{position:absolute;top:10px;left:12px;font-size:11px;font-weight:600;color:var(--text);background:rgba(11,11,13,.55);padding:3px 8px;border-radius:999px}
+/* timer: ring field */
+.ring{background:radial-gradient(circle at 50% 46%,#2B2E36,#17181C 70%)}
+.ring svg.r{position:absolute;left:12px;top:16px}
+.ring .val{position:absolute;left:12px;top:16px;width:72px;height:72px;display:grid;place-items:center;font-size:19px;font-weight:800;letter-spacing:-.02em}
+.ring .ctl{position:absolute;right:10px;top:12px;flex-direction:column}
+/* system */
+.sys{background:linear-gradient(160deg,#25252E,#141419)}
+.meter{position:absolute;bottom:12px;width:30px;height:84px;border-radius:7px;background:rgba(245,245,247,.12);overflow:hidden}
+.meter i{position:absolute;left:0;right:0;bottom:0;background:rgba(245,245,247,.8)}
+/* action circle */
+.neck{position:absolute;top:18px;left:1214px;width:16px;height:16px;background:var(--ground)}
+.act{position:absolute;top:10px;left:1226px;width:32px;height:32px;border-radius:50%;background:var(--ground);display:grid;place-items:center;box-shadow:0 0 0 1px var(--line)}
+.act-cap{position:absolute;top:48px;left:1210px;font-size:11px;font-weight:600;color:#26282E}
+.cap{position:absolute;top:282px;left:220px;width:1000px;text-align:center;font-size:13px;color:#26282E}
+.cap b{font-weight:700}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="desk" aria-hidden="true">
+  <div class="win ed"><div class="bar"><i></i><i></i><i></i></div><div class="side"></div>
+    <div class="code"><b style="width:42%"></b><b style="width:68%"></b><b style="width:55%"></b><b style="width:30%"></b><b style="width:74%"></b><b style="width:61%"></b><b style="width:48%"></b><b style="width:22%"></b><b style="width:66%"></b><b style="width:80%"></b><b style="width:52%"></b><b style="width:38%"></b><b style="width:70%"></b><b style="width:44%"></b><b style="width:58%"></b><b style="width:26%"></b><b style="width:63%"></b><b style="width:49%"></b><b style="width:72%"></b><b style="width:35%"></b><b style="width:57%"></b><b style="width:46%"></b></div></div>
+  <div class="win br"><div class="bar"><i></i><i></i><i></i></div><div class="url"></div><div class="hero"></div><div class="cards"><i></i><i></i><i></i></div></div>
+</div>
+
+<section class="notch" aria-label="Shammy notch, open">
+  <div class="top">
+    <button class="eyes" aria-label="Home, Shammy"><span></span><span></span></button>
+    <button class="chip">Clipboard</button><button class="chip">Shelf</button><button class="chip">Notes</button><button class="chip">Alerts</button><button class="chip">System</button><button class="chip">Mirror</button><button class="chip">Calendar</button>
+    <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="sr">Search</span><input type="text" placeholder="Search or hold Right Alt"></label>
+  </div>
+
+  <div class="rail" role="list" aria-label="Widgets, Music focused">
+    <article class="t sky l" role="listitem" aria-label="Weather: Bhubaneswar 25 degrees, overcast. Hourly 25, 25, 24, 24, 23, 23">
+      <div class="poster" style="font-size:38px">25°</div>
+      <div class="stamp" style="margin-top:4px">Bhubaneswar</div>
+      <div class="bars" aria-hidden="true"><i style="height:100%"></i><i style="height:96%"></i><i style="height:80%"></i><i style="height:74%"></i><i style="height:58%"></i><i style="height:52%"></i></div>
+    </article>
+
+    <article class="t date l near" role="listitem" aria-label="Calendar: 10:30 Standup, in 10 minutes, Google Meet">
+      <div class="stamp" style="color:#BFE3DC">WED 4 NOV</div>
+      <div class="poster" style="font-size:42px;margin-top:6px">10:30</div>
+      <div class="stamp" style="margin-top:8px">Standup</div>
+      <button class="join">Join</button>
+    </article>
+
+    <article class="t music" role="listitem" aria-label="Music: Kesariya by Arijit Singh, 1:58 of 4:28, playing" aria-current="true">
+      <span class="eq">Now playing</span>
+      <div class="scrim">
+        <div class="row">
+          <div><h3>Kesariya</h3><p>Arijit Singh</p></div>
+          <div class="ctl">
+            <button class="play" aria-label="Pause"><svg width="12" height="12" viewBox="0 0 24 24" fill="#0B0B0D" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg></button>
+            <button class="ico" aria-label="Next track"><svg width="12" height="12" viewBox="0 0 24 24" fill="#F5F5F7" aria-hidden="true"><path d="M5 5l10 7-10 7z"/><rect x="16" y="5" width="3" height="14" rx="1"/></svg></button>
+          </div>
+        </div>
+        <div class="prog"><span>1:58</span><span class="track" role="progressbar" aria-label="Track position" aria-valuenow="118" aria-valuemin="0" aria-valuemax="268"><i></i></span><span>4:28</span></div>
+      </div>
+    </article>
+
+    <article class="t ring r near" role="listitem" aria-label="Timer: Tea, 4:32 left">
+      <svg class="r" width="72" height="72" viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="30" fill="none" stroke="rgba(245,245,247,.18)" stroke-width="6"/><circle cx="36" cy="36" r="30" fill="none" stroke="#F5F5F7" stroke-width="6" stroke-linecap="round" stroke-dasharray="171 188.5" transform="rotate(-90 36 36)"/></svg>
+      <div class="val">4:32</div>
+      <div class="stamp" style="position:absolute;left:12px;bottom:12px">Tea</div>
+      <div class="ctl">
+        <button class="ico" aria-label="Pause timer"><svg width="11" height="11" viewBox="0 0 24 24" fill="#F5F5F7" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg></button>
+        <button class="ico" aria-label="Stop timer"><svg width="10" height="10" viewBox="0 0 24 24" fill="#F5F5F7" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/></svg></button>
+      </div>
+    </article>
+
+    <article class="t sys r" role="listitem" aria-label="System: battery 100 percent, earbuds 60 percent">
+      <div class="meter" style="left:14px" aria-hidden="true"><i style="height:100%"></i></div>
+      <div class="meter" style="left:54px" aria-hidden="true"><i style="height:60%"></i></div>
+      <div style="position:absolute;right:12px;bottom:12px;text-align:right">
+        <div class="poster" style="font-size:28px">100%</div><div class="stamp">Battery</div>
+        <div class="poster" style="font-size:20px;margin-top:8px">60%</div><div class="stamp">Earbuds</div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<div class="neck" aria-hidden="true"></div>
+<button class="act" aria-label="Mute microphone, Google Meet call" aria-pressed="false">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5F5F7" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+</button>
+<div class="act-cap" aria-hidden="true">Meet · mic on</div>
+
+<p class="cap"><b>Focus wall</b> · Music has focus: it grows 1.15×, reveals its title and one line. Neighbours step aside and dim. Arrow keys or hover move focus.</p>
+</body>
+</html>

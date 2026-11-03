@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Shammy · Truck-Art Night Shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yatra+One&family=Hind:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0E0B1A;--mari:#FFB21A;--pink:#FF4F8B;--teal:#18B6A4;--parrot:#7BD23C;--cream:#F6EBD9;--cream2:#CFC3B0;
+  --m-teal:#2F7E75;--m-green:#5B8A3A;--m-cream:#8C8170;--line:#3A3255;--sign:'Yatra One',Georgia,serif;--ui:'Hind',system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden}
+body{background:#17151F;font-family:var(--ui);color:var(--cream);position:relative}
+/* desktop stand-in */
+.desk{position:absolute;inset:0;filter:blur(1.6px);opacity:.7}
+.win{position:absolute;background:#22202B;border:1px solid #2E2B38;border-radius:10px;overflow:hidden}
+.win .bar{height:34px;background:#1C1A24;border-bottom:1px solid #2E2B38}
+.code{padding:24px 28px;display:grid;gap:12px}.code i{display:block;height:8px;border-radius:4px;background:#34313F}
+.page{padding:28px;display:grid;gap:16px}.page b{display:block;border-radius:8px;background:#2B2835}
+/* notch = tailboard */
+.notch{position:absolute;top:0;left:220px;width:1000px;height:260px;background:var(--ink);border-radius:0 0 30px 30px;
+  padding:14px 20px 18px;box-shadow:0 20px 50px rgba(0,0,0,.55)}
+.notch::after{content:"";position:absolute;inset:0 6px 6px;border:1px solid rgba(246,235,217,.16);border-top:0;
+  border-radius:0 0 25px 25px;pointer-events:none}
+.top{display:flex;align-items:center;gap:7px;height:38px}
+.pet{width:70px;height:38px;border:0;background:none;cursor:pointer;border-radius:10px;margin-right:6px}
+.chip{font:500 13px/1 var(--ui);color:var(--cream);background:#17122B;border:1px solid var(--line);border-radius:999px;
+  padding:9px 12px 7px;cursor:pointer}
+.chip:hover{border-color:var(--cream2)}
+.srch{margin-left:auto;position:relative}
+.srch svg{position:absolute;left:12px;top:10px;color:var(--cream2)}
+.srch input{width:244px;height:34px;border-radius:999px;border:1px solid var(--line);background:#15112A;color:var(--cream);
+  font:400 13px var(--ui);padding:2px 14px 0 34px}
+.srch input::placeholder{color:#B9AE9C}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cream);outline-offset:2px}
+/* cards: one pinstripe each, the signature */
+.cards{display:grid;grid-template-columns:1.3fr 1.15fr .95fr 1fr .85fr;gap:12px;margin-top:14px;height:176px}
+.card{--band:var(--m-cream);position:relative;border:2px solid var(--band);border-radius:12px;padding:14px 15px 12px;
+  display:flex;flex-direction:column;min-width:0}
+.card.teal{--band:var(--m-teal)}.card.green{--band:var(--m-green)}
+.card.live{--band:var(--mari);box-shadow:0 0 0 4px rgba(255,178,26,.10),0 0 24px rgba(255,178,26,.38)}
+.card.lit{--band:var(--pink);box-shadow:0 0 18px rgba(255,79,139,.26)}
+.fl{position:absolute;width:16px;height:16px;color:var(--band)}
+.fl.tl{top:4px;left:4px}.fl.br{bottom:4px;right:4px;transform:rotate(180deg)}
+.k{font:600 11px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--cream2);padding-left:14px}
+.k em{font-style:normal;color:var(--band)}
+.big{font:400 32px/1.15 var(--sign);color:var(--cream);margin-top:8px;white-space:nowrap}
+.live .big{color:var(--mari)}.lit .big{color:var(--pink)}
+.sub{font:400 13px/1.35 var(--ui);color:var(--cream2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btns{margin-top:auto;display:flex;gap:6px;align-items:center}
+.b{width:30px;height:30px;border-radius:50%;border:1.5px solid #4A4166;background:transparent;color:var(--cream);
+  display:grid;place-items:center;cursor:pointer}
+.b:hover{border-color:var(--cream2)}
+.b.main{background:var(--mari);border-color:var(--mari);color:var(--ink)}
+.pill{height:30px;padding:2px 18px 0;border-radius:999px;border:0;background:var(--pink);color:var(--ink);font:600 13px var(--ui);cursor:pointer}
+.prog{height:4px;background:#2A2440;border-radius:2px;margin-top:10px}.prog i{display:block;width:44%;height:100%;background:var(--mari);border-radius:2px}
+.time{display:flex;justify-content:space-between;font:500 11px/1 var(--ui);color:var(--cream2);margin-top:6px;font-variant-numeric:tabular-nums}
+.ring{position:relative;width:70px;height:70px;margin:8px 0 0 2px}
+.ring span{position:absolute;inset:0;display:grid;place-items:center;font:400 19px/1 var(--sign);padding-top:3px}
+.bars{display:flex;gap:7px;align-items:flex-end;height:26px;margin-top:auto}
+.bars i{flex:1;background:var(--m-green);border-radius:3px 3px 0 0}
+.hrs{display:flex;gap:7px;font:500 10.5px/1 var(--ui);color:var(--cream2);margin-top:4px}.hrs span{flex:1;text-align:center}
+.meter{height:4px;background:#2A2440;border-radius:2px;margin-top:5px}.meter i{display:block;height:100%;background:var(--m-cream);border-radius:2px}
+/* action circle: the OK roundel */
+.act{position:absolute;top:12px;left:1204px;width:34px;height:34px;border-radius:50%;background:var(--mari);border:0;
+  box-shadow:0 0 0 3px var(--ink),0 6px 14px rgba(0,0,0,.5);display:grid;place-items:center;color:var(--ink);cursor:pointer}
+.act-cap{position:absolute;top:21px;left:1248px;font:500 12px/1 var(--ui);color:var(--cream2)}
+.cap{position:absolute;top:278px;left:220px;width:1000px;display:flex;justify-content:space-between;align-items:center;
+  font:500 12px/1 var(--ui);color:var(--cream2)}
+.cap .ok{font:400 13px/1 var(--sign);letter-spacing:.14em;color:var(--cream)}
+.sw{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle;margin-right:7px}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="curl" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+    <path d="M1.5 14V6.5Q1.5 1.5 6.5 1.5H14"/><path d="M5 11q0-6 5.5-6q2 0 2 2t-2 2q-1.3 0-1.3-1.2"/></g></symbol>
+</defs></svg>
+
+<div class="desk" aria-hidden="true">
+  <div class="win" style="left:56px;top:120px;width:650px;height:720px"><div class="bar"></div><div class="code">
+    <i style="width:38%"></i><i style="width:62%;margin-left:24px"></i><i style="width:54%;margin-left:48px"></i><i style="width:70%;margin-left:48px"></i>
+    <i style="width:30%;margin-left:24px"></i><i style="width:12%"></i><i style="width:0;height:4px"></i><i style="width:44%"></i>
+    <i style="width:66%;margin-left:24px"></i><i style="width:58%;margin-left:48px"></i><i style="width:48%;margin-left:48px"></i>
+    <i style="width:72%;margin-left:72px"></i><i style="width:36%;margin-left:48px"></i><i style="width:20%;margin-left:24px"></i>
+    <i style="width:10%"></i><i style="width:0;height:4px"></i><i style="width:52%"></i><i style="width:64%;margin-left:24px"></i>
+    <i style="width:40%;margin-left:24px"></i><i style="width:14%"></i></div></div>
+  <div class="win" style="left:734px;top:150px;width:650px;height:690px"><div class="bar"></div><div class="page">
+    <b style="height:30px;width:60%"></b><b style="height:200px"></b><b style="height:12px;width:90%"></b><b style="height:12px;width:80%"></b>
+    <b style="height:12px;width:86%"></b><b style="height:120px;width:48%"></b><b style="height:12px;width:70%"></b></div></div>
+</div>
+
+<header class="notch" aria-label="Shammy notch">
+  <nav class="top" aria-label="Shammy sections">
+    <button class="pet" aria-label="Shammy home">
+      <svg width="70" height="38" viewBox="-4 0 72 38" aria-hidden="true">
+        <path d="M3 19Q16 4 29 19Q16 34 3 19Z" fill="#F6EBD9"/><circle cx="17" cy="19" r="8" fill="#18B6A4"/>
+        <circle cx="17" cy="19" r="5" fill="#F6EBD9"/><circle cx="17" cy="19" r="3" fill="#0E0B1A"/><circle cx="18.3" cy="17.6" r="1" fill="#F6EBD9"/>
+        <path d="M3 19q-4-3-3.5-9" fill="none" stroke="#FF4F8B" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M35 19Q48 4 61 19Q48 34 35 19Z" fill="#F6EBD9"/><circle cx="49" cy="19" r="8" fill="#18B6A4"/>
+        <circle cx="49" cy="19" r="5" fill="#F6EBD9"/><circle cx="49" cy="19" r="3" fill="#0E0B1A"/><circle cx="50.3" cy="17.6" r="1" fill="#F6EBD9"/>
+        <path d="M61 19q4-3 3.5-9" fill="none" stroke="#FF4F8B" stroke-width="2.2" stroke-linecap="round"/>
+      </svg></button>
+    <button class="chip">Clipboard</button><button class="chip">Shelf</button><button class="chip">Notes</button>
+    <button class="chip">Alerts</button><button class="chip">System</button><button class="chip">Mirror</button><button class="chip">Calendar</button>
+    <label class="srch"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="7" cy="7" r="5"/><path d="M11 11l4 4" stroke-linecap="round"/></svg>
+      <input type="search" placeholder="Search or hold Right Alt" aria-label="Search or hold Right Alt to talk"></label>
+  </nav>
+
+  <div class="cards">
+    <section class="card live" aria-label="Music, playing now">
+      <svg class="fl tl"><use href="#curl"/></svg><svg class="fl br"><use href="#curl"/></svg>
+      <p class="k"><em>Live</em> · Music</p>
+      <p class="big">Kesariya</p><p class="sub">Arijit Singh</p>
+      <div class="prog"><i></i></div><p class="time"><span>1:58</span><span>4:28</span></p>
+      <div class="btns" style="margin-top:8px">
+        <button class="b main" aria-label="Pause"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1" width="3" height="10" rx="1"/><rect x="7" y="1" width="3" height="10" rx="1"/></svg></button>
+        <button class="b" aria-label="Next track"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M2 1.5l6 4.5-6 4.5z"/><rect x="9" y="1.5" width="1.8" height="9" rx=".9"/></svg></button>
+      </div>
+    </section>
+    <section class="card lit" aria-label="Calendar, changed 10 minutes ago">
+      <svg class="fl tl"><use href="#curl"/></svg><svg class="fl br"><use href="#curl"/></svg>
+      <p class="k"><em>Changed</em> · Calendar</p>
+      <p class="big">10:30</p><p class="sub" style="color:var(--cream)">Standup</p><p class="sub">in 10 min · Google Meet</p>
+      <div class="btns"><button class="pill">Join</button></div>
+    </section>
+    <section class="card teal" aria-label="Timer">
+      <svg class="fl tl"><use href="#curl"/></svg><svg class="fl br"><use href="#curl"/></svg>
+      <p class="k">Timer · Tea</p>
+      <div class="ring"><svg width="70" height="70" viewBox="0 0 70 70" aria-hidden="true"><circle cx="35" cy="35" r="30" fill="none" stroke="#2A2440" stroke-width="4"/>
+        <circle cx="35" cy="35" r="30" fill="none" stroke="#2F7E75" stroke-width="4" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="45" transform="rotate(-90 35 35)"/></svg><span>4:32</span></div>
+      <div class="btns">
+        <button class="b" aria-label="Pause timer"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1" width="3" height="10" rx="1"/><rect x="7" y="1" width="3" height="10" rx="1"/></svg></button>
+        <button class="b" aria-label="Stop timer"><svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/></svg></button>
+      </div>
+    </section>
+    <section class="card green" aria-label="Weather">
+      <svg class="fl tl"><use href="#curl"/></svg><svg class="fl br"><use href="#curl"/></svg>
+      <p class="k">Weather</p>
+      <p class="big">25°</p><p class="sub">Bhubaneswar · Overcast</p>
+      <div class="bars" aria-hidden="true"><i style="height:62%"></i><i style="height:74%"></i><i style="height:88%"></i><i style="height:100%"></i><i style="height:80%"></i><i style="height:58%"></i></div>
+      <p class="hrs" aria-label="Next six hours"><span>11</span><span>12</span><span>1</span><span>2</span><span>3</span><span>4</span></p>
+    </section>
+    <section class="card" aria-label="System">
+      <svg class="fl tl"><use href="#curl"/></svg><svg class="fl br"><use href="#curl"/></svg>
+      <p class="k">System</p>
+      <p class="big">100%</p><p class="sub">Battery</p>
+      <p class="sub" style="margin-top:auto;color:var(--cream)">Earbuds 60%</p><div class="meter"><i style="width:60%"></i></div>
+    </section>
+  </div>
+</header>
+
+<button class="act" aria-label="Mute microphone, Google Meet call" aria-pressed="false">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+    <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" fill="currentColor"/><path d="M3 8a5 5 0 0 0 10 0M8 13v2"/></svg>
+</button>
+<p class="act-cap">On call · tap to mute</p>
+
+<div class="cap">
+  <span><span class="sw" style="color:#FFB21A"></span>Marigold band: live now (Music)</span>
+  <span class="ok">HORN · OK · PLEASE</span>
+  <span><span class="sw" style="color:#FF4F8B"></span>Pink band held: changed in the last 10 min (Calendar)</span>
+</div>
+</body></html>

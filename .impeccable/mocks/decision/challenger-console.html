@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>Shammy Graphite Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#121315;--panel:#1B1D20;--seam:#2A2D31;--raise:#212328;--text:#D9DCE1;--dim:#8F959E;
+  --blue:#7AA2F7;--green:#9ECE6A;--red:#F7768E;--amber:#E0AF68;
+  --sans:'Geist',system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden;background:var(--ground);color:var(--text);font:13px/1.35 var(--sans)}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+svg{display:block}
+/* desktop stand-in: low contrast, slightly blurred */
+.desk{position:absolute;inset:0;filter:blur(1.6px);opacity:.6}
+.win{position:absolute;top:60px;bottom:40px;background:#17181B;border:1px solid #222429;border-radius:6px;overflow:hidden}
+.win.ed{left:40px;width:690px}.win.br{left:760px;width:640px}
+.bar{height:30px;border-bottom:1px solid #222429;background:#151619}
+.gut{position:absolute;left:0;top:30px;bottom:0;width:44px;border-right:1px solid #1F2125}
+.ln{height:6px;border-radius:3px;background:#25282D;margin:14px 0 0 var(--x,64px);width:var(--w)}
+.addr{height:18px;width:60%;margin:6px auto 0;border-radius:4px;background:#1F2125}
+.blk{background:#1D1F23;border-radius:4px;margin:18px 24px 0;height:var(--h)}
+/* notch: tiled panels, hairline seams, no shadows */
+.notch{position:absolute;top:0;left:220px;width:1000px;height:260px;background:var(--seam);border:1px solid var(--seam);border-top:0;
+  border-radius:0 0 12px 12px;overflow:hidden;display:grid;grid-template-rows:46px 1fr 24px;gap:1px}
+.top{background:var(--panel);display:flex;align-items:stretch}
+.eyes{width:58px;border:0;border-right:1px solid var(--seam);background:var(--panel);display:flex;gap:7px;align-items:center;justify-content:center;cursor:pointer}
+.eyes i{width:8px;height:15px;border-radius:4px;background:#E8EAED}
+.tabs{display:flex}
+.tabs button{border:0;border-right:1px solid var(--seam);background:none;color:var(--dim);font:500 12.5px var(--sans);padding:0 13px;cursor:pointer}
+.tabs button:first-child{color:var(--text)}
+.search{flex:1;display:flex;align-items:center;gap:8px;margin:9px 10px;padding:0 6px 0 9px;background:var(--ground);border:1px solid var(--seam);border-radius:4px;color:var(--dim)}
+.search input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);font:13px var(--sans)}
+.search input::placeholder{color:var(--dim)}
+kbd{font:500 10.5px var(--mono);color:var(--dim);border:1px solid var(--seam);border-radius:3px;padding:1px 5px}
+.cards{display:grid;grid-template-columns:218px 196px 196px 222px 1fr;gap:1px}
+.p{background:var(--panel);padding:10px 12px 11px;display:flex;flex-direction:column;position:relative;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.hd>span:first-child{font:500 13px var(--sans);font-variant-caps:all-small-caps;letter-spacing:.09em;color:var(--dim)}
+.st{font:500 10.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:5px}
+.st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.g{color:var(--green)}.b{color:var(--blue)}.a{color:var(--amber)}.r{color:var(--red)}
+/* signature: the live panel's seam lights in its state colour */
+.live{z-index:1;outline:1px solid var(--amber)}
+.live::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--amber)}
+.t1{font:600 15px var(--sans);color:#ECEEF1}.t2{color:var(--dim);margin-top:1px}
+.meter{height:3px;background:#2C3035;border-radius:2px;margin-top:12px;overflow:hidden}.meter b{display:block;height:100%;background:var(--text)}
+.times{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin-top:5px}
+.ctl{display:flex;gap:6px;margin-top:auto;align-items:center}
+.btn{height:27px;min-width:27px;padding:0 10px;border:1px solid var(--seam);background:var(--raise);color:var(--text);border-radius:4px;font:500 12px var(--sans);
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.btn.i{padding:0;width:30px}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#0E1014;font-weight:600}
+.btn.danger{background:transparent;color:var(--red);border-color:#4B2C33}
+.sep{width:1px;align-self:stretch;background:var(--seam);margin:0 4px 0 auto}
+.big{font:500 24px/1 var(--mono);font-variant-numeric:tabular-nums;color:#ECEEF1}
+.ring{position:relative;width:66px;height:66px}.ring .num{position:absolute;inset:0;display:grid;place-items:center;font-size:15px;color:#ECEEF1}
+.hrs{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;align-items:end;height:52px;margin-top:auto}
+.hrs b{display:block;background:#3A3F46;border-radius:2px 2px 0 0}.hrs b.now{background:var(--dim)}
+.hl{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;font:10.5px var(--mono);color:var(--dim);text-align:center;margin-top:4px;border-top:1px solid var(--seam);padding-top:3px}
+.sys{display:flex;justify-content:space-between;align-items:baseline}.sys+.meter{margin:5px 0 12px}
+.status{background:var(--ground);display:flex;align-items:center;gap:14px;padding:0 12px;font:11px var(--mono);color:var(--dim)}
+.status .end{margin-left:auto}
+/* action circle: attached to the notch's right edge, shows call state */
+.ac{position:absolute;top:8px;left:1225px;width:32px;height:32px;border-radius:50%;background:var(--panel);border:1px solid var(--green);color:var(--green);
+  display:grid;place-items:center;cursor:pointer}
+.ac::before{content:"";position:absolute;right:100%;top:15px;width:5px;height:1px;background:var(--green)}
+.cap{position:absolute;font:12px var(--mono);color:var(--dim)}
+.cap b{font-weight:500;color:var(--text)}
+</style>
+</head>
+<body>
+<div class="desk" aria-hidden="true">
+  <div class="win ed"><div class="bar"></div><div class="gut"></div>
+    <div class="ln" style="--w:220px"></div><div class="ln" style="--w:340px;--x:84px"></div><div class="ln" style="--w:280px;--x:84px"></div>
+    <div class="ln" style="--w:410px;--x:104px"></div><div class="ln" style="--w:190px;--x:104px"></div><div class="ln" style="--w:120px;--x:84px"></div>
+    <div class="ln" style="--w:300px"></div><div class="ln" style="--w:360px;--x:84px"></div><div class="ln" style="--w:240px;--x:104px"></div>
+    <div class="ln" style="--w:150px;--x:84px"></div><div class="ln" style="--w:90px"></div><div class="ln" style="--w:320px"></div></div>
+  <div class="win br"><div class="bar"><div class="addr"></div></div>
+    <div class="blk" style="--h:28px;width:45%"></div><div class="blk" style="--h:150px"></div><div class="blk" style="--h:12px;width:70%"></div>
+    <div class="blk" style="--h:12px;width:60%"></div><div class="blk" style="--h:90px"></div></div>
+</div>
+
+<main class="notch" aria-label="Shammy notch, open">
+  <div class="top">
+    <button class="eyes" aria-label="Shammy home"><i></i><i></i></button>
+    <nav class="tabs" aria-label="Sections">
+      <button>Clipboard</button><button>Shelf</button><button>Notes</button><button>Alerts</button><button>System</button><button>Mirror</button><button>Calendar</button>
+    </nav>
+    <label class="search">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.8"/><path d="M10.6 10.6 14 14"/></svg>
+      <input type="search" placeholder="Search or hold Right Alt" aria-label="Search or hold Right Alt to talk"><kbd>R-ALT</kbd>
+    </label>
+  </div>
+
+  <div class="cards">
+    <section class="p" aria-label="Music">
+      <div class="hd"><span>music</span><span class="st g">playing</span></div>
+      <div class="t1">Kesariya</div><div class="t2">Arijit Singh</div>
+      <div class="meter" role="progressbar" aria-label="Track position" aria-valuenow="118" aria-valuemin="0" aria-valuemax="268"><b style="width:44%"></b></div>
+      <div class="times num"><span>1:58</span><span>4:28</span></div>
+      <div class="ctl">
+        <button class="btn i" aria-label="Pause"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1.5" width="2.6" height="9" rx=".6"/><rect x="7.4" y="1.5" width="2.6" height="9" rx=".6"/></svg></button>
+        <button class="btn i" aria-label="Next track"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M1.5 1.8v8.4L7.6 6z"/><rect x="8.4" y="1.8" width="1.8" height="8.4" rx=".5"/></svg></button>
+      </div>
+    </section>
+
+    <section class="p" aria-label="Calendar">
+      <div class="hd"><span>calendar</span><span class="st b">in 10 min</span></div>
+      <div class="big">10:30</div>
+      <div class="t1" style="margin-top:7px">Standup</div>
+      <div class="t2" style="display:flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="4" width="9" height="8" rx="1.5"/><path d="m10.5 7 4-2.2v6.4l-4-2.2"/></svg>Google Meet</div>
+      <div class="ctl"><button class="btn primary" style="width:100%">Join call</button></div>
+    </section>
+
+    <section class="p live" aria-label="Timer, running">
+      <div class="hd"><span>timer</span><span class="st a">running</span></div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="ring"><svg width="66" height="66" viewBox="0 0 66 66"><circle cx="33" cy="33" r="27" fill="none" stroke="#2C3035" stroke-width="4"/>
+          <circle cx="33" cy="33" r="27" fill="none" stroke="#E0AF68" stroke-width="4" stroke-dasharray="128.2 169.6" transform="rotate(-90 33 33)"/></svg>
+          <span class="num" role="timer" aria-label="4 minutes 32 seconds left">4:32</span></div>
+        <div><div class="t1">Tea</div><div class="t2 num" style="font-size:11.5px">of 6:00</div></div>
+      </div>
+      <div class="ctl">
+        <button class="btn" aria-label="Pause timer"><svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1.5" width="2.6" height="9" rx=".6"/><rect x="7.4" y="1.5" width="2.6" height="9" rx=".6"/></svg>Pause</button>
+        <span class="sep"></span>
+        <button class="btn danger" aria-label="Stop timer"><svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><rect width="10" height="10" rx="1.5"/></svg>Stop</button>
+      </div>
+    </section>
+
+    <section class="p" aria-label="Weather">
+      <div class="hd"><span>weather</span><span class="t2" style="font-size:12px">Bhubaneswar</span></div>
+      <div style="display:flex;align-items:baseline;gap:9px"><span class="big">25°</span><span class="t2">Overcast</span></div>
+      <div class="hrs" aria-label="Hourly temperature, 25 to 28 degrees">
+        <b class="now" style="height:40%"></b><b style="height:55%"></b><b style="height:72%"></b><b style="height:90%"></b><b style="height:90%"></b><b style="height:72%"></b>
+      </div>
+      <div class="hl"><span>now</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span></div>
+    </section>
+
+    <section class="p" aria-label="System">
+      <div class="hd"><span>system</span></div>
+      <div class="sys"><span>Battery</span><span class="num g">100%</span></div>
+      <div class="meter"><b style="width:100%;background:var(--green)"></b></div>
+      <div class="sys"><span>Earbuds</span><span class="num">60%</span></div>
+      <div class="meter"><b style="width:60%"></b></div>
+    </section>
+  </div>
+
+  <footer class="status">
+    <span>shammy:~/home</span><span>hold <b style="color:var(--text);font-weight:500">R-Alt</b> to talk</span><span>tap to type</span>
+    <span class="end">meet call</span><span class="g">mic live</span>
+  </footer>
+</main>
+
+<button class="ac" aria-label="Mute microphone (on a Google Meet call)" aria-pressed="false">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"/><path d="M3 7.5a5 5 0 0 0 10 0M8 12.5V15"/></svg>
+</button>
+
+<p class="cap" style="top:272px;left:220px"><b>OPEN</b> / home &middot; live panel = timer, its seam lit amber</p>
+<p class="cap" style="top:46px;left:1268px;width:150px;line-height:1.5"><b>ACTION CIRCLE</b><br>call state: mic live<br>click to mute</p>
+</body>
+</html>
