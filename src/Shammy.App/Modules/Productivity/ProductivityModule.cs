@@ -13,7 +13,7 @@ namespace Shammy.Modules.Productivity;
 /// spoken commands ("timer 25m", "remind me at 6pm to take medicine", "note: buy milk").
 /// Running clocks live in the compact ears; reminders and notes persist and show in a Notes tab.
 /// </summary>
-internal sealed class ProductivityModule : IShammyModule, ITextCommand
+internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview
 {
     // Above downloads (40), below messages (50): a running timer yields to anything more urgent.
     const int ClockPriority = 45;
@@ -94,6 +94,24 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand
     public bool CanHandle(string text) => ProductivityParser.Parse(text, DateTime.Now) is not null;
 
     public Task<CommandResult> RunAsync(string text) => Task.FromResult(Run(text, typed: true));
+
+    public CommandPreview? Preview(string text)
+    {
+        var c = ProductivityParser.Parse(text, DateTime.Now);
+        var what = c is null ? null : Shammy.Core.Palette.PaletteQuery.DescribeProductivity(c, DateTime.Now);
+        if (c is null || what is null) return null;
+        var glyph = c.Action switch
+        {
+            ProductivityAction.Remind or ProductivityAction.ReminderNeedsTime => BellGlyph,
+            ProductivityAction.Note or ProductivityAction.ShowNotes => NoteGlyph,
+            ProductivityAction.StartFocus or ProductivityAction.StopFocus => FocusGlyph,
+            ProductivityAction.StartPomodoro or ProductivityAction.StopPomodoro or ProductivityAction.SkipPomodoro => PomodoroGlyph,
+            ProductivityAction.StartStopwatch or ProductivityAction.StopStopwatch or ProductivityAction.PauseStopwatch
+                or ProductivityAction.ResumeStopwatch => StopwatchGlyph,
+            _ => TimerGlyph,
+        };
+        return new CommandPreview(glyph, what);
+    }
 
     CommandResult Run(string text, bool typed)
     {

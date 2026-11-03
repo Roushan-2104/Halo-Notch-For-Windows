@@ -10,7 +10,7 @@ internal sealed record ConvertOutcome(CommandResult Result, string? OpenUrl = nu
 /// "time in tokyo") and translation ("translate good morning to hindi"). <see cref="CanHandle"/> only accepts
 /// phrases that parse completely, so ordinary searches never get captured.
 /// </summary>
-internal sealed class ConvertCommand : ITextCommand
+internal sealed class ConvertCommand : ITextCommand, ICommandPreview
 {
     readonly ModuleContext _ctx;
     readonly ExchangeRates _rates;
@@ -30,6 +30,32 @@ internal sealed class ConvertCommand : ITextCommand
         // A command can't open the results card, so translations go to the browser.
         if (outcome.OpenUrl is not null) _ctx.Open(outcome.OpenUrl);
         return outcome.Result;
+    }
+
+    /// <summary>The answer itself when it needs no network (units, time zones); otherwise what will happen.</summary>
+    public CommandPreview? Preview(string text)
+    {
+        switch (Parse(text))
+        {
+            case TimeQuery time:
+                try
+                {
+                    var answer = WorldClock.Answer(time, DateTime.UtcNow, TimeZoneInfo.Local);
+                    return new CommandPreview(Glyphs.Clock, answer.Title, answer.Detail);
+                }
+                catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
+                {
+                    return null;
+                }
+            case UnitConversion units:
+                return new CommandPreview(Glyphs.Measure, units.Title, units.Detail);
+            case CurrencyQuery money:
+                return new CommandPreview(Glyphs.Money, $"Convert {Currency.Format(money.From.Amount, money.From.Code)} to {money.To}", "Live exchange rate");
+            case TranslateRequest translate:
+                return new CommandPreview(Glyphs.Translate, $"Translate to {translate.Language}", translate.Text);
+            default:
+                return null;
+        }
     }
 
     static object? Parse(string text)

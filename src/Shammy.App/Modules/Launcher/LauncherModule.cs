@@ -8,7 +8,7 @@ namespace Shammy.Modules.Launcher;
 /// Spotlight for Windows: "open spotify", "launch vsc", "open github.com", "open downloads" from the
 /// type box or by voice. Only claims the text when it really names an app, a domain or a known folder.
 /// </summary>
-internal sealed class LauncherModule : IShammyModule, ITextCommand
+internal sealed class LauncherModule : IShammyModule, ITextCommand, ICommandPreview
 {
     static readonly Dictionary<string, (Guid Id, string Title)> Folders = new()
     {
@@ -53,6 +53,19 @@ internal sealed class LauncherModule : IShammyModule, ITextCommand
     {
         var plan = LaunchResolver.Resolve(text, _index.Apps);
         return Task.FromResult(plan is null ? new CommandResult("", "Nothing to open", text, IsError: true) : Launch(plan));
+    }
+
+    public CommandPreview? Preview(string text)
+    {
+        var plan = LaunchResolver.Resolve(text, _index.Apps);
+        if (plan is null) return null;
+        return plan.Request.Kind switch
+        {
+            LaunchKind.Folder => new CommandPreview("", $"Open {Folders[plan.Request.Target].Title}", "Folder"),
+            LaunchKind.Url => new CommandPreview("", $"Open {ShortUrl(plan.Request.Target)}", "Website"),
+            _ when plan.CanLaunch => new CommandPreview("", $"Open {plan.Match!.Value.App.Name}", "App"),
+            _ => null,
+        };
     }
 
     CommandResult Launch(LaunchPlan plan)

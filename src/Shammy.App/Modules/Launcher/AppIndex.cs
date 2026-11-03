@@ -22,9 +22,13 @@ internal sealed class AppIndex : IDisposable
 
     sealed record Snapshot(IReadOnlyList<AppEntry> Apps, DateTime? BuiltAt, string Source);
 
+    /// <summary>The launcher's index, shared so the typing palette doesn't read the Start menu a second time.</summary>
+    public static AppIndex? Current { get; private set; }
+
     public AppIndex(ModuleContext ctx)
     {
         _ctx = ctx;
+        Current = this;
         _timer = new Timer(_ => Refresh(), null, TimeSpan.FromSeconds(1), RefreshEvery);
     }
 

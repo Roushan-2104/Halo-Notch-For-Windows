@@ -18,7 +18,49 @@ public partial class SearchBarView : UserControl
         IsVisibleChanged += (_, _) => UpdateFrames();
     }
 
+    /// <summary>Enter with no palette row chosen: the text goes to commands, the calculator or the web, as always.</summary>
     internal event Action<string>? Submitted;
+
+    /// <summary>The typed text changed (also raised with "" when the box opens).</summary>
+    internal event Action<string>? QueryChanged;
+
+    /// <summary>The palette's "Search Google for …" row: the web, even if the text is also a command.</summary>
+    internal event Action<string>? WebSearchRequested;
+
+    /// <summary>A palette row did its thing itself (opened an app); show the result, or just close on null.</summary>
+    internal event Action<Modules.CommandResult?>? ActionCompleted;
+
+    /// <summary>The palette's height changed; the notch resizes the typing bar to fit.</summary>
+    internal event Action<double>? PaletteHeightChanged;
+
+    /// <summary>Gets first look at keys in the box (Up/Down/Enter for the palette); true when it used the key.</summary>
+    internal Func<KeyEventArgs, bool>? PaletteKeys { get; set; }
+
+    internal string Text => Input.Text;
+
+    internal double PaletteHeight => PaletteHost.Height;
+
+    internal void Submit(string text) => Submitted?.Invoke(text);
+    internal void SearchWeb(string text) => WebSearchRequested?.Invoke(text);
+    internal void Complete(Modules.CommandResult? result) => ActionCompleted?.Invoke(result);
+
+    /// <summary>Show palette rows below the box (null or 0 hides them).</summary>
+    internal void SetPalette(FrameworkElement? content, double height)
+    {
+        if (content is null) height = 0;
+        if (!ReferenceEquals(PaletteHost.Content, content)) PaletteHost.Content = content;
+        bool changed = Math.Abs(PaletteHost.Height - height) > 0.5;
+        PaletteHost.Height = height;
+        UpdatePaletteVisibility();
+        if (changed) PaletteHeightChanged?.Invoke(height);
+    }
+
+    /// <summary>Test hook: type into the box as if from the keyboard.</summary>
+    internal void SetText(string text)
+    {
+        Input.Text = text;
+        Input.CaretIndex = text.Length;
+    }
 
     /// <summary>Listening to the mic; <paramref name="micLevel"/> drives the orb pulse and the wave.</summary>
     internal void ShowListening(Func<float> micLevel, string primary, string secondary)
@@ -69,10 +111,13 @@ public partial class SearchBarView : UserControl
     {
         _micLevel = null;
         SetState(glyph: "", spinning: false, typing: true);
+        bool same = Input.Text == text;
         Input.Text = text;
         Input.CaretIndex = text.Length;
         Wave.Active = false;
         Wave.Visibility = Visibility.Collapsed;
+        // Reopening with the same (empty) text raises no TextChanged; the palette still has to start over.
+        if (same) QueryChanged?.Invoke(text);
     }
 
     internal void FocusInput()
@@ -93,7 +138,19 @@ public partial class SearchBarView : UserControl
         Secondary.Visibility = Visibility.Visible;
         InputHost.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
         EnterHint.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
+        _typing = typing;
+        UpdatePaletteVisibility();
         UpdateFrames();
+    }
+
+    bool _typing;
+
+    void UpdatePaletteVisibility()
+    {
+        bool show = _typing && PaletteHost.Height > 0;
+        PaletteHost.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        // With rows below, each row carries its own hint; the bar's "Enter" would point at two things.
+        EnterHint.Visibility = _typing && !show ? Visibility.Visible : Visibility.Collapsed;
     }
 
     void UpdateFrames()
@@ -116,8 +173,16 @@ public partial class SearchBarView : UserControl
         PulseScale.ScaleX = PulseScale.ScaleY = _pulse.Value;
     }
 
-    void OnInputChanged(object sender, TextChangedEventArgs e) =>
+    void OnInputChanged(object sender, TextChangedEventArgs e)
+    {
         Placeholder.Visibility = Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_typing) QueryChanged?.Invoke(Input.Text);
+    }
+
+    void OnInputPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_typing && PaletteKeys?.Invoke(e) == true) e.Handled = true;
+    }
 
     void OnInputKeyDown(object sender, KeyEventArgs e)
     {

@@ -32,15 +32,17 @@ internal static class ShellIcons
         [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory factory);
 
     const int SIIGBF_RESIZETOFIT = 0x0;
+    const int SIIGBF_ICONONLY = 0x4;
 
-    public static ImageSource? Get(string path, int size)
+    /// <summary>With <paramref name="iconOnly"/> it skips thumbnails, which can take a while for big photos and PDFs.</summary>
+    public static ImageSource? Get(string path, int size, bool iconOnly = false)
     {
         IntPtr hbmp = IntPtr.Zero;
         IShellItemImageFactory? factory = null;
         try
         {
             SHCreateItemFromParsingName(path, IntPtr.Zero, typeof(IShellItemImageFactory).GUID, out factory);
-            if (factory.GetImage(new SIZE { cx = size, cy = size }, SIIGBF_RESIZETOFIT, out hbmp) != 0) return null;
+            if (factory.GetImage(new SIZE { cx = size, cy = size }, iconOnly ? SIIGBF_ICONONLY : SIIGBF_RESIZETOFIT, out hbmp) != 0) return null;
             return FromHBitmap(hbmp);
         }
         catch (Exception ex)

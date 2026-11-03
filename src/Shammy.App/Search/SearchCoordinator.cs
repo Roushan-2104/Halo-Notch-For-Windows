@@ -70,6 +70,17 @@ internal sealed class SearchCoordinator
             if (_phase is Phase.Showing or Phase.Typing) Cancel();
         };
         notch.SearchBarView.Submitted += text => _ = ProcessTextAsync(text);
+        // Palette rows (Modules/Palette): the web row skips commands; rows that acted themselves show a confirmation.
+        notch.SearchBarView.WebSearchRequested += text =>
+        {
+            if (_phase == Phase.Typing) _ = SearchWebAsync(text);
+        };
+        notch.SearchBarView.ActionCompleted += result =>
+        {
+            if (_phase != Phase.Typing) return;
+            if (result is null) Cancel();
+            else ShowCommandResult(result);
+        };
         notch.ResultView.CloseRequested += Cancel;
         notch.ResultView.ModeChanged += mode =>
         {
@@ -425,6 +436,13 @@ internal sealed class SearchCoordinator
         var (query, filters) = QueryBuilder.ExtractSpokenFilters(text);
         if (query.Length == 0) query = text;
         await ShowResultAsync(new Context(query, query, _settings.DefaultSearchMode, filters, null, null));
+    }
+
+    Task SearchWebAsync(string text)
+    {
+        var (query, filters) = QueryBuilder.ExtractSpokenFilters(text);
+        if (query.Length == 0) query = text;
+        return ShowResultAsync(new Context(query, query, _settings.DefaultSearchMode, filters, null, null));
     }
 
     void ShowAnswer(string query, string expression, string result)
