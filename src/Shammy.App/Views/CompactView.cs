@@ -84,7 +84,7 @@ internal sealed class CompactView : Grid
                 _hud.Set(hud);
                 return Width;
             case DownloadPayload d when a.Kind == ActivityKind.Downloading && _rightText is not null:
-                _rightText.Text = FormatBytes(d.Bytes);
+                _rightText.Text = Shammy.Core.Connect.ConnectText.DownloadProgress(d.Bytes, d.Total);
                 return Width;
             case ProgressPayload p when _ring is not null && _rightText is not null:
                 _ring.Value = p.Progress;
@@ -185,7 +185,7 @@ internal sealed class CompactView : Grid
     {
         var spinner = new Spinner { Width = 15, Height = 15, Stroke = (Brush)Application.Current.Resources["AccentBrush"] };
         _left.Content = Row(Glyph("", 14, (Brush)Application.Current.Resources["AccentBrush"]), new FrameworkElement { Width = 7 }, spinner);
-        _rightText = Label(FormatBytes(p.Bytes), (Brush)Application.Current.Resources["Fg"]);
+        _rightText = Label(Shammy.Core.Connect.ConnectText.DownloadProgress(p.Bytes, p.Total), (Brush)Application.Current.Resources["Fg"]);
         _right.Content = _rightText;
         return 70;
     }

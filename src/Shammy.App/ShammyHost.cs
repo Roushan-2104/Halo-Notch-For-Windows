@@ -123,11 +123,12 @@ internal sealed class ShammyHost : IDisposable
         {
             _downloads = Own(new DownloadsService(_ui));
             _downloads.Progress += (name, bytes, count) => Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading,
-                new DownloadPayload(count > 1 ? $"{count} downloads" : name, null, bytes, count)));
+                new DownloadPayload(count > 1 ? $"{count} downloads" : name, null, bytes, count, _downloads.Total)));
+            // Clicking the "done" pill opens a small card: Open, Show in folder, Add to shelf, Send to phone.
             _downloads.Completed += (name, path) => Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone,
                 new DownloadPayload(name, path, 0, 1), In(4))
             {
-                Click = () => System.Diagnostics.Process.Start(Native.ExplorerPath, $"/select,\"{path}\""),
+                Click = () => ShowDownloadCard(path),
             });
             _downloads.AllFinished += () => _activities.Remove("download");
             _downloads.Start();
@@ -393,6 +394,17 @@ internal sealed class ShammyHost : IDisposable
         });
     }
 
+    void ShowDownloadCard(string path)
+    {
+        Modules.Connect.DownloadCard? card = null;
+        card = new Modules.Connect.DownloadCard(path, _shelf, () =>
+        {
+            // Only close it if it's still the card showing.
+            if (card?.Parent is not null) _notch.CloseCard();
+        });
+        _notch.ShowCard(card, Modules.Connect.DownloadCard.CardWidth, Modules.Connect.DownloadCard.CardHeight, interactive: true);
+    }
+
     void ReleaseHeld()
     {
         if (QuietState.IsQuiet || Shammy.Core.Connect.QuietRules.HeldText(_held) is not { } text) return;
@@ -625,10 +637,31 @@ internal sealed class ShammyHost : IDisposable
                 Post(new Activity("bluetooth", ActivityKind.Bluetooth, PriorityBluetooth, new BluetoothPayload(btParts[0].Trim(), true, true,
                     btParts.Length > 1 && int.TryParse(btParts[1], out var btLevel) ? btLevel : null), In(3.5)));
                 return "ok";
-            case "downloading": Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading, new DownloadPayload(arg, null, 12_400_000, 1))); return "ok";
+            case "downloading":
+            {
+                // "downloading name" (12.4 MB so far) or "downloading name|bytes|total" (shows a percent).
+                var d = arg.Split('|');
+                long bytes = d.Length > 1 && long.TryParse(d[1], out var soFar) ? soFar : 12_400_000;
+                long? total = d.Length > 2 && long.TryParse(d[2], out var size) ? size : null;
+                Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading, new DownloadPayload(d[0].Trim(), null, bytes, 1, total)));
+                return "ok";
+            }
             case "downloaded":
+            {
+                // "downloaded <path>": with a real file, clicking the pill opens the download card.
                 _activities.Remove("download");
-                Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone, new DownloadPayload(arg, null, 0, 1), In(4)));
+                var path = arg.Trim().Trim('"');
+                bool file = File.Exists(path);
+                Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone,
+                    new DownloadPayload(file ? Path.GetFileName(path) : path, file ? path : null, 0, 1), In(4))
+                {
+                    Click = file ? () => ShowDownloadCard(path) : null,
+                });
+                return "ok";
+            }
+            case "download-card":
+                if (!File.Exists(arg.Trim().Trim('"'))) return "error: usage download-card <existing file>";
+                ShowDownloadCard(arg.Trim().Trim('"'));
                 return "ok";
             case "message": Post(new Activity("message", ActivityKind.Message, PriorityMessage, new MessagePayload("", arg), In(3))); return "ok";
             case "clear":
