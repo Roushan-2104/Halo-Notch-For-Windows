@@ -1,0 +1,96 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Shammy.Views;
+
+namespace Shammy.Modules.ClipboardHistory;
+
+/// <summary>"Just copied" preview: a copy glyph (or thumbnail) on the left, the text or image size on the right.</summary>
+internal sealed class CopyPreview : ICompactContent
+{
+    const double MaxEar = 160;
+
+    string _text;
+    ImageSource? _thumb;
+    TextBlock? _label;
+    ContentControl? _left;
+
+    public CopyPreview(string text, ImageSource? thumb)
+    {
+        _text = text;
+        _thumb = thumb;
+    }
+
+    public double Build(ContentControl left, ContentControl right)
+    {
+        _left = left;
+        _label = ClipUi.Label(_text, 12, FontWeights.SemiBold, ClipUi.Brush("Fg"));
+        _label.MaxWidth = MaxEar;
+        right.Content = _label;
+        SetLeft();
+        _label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        // Later in-place updates trim to this width rather than spilling into the centre cut-out.
+        _label.MaxWidth = Math.Clamp(Math.Ceiling(_label.DesiredSize.Width), 24, MaxEar);
+        return _label.MaxWidth;
+    }
+
+    /// <summary>Copies in quick succession update the pill in place instead of re-announcing.</summary>
+    public void Set(string text, ImageSource? thumb)
+    {
+        _text = text;
+        _thumb = thumb;
+        if (_label is not null) _label.Text = text;
+        SetLeft();
+    }
+
+    void SetLeft()
+    {
+        if (_left is null) return;
+        _left.Content = _thumb is not null
+            ? ClipImages.Tile(_thumb, 20, 20, 6)
+            : CompactView.Glyph("", 15, ClipUi.Brush("AccentBrush"));
+    }
+}
+
+/// <summary>A new screenshot: thumbnail on the left, "Screenshot" and its size on the right. Click opens the card.</summary>
+internal sealed class ScreenshotPreview : ICompactContent
+{
+    readonly ImageSource _thumb;
+    readonly string _size;
+
+    public ScreenshotPreview(ImageSource thumb, string size)
+    {
+        _thumb = thumb;
+        _size = size;
+    }
+
+    public double Build(ContentControl left, ContentControl right)
+    {
+        left.Content = ClipImages.Tile(_thumb, 26, 20, 5);
+        var title = ClipUi.Label("Screenshot", 11.5, FontWeights.SemiBold, ClipUi.Brush("Fg"));
+        var size = ClipUi.Label(_size, 10.5, FontWeights.Normal, ClipUi.Brush("Fg2"));
+        title.HorizontalAlignment = size.HorizontalAlignment = HorizontalAlignment.Right;
+        var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        stack.Children.Add(title);
+        stack.Children.Add(size);
+        right.Content = stack;
+        return 84;
+    }
+}
+
+/// <summary>Small helpers for code-built UI in the theme's look.</summary>
+internal static class ClipUi
+{
+    public static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
+
+    public static TextBlock Label(string text, double size, FontWeight weight, Brush brush) => new()
+    {
+        Text = text,
+        FontFamily = (FontFamily)Application.Current.Resources["ShammyFont"],
+        FontSize = size,
+        FontWeight = weight,
+        Foreground = brush,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+    };
+}

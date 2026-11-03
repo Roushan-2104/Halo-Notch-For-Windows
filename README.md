@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="Halo: a Dynamic Island for Windows" width="100%">
+  <img src="docs/images/banner.svg" alt="Shammy: a Dynamic Island for Windows" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Roushan-2104/Halo-Notch-For-Windows?style=flat-square&color=7c5cff&label=download"></a>
+  <a href="https://github.com/Roushan-2104/Shammy-Notch-For-Windows/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Roushan-2104/Shammy-Notch-For-Windows?style=flat-square&color=7c5cff&label=download"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%C2%B7%2011-2b2d42?style=flat-square&logo=windows11">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512bd4?style=flat-square&logo=dotnet">
   <img alt="No paid AI" src="https://img.shields.io/badge/paid%20AI-none-ff8a65?style=flat-square">
@@ -13,7 +13,7 @@
 <p align="center">
   <b><a href="#install">Install</a></b> ·
   <a href="#three-keys">Three keys</a> ·
-  <a href="#a-day-with-halo">Tour</a> ·
+  <a href="#a-day-with-shammy">Tour</a> ·
   <a href="#say-it-or-type-it">Commands</a> ·
   <a href="#privacy-by-default">Privacy</a> ·
   <a href="#build-it-yourself">Build</a>
@@ -21,13 +21,13 @@
 
 ---
 
-Halo turns the top-centre of your screen into a living notch, like the iPhone's Dynamic Island, made for Windows.
+Shammy turns the top-centre of your screen into a living notch, like the iPhone's Dynamic Island, made for Windows.
 
 It answers questions with Google AI Mode, Web or Lens right inside the notch, lets you circle anything on screen to search it, and shows your music, timers, calls, downloads and notifications as little live pills. Hover it and it opens into a small dashboard.
 
 It runs on your PC with **no paid AI**:
 - Google does the answering.
-- Speech-to-text runs offline with Whisper.
+- Speech-to-text runs offline with Whisper, tuned for Indian English and the names of apps you have installed.
 - Text recognition uses Windows' built-in OCR.
 
 <!-- DEMO: replace this comment with the demo GIF, e.g. <p align="center"><img src="docs/images/demo.gif" width="760"></p> -->
@@ -45,14 +45,14 @@ Everything else is a **hover** away.
 
 > On layouts where Right Alt is AltGr (English India, German, French…), Right Alt on its own is the talk key, and AltGr + a key still types (₹, €, @). Right Ctrl only counts when held on its own, so Ctrl shortcuts are unaffected.
 
-## A day with Halo
+## A day with Shammy
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
 ### ☕ It starts quiet
-At rest Halo is just a black notch with a soft shadow. A thin colour edge flashes briefly when something happens:
+At rest Shammy is just a black notch with a soft shadow. A thin colour edge flashes briefly when something happens:
 - the album colour for a new song;
 - your accent colour for a notification or timer;
 - green for charging;
@@ -104,7 +104,7 @@ Other apps' notifications drop out of the notch with a soft ping instead of Wind
 - **click** to open the app;
 - **right-click** to mute that app.
 
-During a call or while you share your screen, Halo shows who a notification is from, but not what it says.
+During a call or while you share your screen, Shammy shows who a notification is from, but not what it says.
 
 </td>
 <td><img src="docs/images/notification.png" alt="Notification card"></td>
@@ -122,7 +122,7 @@ Timers, stopwatches, Pomodoro and focus sessions, meeting mic mute, volume and b
 <td valign="top">
 
 ### 🗂️ Hover for the dashboard
-Hover the notch to open it: clock, now playing, battery, and a tab for each part of Halo:
+Hover the notch to open it: clock, now playing, battery, and a tab for each part of Shammy:
 - Shelf
 - Notifications
 - Weather
@@ -170,18 +170,18 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - 🖥️ **System:**
   - a CPU, memory and battery tab;
   - alerts when an app hogs the CPU or the battery drains fast.
-- 🙈 **Fullscreen:** Halo hides itself for fullscreen games, videos and presentations, and never covers a top taskbar.
+- 🙈 **Fullscreen:** Shammy hides itself for fullscreen games, videos and presentations, and never covers a top taskbar.
 
 ## Install
 
-1. Download **`HaloNotch-win-Setup.exe`** from the [latest release](https://github.com/Roushan-2104/Halo-Notch-For-Windows/releases/latest) and run it.
+1. Download **`Shammy-Setup.exe`** from the [latest release](https://github.com/Roushan-2104/Shammy-Notch-For-Windows/releases/latest) and run it.
    - It installs for your account only, with no admin prompt.
    - .NET is included.
-2. On first run, Halo asks once whether it should **start with Windows**. You can change this later in the tray menu.
+2. On first run, Shammy asks once whether it should **start with Windows**. You can change this later in the tray menu.
 
-- **Updates are automatic.** Halo downloads new versions in the background, usually just a few MB, and the notch offers *Update ready · click to restart*. If you ignore it, the update installs when Halo next quits.
-- **No installer?** `HaloNotch-win-Portable.zip` runs from any folder and updates itself the same way.
-- **First launch:** Halo downloads the offline voice model once (~148 MB). Typing and circling work meanwhile.
+- **Updates are automatic.** Shammy downloads new versions in the background, usually just a few MB, and the notch offers *Update ready · click to restart*. If you ignore it, the update installs when Shammy next quits.
+- **No installer?** `Shammy-Portable.zip` runs from any folder and updates itself the same way.
+- **First launch:** Shammy downloads a small offline voice model (~148 MB) so you can talk within a minute. Typing and circling work meanwhile. It then checks your PC once and quietly fetches a sharper model in the background: about 574 MB on a PC with a usable graphics card, or 488 MB otherwise. The notch says *Voice upgraded* when it switches.
 
 <details>
 <summary><b>Requirements and first-run notes</b></summary>
@@ -189,8 +189,8 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - **Windows:** 10 (2004+) or 11.
 - **WebView2 Runtime** for search results. It comes with Windows 11 and current Edge; if it's missing, the notch links to Microsoft's installer.
 - **SmartScreen:** the build isn't code-signed yet, so SmartScreen may ask you to confirm the first run.
-- **To hear only Halo's ping,** turn off *Allow notifications to play sounds* in Settings › System › Notifications. The tray menu has a shortcut to that page.
-- **Uninstall** from Settings › Apps. Your settings and data in `%LOCALAPPDATA%\Halo` are kept.
+- **To hear only Shammy's ping,** turn off *Allow notifications to play sounds* in Settings › System › Notifications. The tray menu has a shortcut to that page.
+- **Uninstall** from Settings › Apps. Your settings and data in `%LOCALAPPDATA%\Shammy` are kept.
 
 </details>
 
@@ -237,9 +237,9 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 
 - **Google robot check.** On shared or mobile connections Google sometimes shows "I'm not a robot" in the results card. Tick it once and the browser profile remembers it.
 - **Lens** uses the same upload endpoint as lens.google.com's own upload button. It isn't a public API, so it could change.
-- **Brightness keys:** Halo shows its HUD, but Windows' own brightness pop-up can't be suppressed, because the firmware handles those keys.
+- **Brightness keys:** Shammy shows its HUD, but Windows' own brightness pop-up can't be suppressed, because the firmware handles those keys.
 - **Notifications** are read when Windows' notification store changes. Clicking one opens the app, not the exact chat: Windows doesn't let other apps trigger a toast's own buttons.
-- **The Copilot key** replaces Windows' Copilot/Search action while Halo runs.
+- **The Copilot key** replaces Windows' Copilot/Search action while Shammy runs.
 - **First launch** shows the notch about 3 s after start (WPF's one-time theme load).
 
 </details>
@@ -247,8 +247,8 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 ## Build it yourself
 
 ```bash
-dotnet test tests/Halo.Core.Tests
-dotnet run --project src/Halo.App
+dotnet test tests/Shammy.Core.Tests
+dotnet run --project src/Shammy.App
 ```
 
 You need Windows 10 (2004+) or 11, the .NET 8 SDK, and the WebView2 Runtime.
@@ -277,9 +277,9 @@ Without `-Publish` it only builds into `artifacts/releases`, so you can try it f
 <summary><b>How it's put together</b></summary>
 
 ```
-src/Halo.Core      pure logic, unit tested: springs, activity priority, parsers (time, money, units,
+src/Shammy.Core      pure logic, unit tested: springs, activity priority, parsers (time, money, units,
                    reminders, snippets, music), calculator, selection analysis, phone-transfer server
-src/Halo.App       WPF app
+src/Shammy.App       WPF app
   Shell/           the notch window: state machine, spring animation, shape, colour edge
   Views/           compact pills, expanded dashboard, search bar, results and answer cards
   Search/          hotkeys, screen freeze, OCR, microphone, Whisper
@@ -289,10 +289,10 @@ src/Halo.App       WPF app
   SystemInfo/      volume, brightness, battery, Bluetooth, downloads
   Notifications/   other apps' notifications via the Windows listener
   Interop/         Win32: keyboard hook, window styles, capture
-tests/             over 1,000 xUnit tests for Halo.Core
+tests/             over 1,000 xUnit tests for Shammy.Core
 ```
 
-Each feature is a module in `src/Halo.App/Modules/`; its README explains how to add your own.
+Each feature is a module in `src/Shammy.App/Modules/`; its README explains how to add your own.
 
 </details>
 
