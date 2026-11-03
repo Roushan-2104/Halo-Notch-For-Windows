@@ -587,7 +587,9 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     // ---- Helpers ---------------------------------------------------------------------------------
 
-    static string ClockText(DateTime t) => t.ToString("h:mm tt", CultureInfo.InvariantCulture);
+    // A long timer can end tomorrow: "Ends 10:09 PM" then reads as tonight.
+    static string ClockText(DateTime t) =>
+        t.Date == DateTime.Now.Date ? t.ToString("h:mm tt", CultureInfo.InvariantCulture) : TimeFormat.When(t, DateTime.Now);
 
     static void After(TimeSpan delay, Action action)
     {
