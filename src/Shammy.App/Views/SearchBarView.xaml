@@ -9,40 +9,46 @@
             <!-- The typing palette's results; empty (0 px) unless something is typed. -->
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid Margin="11,0,18,0">
+        <Grid Margin="10,0,16,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="34" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
+            <!-- Focus Wall: no accent here. The orb is a tile with a white glyph; the mic level breathes as a white halo. -->
             <Grid x:Name="Orb" Width="34" Height="34" VerticalAlignment="Center">
-                <Ellipse x:Name="OrbPulse" Fill="{DynamicResource AccentBrush}" Opacity="0.3" RenderTransformOrigin="0.5,0.5">
+                <Ellipse x:Name="OrbPulse" Fill="{DynamicResource WallText}" Opacity="0.14" RenderTransformOrigin="0.5,0.5">
                     <Ellipse.RenderTransform>
                         <ScaleTransform x:Name="PulseScale" ScaleX="0.8" ScaleY="0.8" />
                     </Ellipse.RenderTransform>
                 </Ellipse>
-                <Ellipse x:Name="OrbCore" Width="28" Height="28" Fill="{DynamicResource AccentBrush}" />
-                <TextBlock x:Name="OrbGlyph" Style="{StaticResource Icon}" Text="&#xE720;" FontSize="14" Foreground="{DynamicResource OnAccentBrush}" />
+                <Ellipse x:Name="OrbCore" Width="30" Height="30" Fill="{DynamicResource WallTile}"
+                         Stroke="{DynamicResource WallHairline}" StrokeThickness="1" />
+                <TextBlock x:Name="OrbGlyph" Style="{StaticResource Icon}" Text="&#xE720;" FontSize="14" Foreground="{DynamicResource WallText}" />
                 <views:Spinner x:Name="Spin" Width="22" Height="22" Visibility="Collapsed" />
             </Grid>
 
             <StackPanel x:Name="TextStack" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
-                <TextBlock x:Name="Primary" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="Secondary" FontSize="11.5" Foreground="{StaticResource Fg2}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                <TextBlock x:Name="Primary" FontFamily="{DynamicResource WallFont}" FontWeight="Bold" FontSize="15"
+                           Foreground="{DynamicResource WallText}" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="Secondary" FontFamily="{DynamicResource WallFont}" FontSize="12" Foreground="{DynamicResource WallText2}"
+                           TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
             </StackPanel>
 
             <Grid x:Name="InputHost" Grid.Column="1" Margin="12,0,10,0" Visibility="Collapsed">
-                <TextBlock x:Name="Placeholder" Text="Ask anything, or type a sum" FontSize="15" Foreground="{StaticResource Fg3}"
-                           VerticalAlignment="Center" IsHitTestVisible="False" />
-                <TextBox x:Name="Input" Style="{StaticResource BareTextBox}" TextChanged="OnInputChanged"
+                <TextBlock x:Name="Placeholder" Text="Ask anything, or type a sum" FontFamily="{DynamicResource WallFontMedium}" FontWeight="Medium"
+                           FontSize="15" Foreground="{DynamicResource WallText2}" VerticalAlignment="Center" IsHitTestVisible="False" />
+                <TextBox x:Name="Input" Style="{StaticResource WallTextBox}"
+                         AutomationProperties.Name="Ask Shammy" TextChanged="OnInputChanged"
                          PreviewKeyDown="OnInputPreviewKeyDown" KeyDown="OnInputKeyDown" />
             </Grid>
 
             <views:VisualizerBars x:Name="Wave" Grid.Column="2" BarCount="6" Height="18" VerticalAlignment="Center" />
-            <Border x:Name="EnterHint" Grid.Column="2" Background="{StaticResource Fill2}" CornerRadius="6" Padding="7,2"
-                    VerticalAlignment="Center" Visibility="Collapsed">
-                <TextBlock Text="Enter" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Fg2}" />
+            <!-- A keycap: hairline outline, tracked label. -->
+            <Border x:Name="EnterHint" Grid.Column="2" BorderBrush="{DynamicResource WallHairline}" BorderThickness="1"
+                    CornerRadius="6" Padding="7,3" VerticalAlignment="Center" Visibility="Collapsed">
+                <views:TrackedText Text="Enter" FontSize="10" Tracking="0.1" />
             </Border>
         </Grid>
         <ContentControl x:Name="PaletteHost" Grid.Row="1" Focusable="False" Height="0" Visibility="Collapsed" />

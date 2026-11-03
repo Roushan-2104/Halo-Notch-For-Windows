@@ -6,7 +6,10 @@ using Shammy.Notifications;
 
 namespace Shammy.Views;
 
-/// <summary>A notification as it drops out of the notch: app icon, app name, title and two lines of text.</summary>
+/// <summary>
+/// A notification as it drops out of the notch: the app's avatar as artwork, a tracked app name, a bold title and two
+/// lines of text. Hovering holds it (the window keeps it up) and reveals Dismiss.
+/// </summary>
 public partial class NotificationView : UserControl
 {
     ShammyNotification? _shown;
@@ -14,8 +17,8 @@ public partial class NotificationView : UserControl
     public NotificationView()
     {
         InitializeComponent();
-        MouseEnter += (_, _) => DismissButton.Visibility = Visibility.Visible;
-        MouseLeave += (_, _) => DismissButton.Visibility = Visibility.Hidden;
+        MouseEnter += (_, _) => SetHeld(true);
+        MouseLeave += (_, _) => SetHeld(false);
         MouseLeftButtonUp += (_, e) =>
         {
             if (_shown is not null && e.OriginalSource is not Button) Opened?.Invoke(_shown);
@@ -37,9 +40,20 @@ public partial class NotificationView : UserControl
         MoreBadge.Visibility = more > 0 ? Visibility.Visible : Visibility.Collapsed;
         MoreText.Text = $"+{more}";
         MuteItem.Header = $"Don't show from {n.AppName}";
-        // Shell icons have transparent padding, so they sit on a subtle tile rather than filling it.
+        // Shell icons have transparent padding, so the crisp icon sits on a field blurred from its own colours.
         IconImage.Source = n.Icon;
+        IconField.Source = n.Icon;
+        System.Windows.Automation.AutomationProperties.SetName(this,
+            n.Body.Length > 0 ? $"{n.AppName}: {n.Title}. {n.Body}" : $"{n.AppName}: {n.Title}");
         IconGlyph.Visibility = n.Icon is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>While the pointer is over it the window holds the notification on screen: show Dismiss, and "Held" for the time.</summary>
+    void SetHeld(bool held)
+    {
+        DismissButton.Visibility = held ? Visibility.Visible : Visibility.Hidden;
+        HeldText.Visibility = held ? Visibility.Visible : Visibility.Collapsed;
+        TimeText.Visibility = held ? Visibility.Collapsed : Visibility.Visible;
     }
 
     void OnDismiss(object sender, RoutedEventArgs e) => Dismissed?.Invoke();

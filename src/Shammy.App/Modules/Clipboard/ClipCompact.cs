@@ -6,8 +6,8 @@ using Shammy.Views;
 namespace Shammy.Modules.ClipboardHistory;
 
 /// <summary>
-/// "Just copied" preview: a copy glyph (or thumbnail) on the left, the text or image size on the right. While the
-/// screen is shared it only says "Copied", with no thumbnail.
+/// "Just copied" preview: a copy glyph (or thumbnail) on the left, the text or image size on the right, in white on
+/// the notch (no accent: it is news, not a control). While the screen is shared it only says "Copied", with no thumbnail.
 /// </summary>
 internal sealed class CopyPreview : ICompactContent
 {
@@ -31,7 +31,7 @@ internal sealed class CopyPreview : ICompactContent
     public double Build(ContentControl left, ContentControl right)
     {
         _left = left;
-        _label = ClipUi.Label(Shown, 12, FontWeights.SemiBold, ClipUi.Brush("Fg"));
+        _label = WallParts.Text(Shown, 12.5, FontWeights.SemiBold);
         _label.MaxWidth = MaxEar;
         right.Content = _label;
         SetLeft();
@@ -55,11 +55,11 @@ internal sealed class CopyPreview : ICompactContent
         if (_left is null) return;
         _left.Content = _thumb is not null && !Private
             ? ClipImages.Tile(_thumb, 20, 20, 6)
-            : CompactView.Glyph("", 15, ClipUi.Brush("AccentBrush"));
+            : WallParts.Glyph("", 15);
     }
 }
 
-/// <summary>A new screenshot: thumbnail on the left, "Screenshot" and its size on the right. Click opens the card.</summary>
+/// <summary>A new screenshot: thumbnail on the left, a tracked "SCREENSHOT" and its size on the right. Click opens the card.</summary>
 internal sealed class ScreenshotPreview : ICompactContent
 {
     readonly ImageSource _thumb;
@@ -74,8 +74,9 @@ internal sealed class ScreenshotPreview : ICompactContent
     public double Build(ContentControl left, ContentControl right)
     {
         left.Content = ClipImages.Tile(_thumb, 26, 20, 5);
-        var title = ClipUi.Label("Screenshot", 11.5, FontWeights.SemiBold, ClipUi.Brush("Fg"));
-        var size = ClipUi.Label(_size, 10.5, FontWeights.Normal, ClipUi.Brush("Fg2"));
+        var title = WallParts.Label("Screenshot", "WallText", 10);
+        title.Tracking = 0.1;
+        var size = WallParts.Text(_size, 10.5, FontWeights.Normal, "WallText2");
         title.HorizontalAlignment = size.HorizontalAlignment = HorizontalAlignment.Right;
         var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         stack.Children.Add(title);
@@ -85,19 +86,15 @@ internal sealed class ScreenshotPreview : ICompactContent
     }
 }
 
-/// <summary>Small helpers for code-built UI in the theme's look.</summary>
+/// <summary>Small helpers for code-built UI in the Focus Wall look (see <see cref="WallParts"/>).</summary>
 internal static class ClipUi
 {
     public static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
 
-    public static TextBlock Label(string text, double size, FontWeight weight, Brush brush) => new()
+    public static TextBlock Label(string text, double size, FontWeight weight, Brush brush)
     {
-        Text = text,
-        FontFamily = (FontFamily)Application.Current.Resources["ShammyFont"],
-        FontSize = size,
-        FontWeight = weight,
-        Foreground = brush,
-        VerticalAlignment = VerticalAlignment.Center,
-        TextTrimming = TextTrimming.CharacterEllipsis,
-    };
+        var t = WallParts.Text(text, size, weight);
+        t.Foreground = brush;
+        return t;
+    }
 }
