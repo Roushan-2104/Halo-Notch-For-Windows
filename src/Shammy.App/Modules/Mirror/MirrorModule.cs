@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
+using Shammy.Core.Cards;
 using Shammy.Modules.Kit;
 
 namespace Shammy.Modules.Mirror;
@@ -53,13 +54,27 @@ internal sealed class MirrorModule : IShammyModule
             },
         });
         ctx.AddPipeCommand("mirror-state", _ => State());
-        // Opens the mirror (and so the camera) as a popup card, for a live check before the notch opens cards in place.
-        ctx.AddPipeCommand("mirror-open", _ =>
-        {
-            CardKit.ShowDetailPopup(ctx, () => _view = new MirrorView(this, ctx.Ui));
-            return "ok";
-        });
+        // Opens the mirror's detail in the notch (and so the camera), as the chip or "mirror" would.
+        ctx.AddPipeCommand("mirror-open", _ => ctx.OpenCard("mirror") ? "ok" : "error: no mirror card");
+        // "mirror", "how do I look", "open camera": before the launcher, which would start Windows' Camera app.
+        ctx.AddCommandFirst(new MirrorCommand(ctx));
         SystemEvents.SessionSwitch += OnSessionSwitch;
+    }
+
+    sealed class MirrorCommand(ModuleContext ctx) : ITextCommand, ICommandPreview
+    {
+        const string Glyph = "";
+
+        public bool CanHandle(string text) => CardPhrases.IsMirror(text);
+
+        public Task<CommandResult> RunAsync(string text)
+        {
+            // The camera starts only once the detail is on screen, after this confirmation has closed.
+            ctx.OpenCard("mirror");
+            return Task.FromResult(new CommandResult(Glyph, "Mirror", "The camera stays off until it opens"));
+        }
+
+        public CommandPreview? Preview(string text) => new(Glyph, "Open the mirror", "A quick look in your camera");
     }
 
     void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)

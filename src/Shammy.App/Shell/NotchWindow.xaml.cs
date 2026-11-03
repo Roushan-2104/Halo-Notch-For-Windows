@@ -53,7 +53,8 @@ public partial class NotchWindow : Window
     NotchMode? _searchMode;
     string? _heldActionId;
     bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
-    (FrameworkElement Panel, bool Hold)? _pendingTab;
+    /// <summary>A view a command asked to open, waiting for its confirmation card (or the search bar) to close.</summary>
+    Action? _pendingOpen;
     Color? _moduleGlow;
     string? _flashedId;
     object? _flashedPayload;
@@ -380,10 +381,10 @@ public partial class NotchWindow : Window
         }
         Recompute();
         UpdateBubble();
-        if (mode is null && _pendingTab is { } pending)
+        if (mode is null && _pendingOpen is { } pending)
         {
-            _pendingTab = null;
-            OpenTab(pending.Panel, pending.Hold);
+            _pendingOpen = null;
+            pending();
         }
     }
 
@@ -452,16 +453,24 @@ public partial class NotchWindow : Window
     {
         if (_searchMode is not null)
         {
-            _pendingTab = (panel, hold);
+            _pendingOpen = () => OpenTab(panel, hold);
             return;
         }
         Open(() => Expanded.ShowTab(panel), hold);
     }
 
-    /// <summary>Open the notch on a view by id or chip label (see ExpandedView.OpenView); false if there's no such view.</summary>
+    /// <summary>
+    /// Open the notch on a view by id or chip label (see ExpandedView.OpenView); false if there's no such view.
+    /// Like <see cref="OpenTab"/>, a view asked for while a search or command card shows opens once that card closes.
+    /// </summary>
     internal bool OpenView(string idOrLabel, bool hold = true)
     {
         if (!Expanded.CanOpen(idOrLabel)) return false;
+        if (_searchMode is not null)
+        {
+            _pendingOpen = () => OpenView(idOrLabel, hold);
+            return true;
+        }
         Open(() => Expanded.OpenView(idOrLabel), hold);
         return true;
     }
@@ -590,7 +599,7 @@ public partial class NotchWindow : Window
 
     public void Collapse()
     {
-        _pendingTab = null;
+        _pendingOpen = null;
         _holdTimeout.Stop();
         if (_held)
         {

@@ -190,7 +190,8 @@ internal sealed class WeatherFeature : IDisposable
             return new CommandResult(WeatherCodes.CloudGlyph, "Weather unavailable",
                 AmbientNet.IsOnline ? "Couldn't reach the forecast; trying again soon" : "You're offline", IsError: true);
 
-        OpenTabSoon();
+        // Opens the weather card's detail once the command's confirmation card has closed.
+        _ctx.OpenCard("weather");
         if (query == WeatherQuery.Tomorrow && WeatherText.Tomorrow(r) is { } tomorrow)
             return new CommandResult(WeatherCodes.Glyph(r.TomorrowCode ?? r.Code), "Tomorrow in " + City, tomorrow);
 
@@ -318,9 +319,6 @@ internal sealed class WeatherFeature : IDisposable
             ? $"city={q.City} when={q.When} -> web search \"{s}\""
             : $"city={q.City} when={q.When} -> {result.Title} | {result.Detail}{(result.IsError ? " (error)" : "")}";
     }
-
-    /// <summary>Opens the notch once the command's confirmation card has closed (the weather card sits on its home row).</summary>
-    void OpenTabSoon() => _ctx.OpenTab(_card.Compact);
 
     public void Dispose()
     {

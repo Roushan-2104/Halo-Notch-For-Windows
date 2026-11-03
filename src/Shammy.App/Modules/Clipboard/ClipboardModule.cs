@@ -79,11 +79,7 @@ internal sealed class ClipboardModule : IShammyModule
         ctx.AddPipeCommand("clipboard-copy", PipeCopy);
         ctx.AddPipeCommand("clipboard-screenshot", PipeScreenshot);
         ctx.AddPipeCommand("clipboard-state", _ => State());
-        ctx.AddPipeCommand("clipboard-open", _ =>
-        {
-            OpenTabHeld();
-            return "ok";
-        });
+        ctx.AddPipeCommand("clipboard-open", _ => OpenDetail() ? "ok" : "error: no clipboard card");
 
         try
         {
@@ -239,7 +235,7 @@ internal sealed class ClipboardModule : IShammyModule
         else _preview!.Set(text, thumb);
         _ctx.Post(new Activity(PreviewId, ActivityKind.Custom, PreviewPriority, _preview, now.AddSeconds(2))
         {
-            Click = OpenTabHeld,
+            Click = () => OpenDetail(),
         });
     }
 
@@ -481,15 +477,12 @@ internal sealed class ClipboardModule : IShammyModule
             return new CommandResult("", "Clipboard history cleared",
                 pinned > 0 ? $"{removed} removed · {pinned} pinned kept" : $"{removed} removed");
         }
-        OpenTabHeld();
+        OpenDetail();
         return new CommandResult("", "Clipboard", CountText());
     }
 
-    /// <summary>
-    /// Opens the clipboard detail (after a command's confirmation clears). Until the notch can open a card's
-    /// detail in place, it shows as a popup card.
-    /// </summary>
-    void OpenTabHeld() => Kit.CardKit.ShowDetailPopup(_ctx, _card2.BuildDetail);
+    /// <summary>Opens the clipboard card's detail in the notch (after a command's confirmation clears).</summary>
+    bool OpenDetail() => _ctx.OpenCard("clipboard");
 
     /// <summary>Opens a copied link; only http(s) addresses the card recognised as links.</summary>
     void OpenLink(string url)

@@ -98,11 +98,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         ctx.AddPipeCommand("productivity-timer", PipeTimer);
         ctx.AddPipeCommand("productivity-remind-now", PipeRemindNow);
         ctx.AddPipeCommand("productivity-state", _ => State());
-        ctx.AddPipeCommand("notes-open", _ =>
-        {
-            Kit.CardKit.ShowDetailPopup(_ctx, _notes.BuildDetail);
-            return "ok";
-        });
+        ctx.AddPipeCommand("notes-open", _ => _ctx.OpenCard("notes") ? "ok" : "error: no notes card");
         ctx.AddPipeCommand("productivity-run", text =>
         {
             var r = Run(text, typed: false);
@@ -309,8 +305,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     CommandResult ShowNotes(bool typed)
     {
-        // Waits for the command's confirmation card to clear, then shows the Notes detail.
-        Kit.CardKit.ShowDetailPopup(_ctx, _notes.BuildDetail);
+        // Waits for the command's confirmation card to clear, then opens the Notes detail in the notch.
+        _ctx.OpenCard("notes");
         int upcoming = _store.Reminders.Count(r => !r.Fired), notes = _store.Notes.Count;
         return new CommandResult(NoteGlyph, "Notes",
             $"{notes} {(notes == 1 ? "note" : "notes")} \u00B7 {upcoming} upcoming {(upcoming == 1 ? "reminder" : "reminders")}");

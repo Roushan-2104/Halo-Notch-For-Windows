@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using Shammy.Core.Activities;
 using Shammy.Core.Calendar;
+using Shammy.Core.Cards;
 using Shammy.Modules.Kit;
 
 namespace Shammy.Modules.Calendar;
@@ -85,6 +86,8 @@ internal sealed class CalendarModule : IShammyModule
         };
         ctx.AddCard(_notchCard);
         ctx.AddGlance("calendar", Glance);
+        // "calendar", "my meetings", "what's next": before the launcher, which would open Windows' Calendar app.
+        ctx.AddCommandFirst(new CalendarCommand(this));
 
         ctx.AddTrayItem("Connect Google Calendar…", OpenSetup);
         ctx.AddTrayItem("Disconnect calendar", Disconnect);
@@ -92,11 +95,7 @@ internal sealed class CalendarModule : IShammyModule
         ctx.AddPipeCommand("cal-state", _ => State());
         ctx.AddPipeCommand("cal-load-ics", LoadIcsFile);
         ctx.AddPipeCommand("cal-pill-test", _ => PillTest());
-        ctx.AddPipeCommand("cal-open", _ =>
-        {
-            ShowDetail();
-            return "ok";
-        });
+        ctx.AddPipeCommand("cal-open", _ => ShowDetail() ? "ok" : "error: no calendar card");
 
         _fetch.Interval = FetchEvery;
         _fetch.Tick += (_, _) => _ = FetchAsync();
@@ -392,5 +391,26 @@ internal sealed class CalendarModule : IShammyModule
         return "ok pill shown for 20 s (Join just dismisses it)";
     }
 
-    internal void ShowDetail() => CardKit.ShowDetailPopup(_ctx, _card.BuildDetail);
+    internal bool ShowDetail() => _ctx.OpenCard("calendar");
+
+    /// <summary>"what's next": says what the next meeting is, then opens the calendar card's detail.</summary>
+    CommandResult RunCommand()
+    {
+        const string Glyph = "";
+        ShowDetail();
+        if (!Connected && _store.Cache.Count == 0) return new CommandResult(Glyph, "Calendar", "Not connected yet · paste your Google Calendar address");
+        var now = DateTime.Now;
+        if (CalendarAgenda.Next(_store.Cache, now) is not { } next) return new CommandResult(Glyph, "Nothing coming up", "Your week is clear");
+        var at = next.Start.Date == now.Date ? CalendarText.ClockAmPm(next.Start) : $"{next.Start.ToString("ddd", CultureInfo.InvariantCulture)} {CalendarText.ClockAmPm(next.Start)}";
+        return new CommandResult(Glyph, next.Title, $"{at} · {CalendarText.Until(next.Start, next.End, now)}" + (next.Provider is { } p ? $" · {p}" : ""));
+    }
+
+    sealed class CalendarCommand(CalendarModule module) : ITextCommand, ICommandPreview
+    {
+        public bool CanHandle(string text) => CardPhrases.IsCalendar(text);
+
+        public Task<CommandResult> RunAsync(string text) => Task.FromResult(module.RunCommand());
+
+        public CommandPreview? Preview(string text) => new("", "Open Calendar", "Your next meeting and today's timeline");
+    }
 }

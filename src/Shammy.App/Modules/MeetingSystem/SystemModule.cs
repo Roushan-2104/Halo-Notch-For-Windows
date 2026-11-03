@@ -77,11 +77,7 @@ internal sealed class SystemModule : IShammyModule
 
         ctx.AddCommand(new SystemCommand(this));
         ctx.AddPipeCommand("system-state", _ => State());
-        ctx.AddPipeCommand("system-open", _ =>
-        {
-            OpenTab();
-            return "ok";
-        });
+        ctx.AddPipeCommand("system-open", _ => OpenDetail() ? "ok" : "error: no system card");
     }
 
     void OnVisibilityChanged()
@@ -217,8 +213,8 @@ internal sealed class SystemModule : IShammyModule
             s = await Task.Run(() => sampler.Sample(false));
             Apply(s);
         }
-        // The host shows this result in the notch, then collapses it ~2.6 s later; open the tab after.
-        OpenTab();
+        // The host shows this result in the notch, then collapses it ~2.6 s later; the System detail opens after.
+        OpenDetail();
 
         string cpuMemory = $"CPU {SystemFormat.Percent(s.Cpu)} · Memory {s.MemoryLoad}%";
         string battery = BatteryLine(s);
@@ -236,12 +232,8 @@ internal sealed class SystemModule : IShammyModule
             : $"Battery {s.BatteryPercent}%";
     }
 
-    // OpenTab waits for a command's confirmation card and holds the tab until it's been looked at.
-    void OpenTab()
-    {
-        if (_ctx is null || _card is null) return;
-        _ctx.OpenTab(_card.Compact);
-    }
+    // OpenCard waits for a command's confirmation card and holds the detail until it's been looked at.
+    bool OpenDetail() => _ctx?.OpenCard("battery") == true;
 
     string State()
     {

@@ -165,6 +165,13 @@ internal sealed class ModuleContext
 
     public void AddCommand(ITextCommand command) => _registry.Commands.Add(command);
 
+    /// <summary>
+    /// A command tried before every other module's (modules start in name order, so a broad matcher such as the
+    /// app launcher's "open …" would otherwise claim an exact phrase like "open camera"). Only for phrases that
+    /// match a fixed list, never for open-ended patterns.
+    /// </summary>
+    public void AddCommandFirst(ITextCommand command) => _registry.Commands.Insert(0, command);
+
     /// <summary>Every module's commands, in the order the search flow tries them (the palette previews them).</summary>
     internal IReadOnlyList<ITextCommand> Commands => _registry.Commands;
 
@@ -197,14 +204,18 @@ internal sealed class ModuleContext
     /// <summary>Call when a card's <see cref="NotchCard.IsRelevant"/> answer may have changed.</summary>
     public void CardsChanged() => Notch.ExpandedView.CardsChanged();
 
-    /// <summary>A chip in the open notch that shows your panel (about 436×150) in its 924×248 view area; prefer <see cref="AddCard"/>.</summary>
+    /// <summary>
+    /// Open the notch on a card's detail (by <see cref="NotchCard.Id"/>, e.g. "weather"), in place, as if its card
+    /// or chip had been clicked. Safe to call from a command's RunAsync: it opens right after the confirmation
+    /// card closes. With <paramref name="hold"/> (the default) it stays open until the pointer has visited and
+    /// left, or 8 s if the user never comes over; no timers needed. Returns false for an unknown id.
+    /// </summary>
+    public bool OpenCard(string cardId, bool hold = true) => Notch.OpenView(cardId, hold);
+
+    /// <summary>Older modules only: a chip that shows a panel (about 436×150) in the 924×248 view area. Use <see cref="AddCard"/>.</summary>
     public void AddTab(string glyph, string tooltip, FrameworkElement panel) => Notch.ExpandedView.AddTab(glyph, tooltip, panel);
 
-    /// <summary>
-    /// Open the expanded notch on one of your tabs. Safe to call from a command's RunAsync: the tab opens
-    /// right after the confirmation card closes. With <paramref name="hold"/> (the default) it stays open
-    /// until the pointer has visited and left, or 8 s if the user never comes over; no timers needed.
-    /// </summary>
+    /// <summary>Older modules only: open the notch on a panel added with <see cref="AddTab"/>. Cards use <see cref="OpenCard"/>.</summary>
     public void OpenTab(FrameworkElement panel, bool hold = true) => Notch.OpenTab(panel, hold);
 
     // ---- Cards, glow, input ----------------------------------------------------------------------

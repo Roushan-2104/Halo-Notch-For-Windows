@@ -166,8 +166,8 @@ internal sealed class MusicModule : IShammyModule
 
             case MusicAction.ShowLyrics:
                 LoadLyricsForCurrentTrack(debounce: false);
-                // Opens the notch (the music card's detail holds the lyrics now); OpenTab waits for the confirmation card.
-                _ctx.OpenTab(_panel);
+                // The music card's detail holds the synced lyrics; OpenCard waits for the confirmation card.
+                _ctx.OpenCard("music");
                 return new CommandResult("\uE8D6", "Lyrics", m.HasSession ? NowPlaying() : "Nothing playing");
         }
         return new CommandResult("\uE783", "Not a music command", IsError: true);
