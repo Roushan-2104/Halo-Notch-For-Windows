@@ -69,6 +69,19 @@ public static class SettingValue
 
     static bool IsList(Type t) => t == typeof(List<string>);
 
+    /// <summary>What a setting of this type accepts, for error messages: "on|off|auto", "Quick|Normal|Relaxed".</summary>
+    public static string Expected(Type type)
+    {
+        var inner = Nullable.GetUnderlyingType(type);
+        var t = inner ?? type;
+        string auto = inner is not null || (t == typeof(string)) ? "|auto" : "";
+        if (t == typeof(bool)) return "on|off" + auto;
+        if (t == typeof(int) || t == typeof(double)) return "a number" + (auto.Length > 0 ? " or auto" : "");
+        if (t.IsEnum) return string.Join("|", Enum.GetNames(t)) + auto;
+        if (IsList(t)) return "a comma-separated list (or none)";
+        return "text" + (auto.Length > 0 ? " or auto" : "");
+    }
+
     /// <summary>How a value reads back: "on"/"off", enum names, "a,b", "auto" for null.</summary>
     public static string Format(object? value) => value switch
     {

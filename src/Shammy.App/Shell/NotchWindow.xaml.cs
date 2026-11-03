@@ -170,7 +170,7 @@ public partial class NotchWindow : Window
         };
         Root.MouseWheel += (_, e) =>
         {
-            if (_mode is NotchMode.Idle or NotchMode.Compact or NotchMode.Notification or NotchMode.Peek)
+            if (_mode is NotchMode.Idle or NotchMode.Compact or NotchMode.Notification or NotchMode.Peek && GesturesOn)
             {
                 // Shift+wheel is the usual horizontal scroll on a mouse without a tilt wheel: wheel down = right = next.
                 const int VK_SHIFT = 0x10;
@@ -250,7 +250,7 @@ public partial class NotchWindow : Window
             return new IntPtr(Native.MA_NOACTIVATE);
         }
         const int WM_MOUSEHWHEEL = 0x020E;
-        if (msg == WM_MOUSEHWHEEL && Root.IsMouseOver)
+        if (msg == WM_MOUSEHWHEEL && Root.IsMouseOver && GesturesOn)
         {
             NotchHorizontalWheel?.Invoke((short)((wParam.ToInt64() >> 16) & 0xFFFF));
             handled = true;
@@ -851,7 +851,9 @@ public partial class NotchWindow : Window
         if (!CanHover || Bubble.IsMouseOver) return;
         bool clickable = _mode == NotchMode.Compact && _activity is { Click: not null, Kind: not ActivityKind.NowPlaying };
         _intent.Reset();
-        _intent.AllowPeek = !clickable;
+        // Settings: the hover speed sets the waits; with the peek off the notch opens after the whole wait.
+        _intent.SpeedSetting = _services.Settings.HoverSpeed;
+        _intent.AllowPeek = !clickable && _services.Settings.PeekEnabled;
         if (_peeking) _intent.ForcePeek(_hoverClock.Elapsed);
         _hoverIn.Start();
         SampleHover();
@@ -947,7 +949,7 @@ public partial class NotchWindow : Window
         _press = null;
         var p = e.GetPosition(Root);
         int direction = DragSwipe.Classify(p.X - press.At.X, p.Y - press.At.Y, _hoverClock.Elapsed - press.T);
-        if (direction == 0) return;
+        if (direction == 0 || !GesturesOn) return;
         e.Handled = true;
         NotchHorizontalWheel?.Invoke(direction * 120);
         if (Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
@@ -1012,9 +1014,13 @@ public partial class NotchWindow : Window
         return DescribePeek();
     }
 
+    /// <summary>Settings: GesturesEnabled. Off, the wheel and swipes over the notch do nothing.</summary>
+    bool GesturesOn => _services.Settings.GesturesEnabled;
+
     /// <summary>The same events a real swipe or wheel over the notch raises; a dry run only says what it would do.</summary>
     internal string SimulateGesture(string gesture, bool dryRun)
     {
+        if (!GesturesOn && !dryRun) return "off: gestures are turned off in settings";
         (bool horizontal, int delta) = gesture switch
         {
             "next" => (true, 120),
