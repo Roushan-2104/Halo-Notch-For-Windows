@@ -94,6 +94,9 @@ public static class ProductivityParser
     // "at 25:00", "at 13pm": the user gave a time, but not one that exists.
     static readonly Regex AtClock = new(@"(?:^|\s)at\s+(?<clock>\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?=\s|$)", Opts);
 
+    static readonly Regex NegativeAhead = new(@"(?:^|\s)(?:in|after|within)\s+-\s*\d", Opts);
+    static readonly Regex PastYearLead = new(@"^(?:19|20|21)\d{2}$", Opts);
+
     public static ProductivityCommand? Parse(string text, DateTime now)
     {
         var s = Spaces.Replace(text, " ").Trim().TrimEnd('.', '!', '?').Trim();
@@ -153,6 +156,8 @@ public static class ProductivityParser
     {
         var m = Remind.Match(s);
         if (!m.Success) return null;
+        // "in -5 minutes": word cleaning would drop the minus and quietly make it 5 minutes from now.
+        if (NegativeAhead.IsMatch(m.Groups["rest"].Value)) return null;
         // Parse lower-cased, punctuation-free words but hand back the reminder text as typed.
         var pairs = WhenParser.Normalize(m.Groups["rest"].Value)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -167,6 +172,9 @@ public static class ProductivityParser
         for (int k = words.Count; k >= 1; k--)
         {
             if (WhenParser.ParseWords(words.Take(k).ToList(), now) is not { } due) continue;
+            // "on 8 march 2020 at 5pm": the past year failed the whole date, and "on 8 march" alone would leave "2020 …".
+            if (k < words.Count && PastYearLead.IsMatch(words[k]) && WhenParser.MentionsDate(string.Join(' ', words.Take(k))))
+                return new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = ReminderText(original.Skip(k + 1)) };
             return Reminder(due, original.Skip(k));
         }
         // Text first: "to call mom in 20 minutes", "to take medicine at 6pm tomorrow".
@@ -211,6 +219,9 @@ public static class ProductivityParser
         var at = AtClock.Match(text);
         if (at.Success && WhenParser.ParseClock(at.Groups["clock"].Value.Replace(" ", "")) is null)
             return new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = ReminderText(AtClock.Replace(text, " ").Split(' ', StringSplitOptions.RemoveEmptyEntries)) };
+        // "on 31 feb at 5pm" (or a date in a past year): only the clock parsed, so it would quietly be tomorrow.
+        if (WhenParser.MentionsDate(text))
+            return new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = text };
         return new ProductivityCommand(ProductivityAction.Remind) { Due = due, Text = text };
     }
 

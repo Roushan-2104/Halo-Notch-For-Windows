@@ -26,6 +26,60 @@ public static class WhenParser
         ["sunday"] = DayOfWeek.Sunday,
     };
 
+    static readonly Dictionary<string, int> Months = new()
+    {
+        ["jan"] = 1, ["january"] = 1, ["feb"] = 2, ["february"] = 2, ["mar"] = 3, ["march"] = 3, ["apr"] = 4, ["april"] = 4,
+        ["may"] = 5, ["jun"] = 6, ["june"] = 6, ["jul"] = 7, ["july"] = 7, ["aug"] = 8, ["august"] = 8,
+        ["sep"] = 9, ["sept"] = 9, ["september"] = 9, ["oct"] = 10, ["october"] = 10, ["nov"] = 11, ["november"] = 11,
+        ["dec"] = 12, ["december"] = 12,
+    };
+
+    static readonly Regex DayOfMonth = new(@"^(\d{1,2})(?:st|nd|rd|th)?$", RegexOptions.CultureInvariant);
+
+    /// <summary>"8 march", "8th of march", "march 8", optionally with a year, starting at w[i]. Returns words used.</summary>
+    static int ParseDate(IReadOnlyList<string> w, int i, out int month, out int day, out int? year)
+    {
+        month = day = 0;
+        year = null;
+        int used;
+        if (DayNumber(w, i) is { } d1)
+        {
+            int j = i + 1;
+            if (j < w.Count && w[j] == "of") j++;
+            if (j >= w.Count || !Months.TryGetValue(w[j], out month)) return 0;
+            day = d1;
+            used = j + 1 - i;
+        }
+        else if (Months.TryGetValue(w[i], out month) && DayNumber(w, i + 1) is { } d2)
+        {
+            day = d2;
+            used = 2;
+        }
+        else return 0;
+        if (i + used < w.Count && w[i + used].Length == 4 && int.TryParse(w[i + used], NumberStyles.None, CultureInfo.InvariantCulture, out var y) && y is >= 2000 and <= 2100)
+        {
+            year = y;
+            used++;
+        }
+        return used;
+    }
+
+    static int? DayNumber(IReadOnlyList<string> w, int i) =>
+        i < w.Count && DayOfMonth.Match(w[i]) is { Success: true } m && int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) is var d and >= 1 and <= 31 ? d : null;
+
+    /// <summary>True when the text says "on" a calendar date ("on 8 march", "on the 31st of feb"), valid or not.</summary>
+    public static bool MentionsDate(string text)
+    {
+        var w = Words(text);
+        for (int i = 0; i + 1 < w.Count; i++)
+        {
+            if (w[i] != "on") continue;
+            int j = w[i + 1] == "the" ? i + 2 : i + 1;
+            if (j < w.Count && ParseDate(w, j, out _, out _, out _) > 0) return true;
+        }
+        return false;
+    }
+
     /// <summary>"6 p.m." becomes "6pm" and "9 o'clock" becomes "9", so each clock reading is one word. Case is kept.</summary>
     public static string Normalize(string text)
     {
@@ -100,12 +154,28 @@ public static class WhenParser
         Part? part = null;
         Clock? clock = null;
         bool bareNumber = false;
+        DateTime? onDate = null;
+        bool dateHasYear = false;
 
         int i = 0;
         while (i < n)
         {
             string word = w[i];
             string? next = i + 1 < n ? w[i + 1] : null;
+
+            // "on 8 march", "the 8th of march", "march 8 2027": a calendar date (checked before "8" reads as a clock).
+            int skip = word is "on" or "the" && next is not null ? 1 : 0;
+            if (skip == 1 && w[i + 1] == "the" && i + 2 < n) skip = 2;
+            if (ParseDate(w, i + skip, out int month, out int dom, out int? year) is var used and > 0)
+            {
+                if (onDate is not null || today || tomorrow) return null;
+                int y = year ?? now.Year;
+                if (dom > DateTime.DaysInMonth(y, month)) return null;
+                onDate = new DateTime(y, month, dom, 0, 0, 0, now.Kind);
+                dateHasYear = year is not null;
+                i += skip + used;
+                continue;
+            }
 
             if (word is "today" or "tonight")
             {
@@ -172,8 +242,37 @@ public static class WhenParser
         }
 
         // A lone "2" is a count ("buy 2"), not a time, unless a day or "morning" says otherwise.
-        if (bareNumber && !today && !tomorrow && weekday is null && part is null) return null;
+        if (bareNumber && !today && !tomorrow && weekday is null && part is null && onDate is null) return null;
+        if (onDate is { } on)
+        {
+            if (today || tomorrow) return null;
+            return ResolveDate(now, on, dateHasYear, part, clock);
+        }
         return Resolve(now, tomorrow, weekday, nextWeek, part, clock);
+    }
+
+    /// <summary>
+    /// A named date: 9 AM unless a time or part of day is given. Without a year, a date already gone means next
+    /// year's; with one, a moment in the past is no reminder at all.
+    /// </summary>
+    static DateTime? ResolveDate(DateTime now, DateTime date, bool hasYear, Part? part, Clock? clock)
+    {
+        (int hour, int minute) = clock is { } c
+            ? (c.Exact ? c.Hour : part is { } p ? WithPart(c.Hour, p) : c.Hour is >= 7 and <= 12 ? c.Hour : c.Hour % 12 + 12, c.Minute)
+            : part switch
+            {
+                Part.Morning => (9, 0),
+                Part.Afternoon => (14, 0),
+                Part.Evening => (18, 0),
+                Part.Night => (21, 0),
+                _ => (9, 0),
+            };
+        var at = date.AddHours(hour).AddMinutes(minute);
+        if (at > now) return at;
+        if (hasYear) return null;
+        var nextYear = date.AddYears(1);
+        // 29 Feb → 28 Feb in a common year; better a day early than a reminder that never comes.
+        return nextYear.AddHours(hour).AddMinutes(minute);
     }
 
     static Part? PartOf(string? word) => word switch

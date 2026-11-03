@@ -130,6 +130,22 @@ public class WhenParserTests
     [Fact]
     public void In_minutes() => Assert.Equal(Now.AddMinutes(20), WhenParser.Parse("in 20 minutes", Now));
 
+    [Theory]
+    [InlineData("on 8 march 2027 at 2:30 am", 2027, 3, 8, 2, 30)]
+    [InlineData("8th of march at 5pm", 2027, 3, 8, 17, 0)]
+    [InlineData("march 8", 2027, 3, 8, 9, 0)]
+    [InlineData("on the 20th of november in the evening", 2026, 11, 20, 18, 0)]
+    [InlineData("nov 25 at 6", 2026, 11, 25, 18, 0)]
+    [InlineData("on 2 nov at 9am", 2027, 11, 2, 9, 0)] // today's 9 AM is gone: next year's
+    public void Named_dates(string text, int y, int mo, int d, int h, int mi) =>
+        Assert.Equal(new DateTime(y, mo, d, h, mi, 0), WhenParser.Parse(text, Now));
+
+    [Theory]
+    [InlineData("on 31 feb")]
+    [InlineData("on 8 march 2020 at 5pm")]
+    [InlineData("tomorrow on 8 march")]
+    public void Impossible_or_past_dates(string text) => Assert.Null(WhenParser.Parse(text, Now));
+
     [Fact]
     public void In_half_an_hour() => Assert.Equal(Now.AddMinutes(30), WhenParser.Parse("in half an hour", Now));
 
@@ -359,6 +375,26 @@ public class ProductivityParserTests
         Assert.Equal(ProductivityAction.ReminderNeedsTime, c.Action);
         Assert.Equal(reminder, c.Text);
     }
+
+    [Fact]
+    public void Reminder_on_a_date_is_set_for_that_date()
+    {
+        var c = Parse("remind me on 8 march 2027 at 2:30 am to renew the passport");
+        Assert.Equal(ProductivityAction.Remind, c.Action);
+        Assert.Equal(new DateTime(2027, 3, 8, 2, 30, 0), c.Due);
+        Assert.Equal("Renew the passport", c.Text);
+        Assert.Equal(new DateTime(2027, 3, 8, 9, 0, 0), Parse("remind me to pay rent on 8th march").Due);
+    }
+
+    [Theory]
+    [InlineData("remind me on 31 feb at 5pm")]
+    [InlineData("remind me on 8 march 2020 at 5pm to call")]
+    public void Reminder_on_an_impossible_date_is_not_moved_to_tomorrow(string text) =>
+        Assert.Equal(ProductivityAction.ReminderNeedsTime, Parse(text).Action);
+
+    [Fact]
+    public void Reminder_in_negative_minutes_is_not_a_reminder() =>
+        Assert.Null(ProductivityParser.Parse("remind me in -5 minutes", Now));
 
     [Fact]
     public void Reminder_with_a_real_time_left_in_the_text_is_still_set()
