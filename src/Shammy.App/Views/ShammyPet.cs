@@ -19,7 +19,7 @@ namespace Shammy.Views;
 /// </summary>
 internal sealed class ShammyPet : Grid
 {
-    const double Gap = 6;
+    const double Gap = 8;
 
     static readonly TimeSpan FarPoll = TimeSpan.FromMilliseconds(250), NearPoll = TimeSpan.FromMilliseconds(33);
 
@@ -40,7 +40,7 @@ internal sealed class ShammyPet : Grid
     public ShammyPet(Func<double> musicLevel)
     {
         _musicLevel = musicLevel;
-        Width = 30;
+        Width = 32;
         Height = RestView.RestHeight;
         _rightEye.Margin = new Thickness(Gap, 0, 0, 0);
         _eyes.Children.Add(_leftEye);
@@ -144,49 +144,49 @@ internal sealed class ShammyPet : Grid
         switch (Mood)
         {
             case PetMood.Music:
-                SetEyes(EyeShape.Arc, 9, 5, white);
+                SetEyes(EyeShape.Arc, 12, 7, white);
                 StartSway();
                 StartParticles(TimeSpan.FromMilliseconds(900));
                 break;
             case PetMood.Notify:
-                SetEyes(EyeShape.Pill, 8, 13, white);
+                SetEyes(EyeShape.Pill, 11, 15, white);
                 _pose.X = 2;
                 _pose.Y = 1.5;
                 Perk();
                 break;
             case PetMood.TimerDone:
-                SetEyes(EyeShape.Arc, 9, 5, Res("TimerAccent"));
+                SetEyes(EyeShape.Arc, 12, 7, Res("TimerAccent"));
                 Repeat(_bounce, TranslateTransform.YProperty, 1000, (0, 0), (200, -4), (400, 0), (600, -2.5), (800, 0));
                 break;
             case PetMood.Listening:
-                SetEyes(EyeShape.Pill, 8, 12, white);
+                SetEyes(EyeShape.Pill, 11, 14, white);
                 _pose.Y = -2;
                 break;
             case PetMood.Thinking:
-                SetEyes(EyeShape.Pill, 7, 9, white);
+                SetEyes(EyeShape.Pill, 10, 11, white);
                 _pose.Y = -1.5;
                 Repeat(_glance, TranslateTransform.XProperty, 1200, (0, -2.5), (600, 2.5), (1200, -2.5));
                 break;
             case PetMood.MeetingSoon:
-                SetEyes(EyeShape.Pill, 7, 11, white);
+                SetEyes(EyeShape.Pill, 11, 13, white);
                 _pose.X = 3;
                 break;
             case PetMood.Tired:
-                SetEyes(EyeShape.Droopy, 7, 6, white);
+                SetEyes(EyeShape.Droopy, 11, 8, white);
                 _pose.Y = 2;
                 break;
             case PetMood.Sleepy:
-                SetEyes(EyeShape.Lid, 8, 2.5, white);
+                SetEyes(EyeShape.Lid, 12, 3, white);
                 _pose.Y = 3;
                 StartParticles(TimeSpan.FromSeconds(4));
                 break;
             case PetMood.Happy:
-                SetEyes(EyeShape.Arc, 9, 5, white);
+                SetEyes(EyeShape.Arc, 12, 7, white);
                 StartParticles(TimeSpan.FromMilliseconds(700));
                 SpawnParticle();
                 break;
             default:
-                SetEyes(EyeShape.Pill, 7, 11, white);
+                SetEyes(EyeShape.Pill, 11, 13, white);
                 break;
         }
     }
@@ -361,24 +361,33 @@ internal sealed class ShammyPet : Grid
 
     enum EyeShape { Pill, Arc, Lid, Droopy }
 
-    /// <summary>One eye: a rounded pill (or lid / droopy pill), or a ^ arc for happy moods.</summary>
+    /// <summary>
+    /// One eye (the Pet board's round eye): a rounded pill lit from below with a pin-point shine (or a lid / droopy
+    /// pill), or a ^ arc for happy moods. The activity costumes (ActivityPet) use the same eye.
+    /// </summary>
     sealed class Eye : Grid
     {
-        readonly Border _pill = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        static readonly Color Lit = Color.FromRgb(0xF5, 0xF5, 0xF7), Shade = Color.FromRgb(0xA3, 0xA6, 0xB2);
+
+        readonly Border _pill = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true };
+        readonly System.Windows.Shapes.Ellipse _shine = new()
+        {
+            Width = 3, Height = 3, Fill = Brushes.White, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(2, 2, 0, 0),
+        };
         readonly System.Windows.Shapes.Path _arc = new()
         {
-            Data = Geometry.Parse("M 0,5 A 4.5,4.5 0 0 1 9,5"),
-            StrokeThickness = 2.2,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
+            Data = Geometry.Parse("M 1.25,7 V 5.25 A 4.75,4.25 0 0 1 10.75,5.25 V 7"),
+            StrokeThickness = 2.5,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
 
         public Eye()
         {
-            Width = 9;
-            Height = 14;
+            Width = 12;
+            Height = 16;
+            _pill.Child = _shine;
             Children.Add(_pill);
             Children.Add(_arc);
         }
@@ -389,7 +398,11 @@ internal sealed class ShammyPet : Grid
             _arc.Visibility = arc ? Visibility.Visible : Visibility.Collapsed;
             _pill.Visibility = arc ? Visibility.Collapsed : Visibility.Visible;
             _arc.Stroke = brush;
-            _pill.Background = brush;
+            // White eyes get the board's soft gradient; a coloured mood keeps its flat colour.
+            _pill.Background = brush is SolidColorBrush { Color: var c } && c == Lit
+                ? new LinearGradientBrush(new GradientStopCollection { new(Shade, 0), new(Lit, 0.62) }, 90)
+                : brush;
+            _shine.Visibility = shape == EyeShape.Pill && h >= 9 ? Visibility.Visible : Visibility.Collapsed;
             _pill.Width = w;
             _pill.Height = h;
             _pill.CornerRadius = shape switch

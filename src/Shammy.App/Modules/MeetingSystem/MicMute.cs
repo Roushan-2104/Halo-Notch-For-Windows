@@ -36,6 +36,19 @@ internal sealed class MicMute : IMMNotificationClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// The microphone's current peak level (0..1), from the endpoint's own meter: it reads the stream the call
+    /// app already has open, so nothing extra is captured. Only polled while the pet wears the call costume.
+    /// </summary>
+    public double Peak
+    {
+        get
+        {
+            try { return _device?.AudioMeterInformation.MasterPeakValue ?? 0; }
+            catch (Exception) { return 0; }
+        }
+    }
+
     public void Start()
     {
         try { _enumerator.RegisterEndpointNotificationCallback(this); }

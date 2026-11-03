@@ -362,11 +362,14 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         return clock;
     }
 
-    void PostClock(RunningClock clock) =>
+    void PostClock(RunningClock clock)
+    {
+        clock.Content.TogglePause = () => SetPaused(clock, !clock.Paused);
         _ctx.Post(new Activity(clock.ActivityId, ActivityKind.Custom, ClockPriority, clock.Content)
         {
             Click = () => SetPaused(clock, !clock.Paused),
         });
+    }
 
     void RemoveClock(RunningClock clock)
     {
@@ -495,22 +498,24 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             case ClockKind.Pomodoro:
                 NextPomodoroPhase(clock);
                 var phase = Pomodoro.PhaseAt(clock.PomodoroStep);
-                Alert(clock.Glyph, phase switch
+                var next = phase switch
                 {
-                    PomodoroPhase.Focus => $"Back to focus \u00B7 {TimeFormat.Describe(clock.Total)}",
-                    PomodoroPhase.LongBreak => $"Long break \u00B7 {TimeFormat.Describe(clock.Total)}",
-                    _ => $"Break time \u00B7 {TimeFormat.Describe(clock.Total)}",
-                });
+                    PomodoroPhase.Focus => "Back to focus",
+                    PomodoroPhase.LongBreak => "Long break",
+                    _ => "Break time",
+                };
+                Alert(clock.Glyph, $"{next} \u00B7 {TimeFormat.Describe(clock.Total)}", next, TimeFormat.Describe(clock.Total));
                 break;
             case ClockKind.Focus:
                 _timerCard.ShowDone("Focus");
                 RemoveClock(clock);
-                Alert(FocusGlyph, $"Focus done \u00B7 {TimeFormat.Describe(clock.Total)}");
+                Alert(FocusGlyph, $"Focus done \u00B7 {TimeFormat.Describe(clock.Total)}", "Focus done", TimeFormat.Describe(clock.Total));
                 break;
             default:
                 _timerCard.ShowDone(clock.Label);
                 RemoveClock(clock);
-                Alert(TimerGlyph, $"Timer done \u00B7 {(clock.Label.Length > 0 ? clock.Label : TimeFormat.Describe(clock.Total))}");
+                Alert(TimerGlyph, $"Timer done \u00B7 {(clock.Label.Length > 0 ? clock.Label : TimeFormat.Describe(clock.Total))}",
+                    clock.Label.Length > 0 ? clock.Label : "Time's up", "0:00");
                 break;
         }
     }
@@ -530,10 +535,15 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
 
     // ---- Alerts ----------------------------------------------------------------------------------
 
-    void Alert(string glyph, string text)
+    /// <param name="petLabel">What the pet's notch says ("Tea", "Break time"), with <paramref name="petValue"/> on the right.</param>
+    void Alert(string glyph, string text, string? petLabel = null, string petValue = "")
     {
-        // A clock you set running out is worth interrupting a fullscreen game or video for.
-        _ctx.Post(new Activity(AlertId, ActivityKind.Message, AlertPriority, new MessagePayload(glyph, text), DateTime.UtcNow + AlertTime)
+        // A clock you set running out is worth interrupting a fullscreen game or video for. The pet wears it
+        // (jumping, confetti, an accent Dismiss circle); without a label it stays a plain message.
+        object payload = petLabel is null
+            ? new MessagePayload(glyph, text)
+            : new TimerDoneContent(glyph, text, petLabel, petValue, () => _ctx.Remove(AlertId));
+        _ctx.Post(new Activity(AlertId, petLabel is null ? ActivityKind.Message : ActivityKind.Custom, AlertPriority, payload, DateTime.UtcNow + AlertTime)
         {
             Click = () => _ctx.Remove(AlertId),
             BreaksFullscreen = true,

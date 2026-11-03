@@ -14,10 +14,17 @@ internal sealed class MeetingModule : IShammyModule
     // Above Bluetooth (60) so a call stays visible, below charging/low battery (70-75).
     const int Priority = 65;
 
+    // Screen capture (sharing or recording): just above the call, so the pet's ninja mask says "someone may be
+    // watching" first; the call waits as the dot beside the action circle (click it to swap and mute).
+    const string ScreenId = "meeting.screen";
+    const int ScreenPriority = 66;
+
     ModuleContext? _ctx;
     MicMute? _mic;
     CapabilityWatcher? _watcher;
     MeetingContent? _content;
+    ScreenContent? _screen;
+    DateTime? _callSince, _screenSince;
     CapabilitySnapshot _snapshot = CapabilitySnapshot.Empty;
 
     // "meeting-fake" test state: shows the activity without a real app and without touching real mute.
@@ -61,25 +68,52 @@ internal sealed class MeetingModule : IShammyModule
         // A call app on the mic (not a recorder or a game) makes the notch quiet: notifications wait.
         Infrastructure.QuietState.Set(Shammy.Core.Connect.QuietReason.Call,
             QuietRules.AnyCallApp(fake ? new[] { _fakeApp! } : _snapshot.Microphone.Select(a => a.Name)));
+        RefreshScreen(fake);
         var name = _fakeApp ?? Describe(_snapshot.Microphone);
         if (name is null)
         {
             _content = null;
+            _callSince = null;
             _ctx.Remove(ActivityId);
             return;
         }
+        _callSince ??= DateTime.UtcNow;
         bool muted = fake ? _fakeMuted : _mic.Muted;
         bool camera = fake ? _fakeCamera : _snapshot.Camera.Count > 0;
         if (_content is null || _content.AppName != name || _ctx.Get(ActivityId) is null)
         {
             // A new payload instance rebuilds the ears (and resizes the pill for the new name).
-            _content = new MeetingContent(name, muted, camera);
+            _content = new MeetingContent(name, muted, camera, _callSince, OnClick, MicLevel);
             _ctx.Post(new Activity(ActivityId, ActivityKind.Custom, Priority, _content) { Click = OnClick });
         }
         else
         {
             _content.Set(muted, camera);
         }
+    }
+
+    /// <summary>The pet's mouth follows the microphone; a fake call (testing) has a made-up voice.</summary>
+    double MicLevel() => _fakeApp is not null
+        ? Math.Max(0, Math.Sin(Environment.TickCount64 / 140.0)) * (Environment.TickCount64 / 1500 % 2 == 0 ? 0.4 : 0)
+        : _mic?.Peak ?? 0;
+
+    /// <summary>An app capturing the screen gets its own activity: the ninja mask while someone may be watching.</summary>
+    void RefreshScreen(bool fake)
+    {
+        if (_ctx is null) return;
+        string? app = fake ? (_fakeScreen ? _fakeApp : null) : Describe(_snapshot.Screen);
+        if (app is null)
+        {
+            _screen = null;
+            _screenSince = null;
+            _ctx.Remove(ScreenId);
+            return;
+        }
+        _screenSince ??= DateTime.UtcNow;
+        if (_screen is not null && _screen.AppName == app && _ctx.Get(ScreenId) is not null) return;
+        bool sharing = fake || QuietRules.AnyCallApp(_snapshot.Microphone.Select(a => a.Name).Append(app));
+        _screen = new ScreenContent(app, sharing, _screenSince.Value, fake ? null : _snapshot.Screen.FirstOrDefault(a => a.Path is not null)?.Path);
+        _ctx.Post(new Activity(ScreenId, ActivityKind.Custom, ScreenPriority, _screen));
     }
 
     static string? Describe(IReadOnlyList<CapabilityApp> apps)
@@ -144,6 +178,7 @@ internal sealed class MeetingModule : IShammyModule
         _watcher?.Dispose();
         _mic?.Dispose();
         _ctx?.Remove(ActivityId);
+        _ctx?.Remove(ScreenId);
     }
 
     sealed class MicCommand : ITextCommand
