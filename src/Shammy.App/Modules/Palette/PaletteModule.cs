@@ -225,8 +225,9 @@ internal sealed class PaletteModule : IShammyModule
             foreach (var (control, match) in PaletteQuery.MediaControls(text))
                 items.Add(MediaItem(control, match));
         }
-        // Only with a play intent the music command doesn't cover ("tum hi ho bajao"); plain words aren't songs.
-        if (!musicCommand && PaletteQuery.MusicQuery(text) is { } song)
+        // Only with a play intent the music command doesn't cover ("kesariya chalao"); plain words aren't songs,
+        // and a text another command already understood ("5 minute ka timer chala do") isn't one either.
+        if (command is null && PaletteQuery.MusicQuery(text) is { } song)
         {
             items.Add(new PaletteItem("music:youtube", PaletteKind.Music, $"Play \u201C{song}\u201D", "YouTube Music", 60)
             {

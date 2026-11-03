@@ -473,7 +473,6 @@ public class PaletteQueryTests
     [InlineData("tum hi ho bajao", "tum hi ho")]
     [InlineData("arijit ke gaane bajao", "arijit")]
     [InlineData("kesariya chalao", "kesariya")]
-    [InlineData("lagao kesariya", "kesariya")]
     [InlineData("tum hi ho song chala do", "tum hi ho")]
     [InlineData("kesariya sunao na", "kesariya")]
     public void Music_needs_a_play_intent(string text, string expected)
@@ -488,6 +487,8 @@ public class PaletteQueryTests
     [InlineData("play store")]
     [InlineData("bajao")]
     [InlineData("2+2")]
+    [InlineData("kal subah 7 baje ka alarm laga do")]
+    [InlineData("lagao kesariya")]
     public void Not_music(string text)
     {
         Assert.Null(PaletteQuery.MusicQuery(text));

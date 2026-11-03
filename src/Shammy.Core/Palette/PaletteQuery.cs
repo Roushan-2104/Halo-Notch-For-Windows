@@ -64,7 +64,8 @@ public static class PaletteQuery
         return MusicCommand.Parse("play " + q) is { Action: MusicAction.PlayYouTubeMusic } guess ? guess.Query : null;
     }
 
-    const string HindiVerb = @"(?:baja|bajao|baja\s+do|chalao|chala\s+do|lagao|laga\s+do|sunao|suna\s+do)";
+    // Not "lagao" / "laga do": that's how timers and alarms are set ("alarm laga do").
+    const string HindiVerb = @"(?:baja|bajao|baja\s+do|chalao|chala\s+do|sunao|suna\s+do)";
     static readonly Regex HindiPlayAfter = new($@"^(?<q>.+?)\s+{HindiVerb}(?:\s+(?:na|please|yaar))?$", Opts);
     static readonly Regex HindiPlayBefore = new($@"^{HindiVerb}\s+(?<q>.+)$", Opts);
 
