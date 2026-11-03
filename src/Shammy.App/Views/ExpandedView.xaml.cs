@@ -1,38 +1,93 @@
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
+using Shammy.Core.Notch;
 using Shammy.Infrastructure;
+using Shammy.Modules;
+using Shammy.Motion;
 using Shammy.Shelf;
 
 namespace Shammy.Views;
 
+/// <summary>
+/// The open notch (v2): a top row of the eyes (home), chips and a search pill, and under it either the home
+/// row of cards modules registered with <see cref="AddCard"/> or one view opened in place — a card's detail,
+/// the Shelf, Notifications, or an older module's tab. Opening a view swaps the row for it with a quick
+/// spring grow, and the notch grows taller to fit (see <see cref="HeightChanged"/>).
+/// </summary>
 public partial class ExpandedView : UserControl
 {
+    /// <summary>The open notch's size: 1012 wide; the home row makes it 248 tall, an opened view 320.</summary>
+    public const double OpenWidth = 1012, HomeHeight = 248, DetailHeight = 320;
+
+    const string ShelfId = "shelf", AlertsId = "alerts", TabPrefix = "tab:";
+
     ShammyServices? _s;
     readonly DispatcherTimer _clock;
     bool _seeking;
     Point _dragStart;
     ShelfItem? _pressed;
 
+    readonly List<NotchCard> _cards = new();
+    readonly List<(string Id, string Label, FrameworkElement Panel)> _tabs = new();
+    readonly Dictionary<NotchCard, Grid> _frames = new();
+    readonly Dictionary<string, RadioButton> _chipButtons = new(StringComparer.OrdinalIgnoreCase);
+    IReadOnlyList<ChipSpec> _chips = Array.Empty<ChipSpec>();
+    IReadOnlyList<string> _homeIds = Array.Empty<string>();
+    readonly NotchCard _nowPlaying;
+    Border? _shelfBadge;
+    TextBlock? _shelfBadgeText;
+    string? _openId;
+    Grid? _pressedFrame;
+    Point _pressedAt;
+
+    readonly SpringValue _inOpacity = new(1, 0.002), _inScale = new(1, 0.0005);
+    readonly ScaleTransform _inTransform = new(1, 1);
+    FrameworkElement? _animTarget;
+    bool _animHooked;
+
     public ExpandedView()
     {
         InitializeComponent();
         _clock = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Render, (_, _) => Tick(), Dispatcher) { IsEnabled = false };
+
+        Stash.Children.Remove(MediaPanel);
+        _nowPlaying = new NotchCard
+        {
+            Id = "nowplaying",
+            Title = "Now playing",
+            Width = 340,
+            Order = 0,
+            Compact = MediaPanel,
+            Detail = () => new Grid(),
+            IsRelevant = () => _s?.Media.HasSession == true,
+        };
+
         IsVisibleChanged += (_, _) =>
         {
             _clock.IsEnabled = IsVisible;
-            if (!IsVisible) return;
-            // Opening (by hover or by a command): no tab is lit until the pointer actually moves over it.
+            if (!IsVisible)
+            {
+                // Closed: the next open starts on the home row, as the design does.
+                if (_openId is not null) GoHome(animate: false);
+                return;
+            }
+            // Opening (by hover or by a command): no chip is lit until the pointer actually moves over it.
             ClearTabHover();
             Refresh();
             RebuildAlertRows();
         };
-        TabHover.Track(HomeTab);
-        TabHover.Track(ShelfTab);
-        TabHover.Track(AlertsTab);
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape || _openId is null) return;
+            GoHome(animate: true);
+            e.Handled = true;
+        };
+        RebuildChips();
+        RebuildRow(force: true);
     }
 
     /// <summary>Raised while a file is being dragged off the shelf, so the notch stays open.</summary>
@@ -41,6 +96,12 @@ public partial class ExpandedView : UserControl
     /// <summary>A notification in the history list was clicked.</summary>
     internal event Action<Notifications.ShammyNotification>? NotificationOpened;
 
+    /// <summary>The search pill was clicked: open the typing palette.</summary>
+    internal event Action? SearchRequested;
+
+    /// <summary>The view's height changed (home row ⇄ an opened view); the notch reshapes to match.</summary>
+    internal event Action? HeightChanged;
+
     internal void Attach(ShammyServices services)
     {
         _s = services;
@@ -48,29 +109,400 @@ public partial class ExpandedView : UserControl
         services.Shelf.Items.CollectionChanged += (_, _) => RefreshShelf();
         AlertItems.ItemsSource = services.Notifications.History;
         services.Notifications.History.CollectionChanged += (_, _) => Refresh();
-        // A call starting or ending hides or reveals the rows' text in place, even with the tab open.
+        // A call starting or ending hides or reveals the rows' text in place, even with the view open.
         PrivacyState.Changed += _ => Dispatcher.BeginInvoke(RebuildAlertRows);
         Bars.Source = services.Visualizer.Level;
         RefreshShelf();
     }
 
-    internal void ShowShelf() => Select(ShelfTab);
-    internal void ShowHome() => Select(HomeTab);
-    internal void ShowAlerts() => Select(AlertsTab);
+    // ---- Opening views ------------------------------------------------------------------------
 
-    /// <summary>A tab chosen by code (a command, a drop): the pointer isn't on any tab, so none stays lit.</summary>
-    void Select(RadioButton tab)
+    internal void ShowShelf() => OpenView(ShelfId);
+    internal void ShowAlerts() => OpenView(AlertsId);
+    internal void ShowHome() => GoHome(animate: IsVisible);
+
+    /// <summary>
+    /// An older module's tab, opened by the module (ModuleContext.OpenTab). Once the module has registered a
+    /// card with the tab's title, the card has taken the tab's place, so its detail opens instead.
+    /// </summary>
+    internal void ShowTab(FrameworkElement panel)
     {
-        ClearTabHover();
-        tab.IsChecked = true;
+        foreach (var (id, label, p) in _tabs)
+        {
+            if (p != panel) continue;
+            var card = _cards.FirstOrDefault(c => string.Equals(c.Title, label, StringComparison.OrdinalIgnoreCase));
+            OpenView(card?.Id ?? id);
+            return;
+        }
     }
 
-    IEnumerable<RadioButton> Tabs => new[] { HomeTab, ShelfTab, AlertsTab }.Concat(_moduleTabs.Select(t => t.Tab));
+    /// <summary>Whether <paramref name="query"/> (a view id or a chip label) names something that can open.</summary>
+    internal bool CanOpen(string query) => Resolve(query) is not null || IsHome(query);
+
+    static bool IsHome(string query) => string.Equals(query.Trim(), "home", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Open a view in place by id ("music", "shelf", "alerts", "tab:weather") or chip label ("Weather",
+    /// "Alerts"); "home" goes back to the row. Returns false for an unknown name.
+    /// </summary>
+    internal bool OpenView(string query)
+    {
+        if (IsHome(query))
+        {
+            ShowHome();
+            return true;
+        }
+        if (Resolve(query) is not { } view) return false;
+
+        _openId = view.Id;
+        ClearTabHover();
+        DetailContent.Content = null;
+        LegacyHost.Visibility = ShelfView.Visibility = AlertsView.Visibility = Visibility.Collapsed;
+        foreach (UIElement child in LegacyHost.Children) child.Visibility = Visibility.Collapsed;
+
+        switch (view.Kind)
+        {
+            case ViewKind.Card:
+                try
+                {
+                    DetailContent.Content = view.Card!.Detail();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"Building the {view.Card!.Id} card's detail failed", ex);
+                }
+                break;
+            case ViewKind.Tab:
+                view.Panel!.Visibility = Visibility.Visible;
+                LegacyHost.Visibility = Visibility.Visible;
+                break;
+            case ViewKind.Shelf:
+                ShelfView.Visibility = Visibility.Visible;
+                RefreshShelf();
+                break;
+            case ViewKind.Alerts:
+                AlertsView.Visibility = Visibility.Visible;
+                RebuildAlertRows();
+                break;
+        }
+        DetailTitle.Text = view.Title.ToUpperInvariant();
+        HomeRow.Visibility = EmptyText.Visibility = Visibility.Collapsed;
+        DetailFrame.Visibility = Visibility.Visible;
+        SyncChips();
+        Refresh();
+        SetBodyHeight(DetailHeight);
+        if (IsVisible) AnimateIn(DetailFrame);
+        return true;
+    }
+
+    void GoHome(bool animate)
+    {
+        bool wasOpen = _openId is not null;
+        _openId = null;
+        // Let go of the card's detail so it (and anything it subscribed to) can be collected.
+        DetailContent.Content = null;
+        DetailFrame.Visibility = Visibility.Collapsed;
+        HomeRow.Visibility = Visibility.Visible;
+        RebuildRow(force: false);
+        SyncChips();
+        SetBodyHeight(HomeHeight);
+        if (animate && wasOpen) AnimateIn(HomeRow);
+    }
+
+    enum ViewKind { Card, Tab, Shelf, Alerts }
+
+    sealed record View(string Id, string Title, ViewKind Kind, NotchCard? Card = null, FrameworkElement? Panel = null);
+
+    View? Resolve(string query)
+    {
+        query = query.Trim();
+        if (query.Length == 0) return null;
+        bool Is(string s) => string.Equals(s, query, StringComparison.OrdinalIgnoreCase);
+
+        foreach (var c in _cards)
+            if (Is(c.Id)) return CardView(c);
+        if (Is(ShelfId)) return new View(ShelfId, "Shelf", ViewKind.Shelf);
+        if (Is(AlertsId) || Is("notifications")) return new View(AlertsId, "Notifications", ViewKind.Alerts);
+        foreach (var (id, label, panel) in _tabs)
+            if (Is(id)) return new View(id, label, ViewKind.Tab, Panel: panel);
+        // By label: the chip's label first (a card may have taken a tab's chip), then any card's title.
+        foreach (var chip in _chips)
+            if (Is(chip.Label)) return Resolve(chip.ViewId);
+        foreach (var c in _cards)
+            if (Is(c.Title)) return CardView(c);
+        foreach (var (id, label, panel) in _tabs)
+            if (Is(label)) return new View(id, label, ViewKind.Tab, Panel: panel);
+        return null;
+    }
+
+    static View CardView(NotchCard c) => new(c.Id, c.Title, ViewKind.Card, Card: c);
+
+    void SetBodyHeight(double height)
+    {
+        if (Height == height) return;
+        Height = height;
+        HeightChanged?.Invoke();
+    }
+
+    /// <summary>A quick spring grow (scale 0.96 → 1 with a touch of overshoot, fading in) for the view that just appeared.</summary>
+    void AnimateIn(FrameworkElement el)
+    {
+        if (_animTarget is not null && _animTarget != el)
+        {
+            _animTarget.Opacity = 1;
+            _animTarget.RenderTransform = Transform.Identity;
+        }
+        _animTarget = el;
+        el.RenderTransformOrigin = new Point(0.5, 0);
+        el.RenderTransform = _inTransform;
+        _inOpacity.Snap(0);
+        _inScale.Snap(0.96);
+        _inOpacity.AnimateTo(1, 0.22, 1);
+        _inScale.AnimateTo(1, 0.32, 0.72);
+        ApplyAnim();
+        if (_animHooked) return;
+        _animHooked = true;
+        Animator.Frame += OnAnimFrame;
+    }
+
+    void OnAnimFrame(double dt)
+    {
+        ApplyAnim();
+        if (!_inOpacity.IsSettled || !_inScale.IsSettled) return;
+        Animator.Frame -= OnAnimFrame;
+        _animHooked = false;
+    }
+
+    void ApplyAnim()
+    {
+        if (_animTarget is null) return;
+        _animTarget.Opacity = Math.Clamp(_inOpacity.Value, 0, 1);
+        _inTransform.ScaleX = _inTransform.ScaleY = _inScale.Value;
+    }
+
+    void OnHomeClicked(object sender, RoutedEventArgs e) => ShowHome();
+    void OnBackClicked(object sender, RoutedEventArgs e) => ShowHome();
+    void OnSearchClicked(object sender, MouseButtonEventArgs e) => SearchRequested?.Invoke();
+
+    // ---- Chips --------------------------------------------------------------------------------
 
     void ClearTabHover()
     {
-        foreach (var tab in Tabs) TabHover.Clear(tab);
+        foreach (var chip in _chipButtons.Values) TabHover.Clear(chip);
     }
+
+    /// <summary>Chips for the built-in views, older tabs and cards that asked for one (see <see cref="NotchChips"/>).</summary>
+    void RebuildChips()
+    {
+        var legacy = new List<LegacyView> { new("Shelf", ShelfId), new("Alerts", AlertsId) };
+        legacy.AddRange(_tabs.Select(t => new LegacyView(t.Label, t.Id)));
+        var chips = NotchChips.Build(legacy, _cards.Select(c => new ChipCard(c.Id, c.Title, c.Chip)));
+        if (chips.SequenceEqual(_chips)) return;
+        _chips = chips;
+
+        ChipStrip.Children.Clear();
+        _chipButtons.Clear();
+        _shelfBadge = null;
+        foreach (var spec in chips)
+        {
+            var chip = new RadioButton
+            {
+                Style = (Style)FindResource("V2Chip"),
+                GroupName = "V2Chips",
+                Content = spec.ViewId == ShelfId ? ShelfChipContent(spec.Label) : spec.Label,
+            };
+            string id = spec.ViewId;
+            chip.Click += (_, _) => OpenView(id);
+            TabHover.Track(chip);
+            ChipStrip.Children.Add(chip);
+            _chipButtons[id] = chip;
+        }
+        SyncChips();
+        RefreshShelf();
+    }
+
+    /// <summary>"Shelf" plus the number of files on it, in a small purple badge.</summary>
+    object ShelfChipContent(string label)
+    {
+        _shelfBadgeText = new TextBlock
+        {
+            FontSize = 10,
+            FontWeight = FontWeights.Bold,
+            Foreground = Brushes.Black,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _shelfBadge = new Border
+        {
+            Background = (Brush)FindResource("PurpleAccent"),
+            CornerRadius = new CornerRadius(8),
+            Height = 16,
+            MinWidth = 16,
+            Padding = new Thickness(4, 0, 4, 0),
+            Margin = new Thickness(6, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+            Child = _shelfBadgeText,
+        };
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(_shelfBadge);
+        return row;
+    }
+
+    /// <summary>Light the chip of the open view (none on the home row or for a card without a chip).</summary>
+    void SyncChips()
+    {
+        foreach (var (id, chip) in _chipButtons)
+            chip.IsChecked = _openId is not null && string.Equals(id, _openId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---- Registration -------------------------------------------------------------------------
+
+    /// <summary>Add an older module's tab: a chip that opens its panel (about 436×150) in the view area.</summary>
+    internal void AddTab(string glyph, string tooltip, FrameworkElement panel)
+    {
+        string id = TabPrefix + tooltip.ToLowerInvariant();
+        panel.Visibility = Visibility.Collapsed;
+        LegacyHost.Children.Add(panel);
+        _tabs.Add((id, tooltip, panel));
+        RebuildChips();
+    }
+
+    /// <summary>The v2 home-row cards registered so far, in display order.</summary>
+    internal IReadOnlyList<NotchCard> Cards => _cards.OrderBy(c => c.Order).ToList();
+
+    /// <summary>Registers a v2 card (a card with the same id replaces the earlier one).</summary>
+    internal void AddCard(NotchCard card)
+    {
+        foreach (var old in _cards.Where(c => c.Id == card.Id).ToList())
+        {
+            if (_frames.Remove(old, out var frame)) frame.Children.Clear();
+            _cards.Remove(old);
+        }
+        _cards.Add(card);
+        CardsChanged();
+    }
+
+    /// <summary>A card's relevance may have changed: re-lay the home row (and the chips).</summary>
+    internal void CardsChanged()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(CardsChanged);
+            return;
+        }
+        RebuildChips();
+        if (_openId is null) RebuildRow(force: false);
+    }
+
+    /// <summary>Every card that can sit on the home row, including the built-in now-playing card while no module provides music.</summary>
+    IEnumerable<NotchCard> RowCandidates =>
+        _cards.Any(c => string.Equals(c.Id, "music", StringComparison.OrdinalIgnoreCase)) ? _cards : _cards.Prepend(_nowPlaying);
+
+    IReadOnlyList<string> ComputeRow() =>
+        HomeRowLayout.Fit(RowCandidates.Select(c => new RowCard(c.Id, c.Width, c.Order, IsRelevant(c))));
+
+    static bool IsRelevant(NotchCard c)
+    {
+        try { return c.IsRelevant(); }
+        catch (Exception ex)
+        {
+            Log.Warn($"The {c.Id} card's relevance check failed", ex);
+            return false;
+        }
+    }
+
+    /// <summary>Lay out the home row; skipped when the same cards would show, so frequent CardsChanged calls cost nothing.</summary>
+    void RebuildRow(bool force)
+    {
+        var ids = ComputeRow();
+        if (!force && ids.SequenceEqual(_homeIds) && HomeRow.Children.Count == ids.Count)
+        {
+            EmptyText.Visibility = _openId is null && ids.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            return;
+        }
+        _homeIds = ids;
+        HomeRow.Children.Clear();
+        var byId = RowCandidates.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < ids.Count; i++)
+        {
+            var frame = FrameFor(byId[ids[i]]);
+            frame.Margin = new Thickness(i == 0 ? 0 : HomeRowLayout.Gap, 0, 0, 0);
+            HomeRow.Children.Add(frame);
+        }
+        EmptyText.Visibility = _openId is null && ids.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    static readonly Brush FrameHoverBg = Freeze(Color.FromRgb(0x15, 0x15, 0x18)), FrameHoverStroke = Freeze(Color.FromRgb(0x2E, 0x2E, 0x33));
+
+    static Brush Freeze(Color c)
+    {
+        var b = new SolidColorBrush(c);
+        b.Freeze();
+        return b;
+    }
+
+    /// <summary>
+    /// The notch's frame around a card's compact view: the card background, 1 px stroke and 20 px corners
+    /// under content that gets the full Width × 176. Clicking anywhere the card's own controls don't handle
+    /// opens its detail.
+    /// </summary>
+    Grid FrameFor(NotchCard card)
+    {
+        if (_frames.TryGetValue(card, out var existing)) return existing;
+        var bg = new Border
+        {
+            Background = (Brush)FindResource("CardBg"),
+            BorderBrush = (Brush)FindResource("CardStroke"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(20),
+        };
+        var frame = new Grid
+        {
+            Width = card.Width,
+            Height = NotchPalette.CardHeight,
+            Clip = new RectangleGeometry(new Rect(0, 0, card.Width, NotchPalette.CardHeight), 20, 20),
+            Cursor = card == _nowPlaying ? null : Cursors.Hand,
+        };
+        (card.Compact.Parent as Panel)?.Children.Remove(card.Compact);
+        frame.Children.Add(bg);
+        frame.Children.Add(card.Compact);
+        frame.MouseEnter += (_, _) =>
+        {
+            bg.Background = FrameHoverBg;
+            bg.BorderBrush = FrameHoverStroke;
+        };
+        frame.MouseLeave += (_, _) =>
+        {
+            bg.Background = (Brush)FindResource("CardBg");
+            bg.BorderBrush = (Brush)FindResource("CardStroke");
+        };
+        // Buttons inside the card handle the press, so it never gets here; a drag that started on the card
+        // (dragging a file out, scrubbing) isn't a click either.
+        frame.MouseLeftButtonDown += (_, e) =>
+        {
+            _pressedFrame = frame;
+            _pressedAt = e.GetPosition(this);
+        };
+        frame.MouseLeftButtonUp += (_, e) =>
+        {
+            bool click = _pressedFrame == frame && !e.Handled && (e.GetPosition(this) - _pressedAt).Length < 6;
+            _pressedFrame = null;
+            if (!click || card == _nowPlaying) return;
+            e.Handled = true;
+            OpenView(card.Id);
+        };
+        _frames[card] = frame;
+        return frame;
+    }
+
+    /// <summary>One line for the test pipe: chips, the home row's card ids and the open view.</summary>
+    internal string DescribeV2() =>
+        $"chips=[{string.Join(",", _chips.Select(c => c.Label))}] home=[{string.Join(",", ComputeRow())}] " +
+        $"detail={_openId ?? "-"} cards=[{string.Join(",", Cards.Select(c => c.Id))}] height={Height}";
+
+    // ---- Refresh --------------------------------------------------------------------------------
 
     /// <summary>
     /// Rebuild the notification rows so their text (and "5m" ages) is read again: rows bind once, and
@@ -81,102 +513,46 @@ public partial class ExpandedView : UserControl
         if (_s is not null && AlertItems.ItemsSource is not null) AlertItems.Items.Refresh();
     }
 
-    /// <summary>What the Notifications tab lists right now, rows separated by " || " (test pipe; replies are one line).</summary>
+    /// <summary>What the Notifications view lists right now, rows separated by " || " (test pipe; replies are one line).</summary>
     internal string DescribeAlertRows() => _s is null ? "" : string.Join(" || ",
         _s.Notifications.History.Select(n => $"{n.ListTitle} | {n.ListDetail} | {n.TimeText}"));
 
-    readonly List<(RadioButton Tab, FrameworkElement Panel)> _moduleTabs = new();
-
     /// <summary>Extra actions on a shelf tile's right-click menu (registered by modules).</summary>
-    internal List<Modules.ShelfAction> ShelfActions { get; set; } = new();
-
-    /// <summary>Add a module's tab; its panel fills the card body (about 436×150).</summary>
-    internal void AddTab(string glyph, string tooltip, FrameworkElement panel)
-    {
-        var tab = new RadioButton
-        {
-            Style = (Style)FindResource("TabButton"),
-            GroupName = "NotchTabs",
-            Content = glyph,
-            ToolTip = tooltip,
-            Margin = new Thickness(4, 0, 0, 0),
-        };
-        tab.Checked += OnTabChanged;
-        TabHover.Track(tab);
-        TabStrip.Children.Add(tab);
-        Grid.SetRow(panel, 1);
-        panel.Visibility = Visibility.Collapsed;
-        CardGrid.Children.Add(panel);
-        _moduleTabs.Add((tab, panel));
-    }
-
-    readonly List<Modules.NotchCard> _cards = new();
-
-    /// <summary>The v2 home-row cards registered so far, in display order.</summary>
-    internal IReadOnlyList<Modules.NotchCard> Cards => _cards.OrderBy(c => c.Order).ToList();
-
-    /// <summary>Registers a v2 card. (Placeholder: the redesigned layout that shows them is being built.)</summary>
-    internal void AddCard(Modules.NotchCard card)
-    {
-        _cards.RemoveAll(c => c.Id == card.Id);
-        _cards.Add(card);
-        CardsChanged();
-    }
-
-    /// <summary>A card's relevance may have changed: re-lay the home row.</summary>
-    internal void CardsChanged() { }
-
-    internal void ShowTab(FrameworkElement panel)
-    {
-        foreach (var (tab, p) in _moduleTabs)
-            if (p == panel) Select(tab);
-    }
-
-    void OnTabChanged(object sender, RoutedEventArgs e) => Refresh();
+    internal List<ShelfAction> ShelfActions { get; set; } = new();
 
     internal void Refresh()
     {
         if (_s is null || !IsInitialized) return;
-        bool shelf = ShelfTab.IsChecked == true;
-        bool alerts = AlertsTab.IsChecked == true;
-        bool moduleTab = false;
-        foreach (var (tab, panel) in _moduleTabs)
-        {
-            bool on = tab.IsChecked == true;
-            panel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-            moduleTab |= on;
-        }
-        bool home = !shelf && !alerts && !moduleTab;
-        var media = _s.Media;
-        MediaPanel.Visibility = home && media.HasSession ? Visibility.Visible : Visibility.Collapsed;
-        ClockPanel.Visibility = home && !media.HasSession ? Visibility.Visible : Visibility.Collapsed;
-        ShelfPanel.Visibility = shelf ? Visibility.Visible : Visibility.Collapsed;
-        AlertsPanel.Visibility = alerts ? Visibility.Visible : Visibility.Collapsed;
-        int alertCount = _s.Notifications.History.Count;
-        AlertsEmpty.Text = _s.Notifications.IsAvailable ? "No notifications" : _s.Notifications.Problem ?? "Notifications are starting…";
+        if (_openId is null) RebuildRow(force: false);
+
+        var n = _s.Notifications;
+        int alertCount = n.History.Count;
+        AlertsCount.Text = alertCount.ToString();
+        AlertsNote.Text = !n.IsAvailable ? n.Problem ?? "Notifications are starting…"
+            : PrivacyState.Presenting ? "Messages are hidden while you share your screen"
+            : "Click one to open its app";
+        AlertsEmptyText.Text = n.IsAvailable ? "All caught up" : n.Problem ?? "Notifications are starting…";
+        AlertsEmptyIcon.Visibility = n.IsAvailable ? Visibility.Visible : Visibility.Collapsed;
         AlertsEmpty.Visibility = alertCount == 0 ? Visibility.Visible : Visibility.Collapsed;
         AlertsScroll.Visibility = alertCount == 0 ? Visibility.Collapsed : Visibility.Visible;
-        ShelfClear.Visibility = (shelf && _s.Shelf.Items.Count > 0) || (alerts && alertCount > 0) ? Visibility.Visible : Visibility.Collapsed;
+        AlertsClear.Visibility = alertCount > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        BatteryPanel.Visibility = Visibility.Visible;
-        Battery.Visibility = BatteryText.Visibility = _s.Battery.HasBattery ? Visibility.Visible : Visibility.Collapsed;
-        if (_s.Battery.HasBattery)
-        {
-            Battery.Set(_s.Battery.Percent, _s.Battery.IsCharging);
-            BatteryText.Text = $"{_s.Battery.Percent}%";
-        }
-
+        var media = _s.Media;
         if (media.HasSession)
         {
             TitleText.Text = media.Title;
             ArtistText.Text = media.Artist;
             CompactView.ApplyArt(ArtFrame, media, 24);
             Bars.Color = media.ArtColor;
-            Bars.Active = media.IsPlaying;
+            Bars.Active = media.IsPlaying && _homeIds.Contains(_nowPlaying.Id);
             PlayButton.Content = media.IsPlaying ? "" : "";
             PrevButton.IsEnabled = media.CanSkipPrevious;
             NextButton.IsEnabled = media.CanSkipNext;
             Track.IsEnabled = media.CanSeek;
+        }
+        else
+        {
+            Bars.Active = false;
         }
         Tick();
     }
@@ -184,10 +560,6 @@ public partial class ExpandedView : UserControl
     void Tick()
     {
         if (_s is null) return;
-        var now = DateTime.Now;
-        ClockText.Text = now.ToString("t");
-        DateText.Text = now.ToString("dddd, d MMMM");
-
         var media = _s.Media;
         if (!media.HasSession || _seeking) return;
         var dur = media.Duration;
@@ -211,13 +583,19 @@ public partial class ExpandedView : UserControl
     void OnPlayPause(object sender, RoutedEventArgs e) => _s?.Media.TogglePlayPause();
     void OnNext(object sender, RoutedEventArgs e) => _s?.Media.Next();
     void OnPrev(object sender, RoutedEventArgs e) => _s?.Media.Previous();
-    void OnArtClicked(object sender, MouseButtonEventArgs e) => _s?.Media.TogglePlayPause();
+
+    void OnArtClicked(object sender, MouseButtonEventArgs e)
+    {
+        _s?.Media.TogglePlayPause();
+        e.Handled = true;
+    }
 
     void OnTrackDown(object sender, MouseButtonEventArgs e)
     {
         _seeking = true;
         Track.CaptureMouse();
         SetProgress(e.GetPosition(Track).X / Track.ActualWidth);
+        e.Handled = true;
     }
 
     void OnTrackMove(object sender, MouseEventArgs e)
@@ -230,32 +608,30 @@ public partial class ExpandedView : UserControl
         if (!_seeking) return;
         _seeking = false;
         Track.ReleaseMouseCapture();
+        e.Handled = true;
         if (_s is null) return;
         double f = Math.Clamp(e.GetPosition(Track).X / Track.ActualWidth, 0, 1);
         _s.Media.Seek(TimeSpan.FromSeconds(f * _s.Media.Duration.TotalSeconds));
     }
 
+    // ---- Shelf ----------------------------------------------------------------------------------
+
     void RefreshShelf()
     {
         if (_s is null) return;
         int n = _s.Shelf.Items.Count;
-        ShelfEmpty.Visibility = n == 0 ? Visibility.Visible : Visibility.Collapsed;
         ShelfScroll.Visibility = n == 0 ? Visibility.Collapsed : Visibility.Visible;
-        ShelfBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ShelfCount.Text = n.ToString();
-        if (ShelfTab.IsChecked == true) ShelfClear.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShelfClear.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShelfCountRun.Text = n == 0 ? "Empty" : n == 1 ? "1 file" : $"{n} files";
+        ShelfHintRun.Text = n == 0 ? "  · drop files on the notch to keep them here" : "  · drag any file out to use it";
+        if (_shelfBadge is not null && _shelfBadgeText is not null)
+        {
+            _shelfBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+            _shelfBadgeText.Text = n.ToString();
+        }
     }
 
-    void OnClearShelf(object sender, MouseButtonEventArgs e)
-    {
-        if (AlertsTab.IsChecked == true) _s?.Notifications.ClearHistory();
-        else _s?.Shelf.Clear();
-    }
-
-    void OnAlertClicked(object sender, MouseButtonEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is Notifications.ShammyNotification n) NotificationOpened?.Invoke(n);
-    }
+    void OnClearShelf(object sender, RoutedEventArgs e) => _s?.Shelf.Clear();
 
     void OnShelfWheel(object sender, MouseWheelEventArgs e)
     {
@@ -312,7 +688,7 @@ public partial class ExpandedView : UserControl
         foreach (var action in ShelfActions) Add(action.Label, () => action.Run(item));
         Add("Remove from shelf", () => _s?.Shelf.Remove(item));
         menu.PlacementTarget = (UIElement)sender;
-        // Keep the card open while the menu is up (the pointer leaves the notch to reach it).
+        // Keep the notch open while the menu is up (the pointer leaves the notch to reach it).
         ShelfDragging?.Invoke(true);
         menu.Closed += (_, _) => ShelfDragging?.Invoke(false);
         menu.IsOpen = true;
@@ -329,5 +705,21 @@ public partial class ExpandedView : UserControl
     {
         try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
         catch (Exception ex) { Log.Warn("Opening a shelf item failed", ex); }
+    }
+
+    // ---- Notifications --------------------------------------------------------------------------
+
+    void OnClearAlerts(object sender, RoutedEventArgs e) => _s?.Notifications.ClearHistory();
+
+    void OnAlertClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (e.Handled) return;
+        if ((sender as FrameworkElement)?.DataContext is Notifications.ShammyNotification n) NotificationOpened?.Invoke(n);
+    }
+
+    void OnDismissAlert(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Notifications.ShammyNotification n) _s?.Notifications.History.Remove(n);
+        e.Handled = true;
     }
 }

@@ -40,6 +40,49 @@ internal sealed class ShelfItem : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Icon)));
     }
 
+    string? _details;
+    bool _detailsRequested;
+
+    /// <summary>
+    /// The tile's "2.4 MB · Word" line. Just the type until the size has been read off the UI thread, for the
+    /// same reason as <see cref="Icon"/>: a file on an offline share can take a network timeout to answer.
+    /// </summary>
+    public string Details
+    {
+        get
+        {
+            if (!_detailsRequested)
+            {
+                _detailsRequested = true;
+                var ui = Dispatcher.CurrentDispatcher;
+                _ = Task.Run(() =>
+                {
+                    var d = Describe(Path);
+                    ui.BeginInvoke(() =>
+                    {
+                        _details = d;
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Details)));
+                    });
+                });
+            }
+            return _details ?? Core.Notch.FileKinds.Describe(Path);
+        }
+    }
+
+    static string Describe(string path)
+    {
+        try
+        {
+            if (System.IO.Directory.Exists(path)) return "Folder";
+            long bytes = new System.IO.FileInfo(path).Length;
+            return $"{Views.CompactView.FormatBytes(bytes)} · {Core.Notch.FileKinds.Describe(path)}";
+        }
+        catch (Exception)
+        {
+            return Core.Notch.FileKinds.Describe(path);
+        }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 

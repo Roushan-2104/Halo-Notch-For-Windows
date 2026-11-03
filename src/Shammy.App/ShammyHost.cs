@@ -213,6 +213,15 @@ internal sealed class ShammyHost : IDisposable
         _keys.VolumeKey += dir => _volume?.Step(dir);
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
+        _notch.ExpandedView.SearchRequested += _search.OpenTyping;
+        // The v2 open notch, for scripted checks: "v2-state", "v2-open <id|chip label>", "v2-back".
+        _modules.PipeCommands["v2-state"] = _ => $"mode={_notch.Mode} {_notch.ExpandedView.DescribeV2()}";
+        _modules.PipeCommands["v2-open"] = arg => _notch.OpenView(arg) ? "ok" : $"error: no view '{arg.Trim()}'";
+        _modules.PipeCommands["v2-back"] = _ =>
+        {
+            _notch.ExpandedView.ShowHome();
+            return "ok";
+        };
         NotchSound.Enabled = _settings.NotchSounds;
         _modules.TrayItems.Add(new Modules.ModuleTrayItem("Notch sounds (ping and chime)", null, () => _settings.NotchSounds, on =>
         {

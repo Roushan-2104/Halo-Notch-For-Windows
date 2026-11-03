@@ -5,20 +5,20 @@
         xmlns:views="clr-namespace:Shammy.Views"
         Title="Shammy" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize" ShowActivated="False"
-        Width="760" Height="96" Left="0" Top="0" AllowDrop="True"
+        Width="1100" Height="96" Left="0" Top="0" AllowDrop="True"
         FontFamily="{StaticResource ShammyFont}" Foreground="{StaticResource Fg}"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
-    <Canvas x:Name="Root" Width="760" Height="760" AllowDrop="True">
-        <shell:NotchShape x:Name="ShadowShape" Width="760" Height="760" Opacity="0" IsHitTestVisible="False">
+    <Canvas x:Name="Root" Width="1100" Height="1100" AllowDrop="True">
+        <shell:NotchShape x:Name="ShadowShape" Width="1100" Height="1100" Opacity="0" IsHitTestVisible="False">
             <shell:NotchShape.Effect>
                 <DropShadowEffect BlurRadius="40" ShadowDepth="12" Direction="270" Opacity="0.6" Color="Black" />
             </shell:NotchShape.Effect>
         </shell:NotchShape>
-        <shell:EdgeLight x:Name="Edge" Width="760" Height="760" />
+        <shell:EdgeLight x:Name="Edge" Width="1100" Height="1100" />
         <!-- Nearly-invisible hit area: alpha 1/255 still receives the mouse, so hovering just below or beside the pill counts. -->
         <Rectangle x:Name="HitArea" Fill="#01000000" />
-        <shell:NotchShape x:Name="Shape" Width="760" Height="760" />
-        <Canvas x:Name="ContentHost" Width="760" Height="760">
+        <shell:NotchShape x:Name="Shape" Width="1100" Height="1100" />
+        <Canvas x:Name="ContentHost" Width="1100" Height="1100">
             <views:CompactView x:Name="CompactA" />
             <views:CompactView x:Name="CompactB" />
             <views:ExpandedView x:Name="Expanded" />
