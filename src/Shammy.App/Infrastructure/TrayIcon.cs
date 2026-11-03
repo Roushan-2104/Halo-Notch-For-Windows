@@ -139,8 +139,8 @@ internal sealed class TrayIcon : IDisposable
                 }
                 if (item.IsVisible is { } isVisible)
                 {
-                    mi.Visible = isVisible();
-                    menu.Opening += (_, _) => mi.Visible = isVisible();
+                    mi.Available = isVisible();
+                    menu.Opening += (_, _) => mi.Available = isVisible();
                 }
                 menu.Items.Add(mi);
             }
