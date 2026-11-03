@@ -124,11 +124,41 @@ public sealed class ClipHistory
     }
 
     /// <summary>Removes everything that isn't pinned; returns how many went.</summary>
-    public int Clear()
+    public int Clear() => ClearUnpinned().Count;
+
+    /// <summary>Removes everything that isn't pinned and returns it, newest first, so it can be put back (<see cref="Restore"/>).</summary>
+    public IReadOnlyList<ClipEntry> ClearUnpinned()
     {
-        int removed = _items.RemoveAll(e => !e.Pinned);
-        if (removed > 0) Changed?.Invoke();
+        var removed = _items.Where(e => !e.Pinned).ToList();
+        if (removed.Count == 0) return removed;
+        _items.RemoveAll(e => !e.Pinned);
+        Changed?.Invoke();
         return removed;
+    }
+
+    /// <summary>
+    /// Undo for <see cref="ClearUnpinned"/>: puts the entries back in time order. Anything copied again since
+    /// is already in the list (newer) and stays as it is; the list is trimmed to capacity as usual.
+    /// </summary>
+    /// <returns>How many came back.</returns>
+    public int Restore(IEnumerable<ClipEntry> entries)
+    {
+        int added = 0;
+        foreach (var e in entries)
+        {
+            if (_items.Any(x => x.Key == e.Key)) continue;
+            _items.Add(e);
+            added++;
+        }
+        if (added == 0) return 0;
+        var pinned = _items.Where(e => e.Pinned).ToList();
+        var rest = _items.Where(e => !e.Pinned).OrderByDescending(e => e.Time).ToList();
+        _items.Clear();
+        _items.AddRange(pinned);
+        _items.AddRange(rest);
+        Trim();
+        Changed?.Invoke();
+        return added;
     }
 
     /// <summary>Removes unpinned entries last copied before <paramref name="cutoff"/>; returns how many went.</summary>

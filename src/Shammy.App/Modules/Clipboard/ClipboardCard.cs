@@ -20,15 +20,18 @@ internal sealed class ClipboardCard
     readonly ClipHistory _history;
     readonly Action<ClipEntry> _copy;
     readonly Action<string> _open;
+    readonly Func<Action?> _clear;
     readonly StackPanel _compactRows = new();
     readonly TextBlock _compactMore = CardKit.Label("", 11, FontWeights.SemiBold, CardKit.Text2);
     readonly Grid _compact = new() { Margin = new Thickness(14) };
 
-    public ClipboardCard(ClipHistory history, Action<ClipEntry> copy, Action<string> open)
+    /// <param name="clear">Clears the unpinned history and returns how to undo it (null when nothing was cleared).</param>
+    public ClipboardCard(ClipHistory history, Action<ClipEntry> copy, Action<string> open, Func<Action?> clear)
     {
         _history = history;
         _copy = copy;
         _open = open;
+        _clear = clear;
         BuildCompactFrame();
         _history.Changed += () =>
         {
@@ -149,7 +152,9 @@ internal sealed class ClipboardCard
         readonly ClipboardCard _card;
         readonly TextBlock _count = CardKit.Label("", 15, FontWeights.Bold);
         readonly TextBlock _pinnedLabel = CardKit.Label("", 11, FontWeights.SemiBold, CardKit.Brush(Accent));
-        readonly Border _pinnedChip, _allChip, _clearChip;
+        readonly Border _pinnedChip, _allChip, _clearChip, _undoChip;
+        readonly System.Windows.Threading.DispatcherTimer _undoExpiry = new() { Interval = ClipboardModule.UndoTime };
+        Action? _undo;
         readonly TextBox _search;
         readonly StackPanel _row = new() { Orientation = Orientation.Horizontal };
         readonly ScrollViewer _scroll;
@@ -180,12 +185,21 @@ internal sealed class ClipboardCard
             _allChip.Margin = new Thickness(6, 0, 0, 0);
             header.Children.Add(_allChip);
 
-            _clearChip = CardKit.PillButton("Clear", () => _card._history.Clear(), 26, background: CardKit.Raised, hover: CardKit.RoundHover,
+            _clearChip = CardKit.PillButton("Clear", Clear, 26, background: CardKit.Raised, hover: CardKit.RoundHover,
                 foreground: CardKit.Text2, tip: "Clear everything that isn't pinned");
             _clearChip.BorderBrush = CardKit.RaisedStroke;
             _clearChip.BorderThickness = new Thickness(1);
             _clearChip.Margin = new Thickness(6, 0, 0, 0);
             header.Children.Add(_clearChip);
+            // For 8 s after clearing, the Clear chip's place offers Undo.
+            _undoChip = CardKit.PillButton("Undo", Undo, 26, background: CardKit.Raised, hover: CardKit.RoundHover,
+                foreground: CardKit.Text, tip: "Put the cleared items back");
+            _undoChip.BorderBrush = CardKit.RaisedStroke;
+            _undoChip.BorderThickness = new Thickness(1);
+            _undoChip.Margin = new Thickness(6, 0, 0, 0);
+            _undoChip.Visibility = Visibility.Collapsed;
+            header.Children.Add(_undoChip);
+            _undoExpiry.Tick += (_, _) => ShowUndo(null);
 
             _search = new TextBox { Style = (Style)Application.Current.Resources["BareTextBox"], FontSize = 12, FontFamily = CardKit.Font };
             var hint = CardKit.Label("Search clipboard", 12, FontWeights.Normal, CardKit.Text2);
@@ -244,7 +258,30 @@ internal sealed class ClipboardCard
 
             Action changed = () => Dispatcher.BeginInvoke(Refresh, DispatcherPriority.Background);
             Loaded += (_, _) => _card._history.Changed += changed.Invoke;
-            Unloaded += (_, _) => _card._history.Changed -= changed.Invoke;
+            Unloaded += (_, _) =>
+            {
+                _card._history.Changed -= changed.Invoke;
+                _undoExpiry.Stop();
+            };
+            Refresh();
+        }
+
+        void Clear() => ShowUndo(_card._clear());
+
+        void Undo()
+        {
+            var undo = _undo;
+            ShowUndo(null);
+            undo?.Invoke();
+        }
+
+        /// <summary>Offer Undo in the Clear chip's place for a few seconds (null puts Clear back).</summary>
+        void ShowUndo(Action? undo)
+        {
+            _undo = undo;
+            _undoExpiry.Stop();
+            if (undo is not null) _undoExpiry.Start();
+            _undoChip.Visibility = undo is null ? Visibility.Collapsed : Visibility.Visible;
             Refresh();
         }
 
@@ -267,7 +304,7 @@ internal sealed class ClipboardCard
             if (pinned == 0) _pinnedOnly = false;
             _pinnedChip.Opacity = _pinnedOnly ? 1 : 0.75;
             _allChip.Opacity = _pinnedOnly ? 0.75 : 1;
-            _clearChip.Visibility = all.Count > pinned ? Visibility.Visible : Visibility.Collapsed;
+            _clearChip.Visibility = _undo is null && all.Count > pinned ? Visibility.Visible : Visibility.Collapsed;
 
             var query = _search.Text.Trim();
             var shown = all.Where(e => !_pinnedOnly || e.Pinned).Where(e => Matches(e, query)).ToList();

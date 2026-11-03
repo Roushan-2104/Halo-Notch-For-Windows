@@ -55,6 +55,9 @@ public partial class NotchWindow : Window
     bool _hoverExpanded, _dragging, _fullscreen, _interactive, _held, _hoveringNotification, _visitedWhileHeld;
     /// <summary>A view a command asked to open, waiting for its confirmation card (or the search bar) to close.</summary>
     Action? _pendingOpen;
+
+    /// <summary>Other work waiting for the search bar or a command's confirmation card to close (see <see cref="AfterSearch"/>).</summary>
+    readonly List<Action> _afterSearch = new();
     Color? _moduleGlow;
     string? _flashedId;
     object? _flashedPayload;
@@ -399,6 +402,12 @@ public partial class NotchWindow : Window
             _pendingOpen = null;
             pending();
         }
+        if (mode is null && _afterSearch.Count > 0)
+        {
+            var waiting = _afterSearch.ToList();
+            _afterSearch.Clear();
+            foreach (var run in waiting) run();
+        }
     }
 
     public bool IsFullscreen => _fullscreen;
@@ -506,6 +515,16 @@ public partial class NotchWindow : Window
         }
         Recompute();
         if (!Root.IsMouseOver) _hoverOut.Start();
+    }
+
+    /// <summary>
+    /// Run <paramref name="action"/> once the search bar or a command's confirmation card has closed (now if none
+    /// is up), e.g. a pill that should get its whole time on screen rather than start behind the confirmation.
+    /// </summary>
+    internal void AfterSearch(Action action)
+    {
+        if (_searchMode is null) action();
+        else _afterSearch.Add(action);
     }
 
     /// <summary>Drop this window's own hold; other holds (a drag, a context menu) still keep it open.</summary>

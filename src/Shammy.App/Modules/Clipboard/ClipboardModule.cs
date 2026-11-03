@@ -62,7 +62,7 @@ internal sealed class ClipboardModule : IShammyModule
         _expiry = new DispatcherTimer(TimeSpan.FromMinutes(10), DispatcherPriority.Background,
             (_, _) => _history.Expire(DateTime.Now - KeepFor), ctx.Ui);
 
-        _card2 = new ClipboardCard(_history, CopyBack, OpenLink);
+        _card2 = new ClipboardCard(_history, CopyBack, OpenLink, ClearWithUndo);
         // A chip-only card (v2): reached from the chips row, never pushed onto the home row by itself.
         ctx.AddCard(new NotchCard
         {
@@ -79,6 +79,14 @@ internal sealed class ClipboardModule : IShammyModule
         ctx.AddPipeCommand("clipboard-copy", PipeCopy);
         ctx.AddPipeCommand("clipboard-screenshot", PipeScreenshot);
         ctx.AddPipeCommand("clipboard-state", _ => State());
+        // "clipboard-undo": what the "Clipboard cleared · Undo" pill does (after "search clear clipboard").
+        ctx.AddPipeCommand("clipboard-undo", _ =>
+        {
+            if (_lastUndo is not { } undo) return "error: nothing to undo";
+            _lastUndo = null;
+            undo();
+            return State();
+        });
         ctx.AddPipeCommand("clipboard-open", _ => OpenDetail() ? "ok" : "error: no clipboard card");
 
         try
@@ -472,7 +480,8 @@ internal sealed class ClipboardModule : IShammyModule
     {
         if (intent == ClipIntent.Clear)
         {
-            int removed = _history.Clear();
+            int removed = _history.Items.Count - _history.PinnedCount;
+            ClearWithUndo();
             int pinned = _history.PinnedCount;
             return new CommandResult("", "Clipboard history cleared",
                 pinned > 0 ? $"{removed} removed · {pinned} pinned kept" : $"{removed} removed");
@@ -480,6 +489,42 @@ internal sealed class ClipboardModule : IShammyModule
         OpenDetail();
         return new CommandResult("", "Clipboard", CountText());
     }
+
+    internal static readonly TimeSpan UndoTime = TimeSpan.FromSeconds(8);
+    const string UndoId = "clipboard.undo";
+
+    /// <summary>
+    /// Clears the unpinned history, with a way back: a "Clipboard cleared · Undo" pill for 8 s (after a command's
+    /// confirmation has closed, so it gets its whole time). Returns the undo (the card's own Undo chip uses it),
+    /// or null when there was nothing to clear.
+    /// </summary>
+    Action? ClearWithUndo()
+    {
+        var removed = _history.ClearUnpinned();
+        if (removed.Count == 0) return null;
+        bool undone = false;
+        void Undo()
+        {
+            if (undone) return;
+            undone = true;
+            _ctx.Remove(UndoId);
+            int back = _history.Restore(removed);
+            _ctx.ShowMessage("\uE7A7", back == 1 ? "1 item restored" : $"{back} items restored", seconds: 2);
+        }
+        _ctx.Notch.AfterSearch(() =>
+        {
+            if (undone) return;
+            _ctx.Post(new Activity(UndoId, ActivityKind.Message, UndoPriority,
+                new MessagePayload("\uE7A7", "Clipboard cleared \u00B7 Undo"), DateTime.UtcNow + UndoTime) { Click = Undo });
+        });
+        _lastUndo = Undo;
+        return Undo;
+    }
+
+    /// <summary>Above other messages (50): it's the only way back.</summary>
+    const int UndoPriority = 55;
+
+    Action? _lastUndo;
 
     /// <summary>Opens the clipboard card's detail in the notch (after a command's confirmation clears).</summary>
     bool OpenDetail() => _ctx.OpenCard("clipboard");
