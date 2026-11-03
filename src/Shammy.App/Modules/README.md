@@ -22,6 +22,7 @@ The whole API is in [`ModuleApi.cs`](ModuleApi.cs); read it first.
 | Want to... | Use |
 |---|---|
 | React to typed (tap Right Alt) or spoken (hold Right Alt) text | `ctx.AddCommand(ITextCommand)`; `CanHandle` must be cheap and specific so it never steals normal web searches |
+| Say what your command will do in the typing palette ("= 42", "Start a 25 min timer") | Also implement `ICommandPreview` on the command; cheap, no side effects, null if unsure |
 | Show something live in the compact notch | `ctx.Post(new Activity("<module>.<id>", ActivityKind.Custom, priority, payload))` where payload implements `ICompactContent` |
 | A tab in the expanded notch | `ctx.AddTab(glyph, tooltip, panel)` (panel gets ~436×150), `ctx.OpenTab(panel)` |
 | A bigger popup (QR code, picker) | `ctx.ShowCard(element, width, height, interactive)` / `ctx.CloseCard()` |

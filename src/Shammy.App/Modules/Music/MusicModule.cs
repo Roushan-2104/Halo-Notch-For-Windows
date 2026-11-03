@@ -75,10 +75,22 @@ internal sealed class MusicModule : IShammyModule
 
     // ---- Commands --------------------------------------------------------------------------------
 
-    sealed class MusicTextCommand(MusicModule module) : ITextCommand
+    sealed class MusicTextCommand(MusicModule module) : ITextCommand, ICommandPreview
     {
         public bool CanHandle(string text) => MusicCommand.Parse(text) is not null;
         public Task<CommandResult> RunAsync(string text) => module.RunAsync(MusicCommand.Parse(text)!);
+
+        public CommandPreview? Preview(string text) => MusicCommand.Parse(text) switch
+        {
+            { Action: MusicAction.PlayYouTubeMusic } i => new CommandPreview("", $"Play “{i.Query}”", "YouTube Music"),
+            { Action: MusicAction.PlaySpotify } i => new CommandPreview("", $"Play “{i.Query}”", "Spotify"),
+            { Action: MusicAction.Pause } => new CommandPreview("", "Pause", "Media"),
+            { Action: MusicAction.Resume } => new CommandPreview("", "Resume", "Media"),
+            { Action: MusicAction.Next } => new CommandPreview("", "Next track", "Media"),
+            { Action: MusicAction.Previous } => new CommandPreview("", "Previous track", "Media"),
+            { Action: MusicAction.ShowLyrics } => new CommandPreview("", "Show lyrics", "Media"),
+            _ => null,
+        };
     }
 
     async Task<CommandResult> RunAsync(MusicIntent intent)

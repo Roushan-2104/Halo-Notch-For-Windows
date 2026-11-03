@@ -41,6 +41,9 @@ public partial class NotchWindow : Window
     NotchMode _mode = NotchMode.Idle;
     (double W, double H, double R) _spec = (186, 32, 11);
     double _compactWidth = 290;
+
+    /// <summary>Height of the palette rows under the typing bar; the bar grows down by this much.</summary>
+    double _paletteHeight;
     double _lastW = -1, _lastH = -1, _lastR = -1;
 
     Activity? _activity, _secondary;
@@ -66,6 +69,11 @@ public partial class NotchWindow : Window
         _expanded = AddLayer(Expanded);
         _drop = AddLayer(DropZone);
         _searchBar = AddLayer(SearchBar);
+        SearchBar.PaletteHeightChanged += h =>
+        {
+            _paletteHeight = h;
+            if (_mode == NotchMode.Typing) Transition(NotchMode.Typing);
+        };
         _answer = AddLayer(Answer);
         _result = AddLayer(Result);
         _notification = AddLayer(NotificationCard);
@@ -569,7 +577,7 @@ public partial class NotchWindow : Window
         NotchMode.Expanded => (480, 204, 32),
         NotchMode.Drop => (480, 150, 32),
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => (420, 54, 27),
-        NotchMode.Typing => (560, 58, 29),
+        NotchMode.Typing => (560, 58 + _paletteHeight, _paletteHeight > 0 ? 30 : 29),
         NotchMode.Answer => (440, 120, 32),
         NotchMode.Result => (560, 680, 34),
         _ => (186, 32, 11),

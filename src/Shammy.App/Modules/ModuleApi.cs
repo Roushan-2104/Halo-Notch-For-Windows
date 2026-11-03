@@ -36,6 +36,18 @@ internal interface ITextCommand
     Task<CommandResult> RunAsync(string text);
 }
 
+/// <summary>
+/// Optional on an <see cref="ITextCommand"/>: what Enter would do, shown as the command row in the typing
+/// palette ("= 42", "Start a 25 min timer"). Called on every keystroke, so it must be cheap and have no
+/// side effects; return null when it can't tell, and the row just says the command will run.
+/// </summary>
+internal interface ICommandPreview
+{
+    CommandPreview? Preview(string text);
+}
+
+internal sealed record CommandPreview(string Glyph, string Title, string? Detail = null);
+
 /// <summary>What the notch shows briefly after a command ran.</summary>
 internal sealed record CommandResult(string Glyph, string Title, string? Detail = null, bool IsError = false);
 
@@ -141,6 +153,9 @@ internal sealed class ModuleContext
     // ---- Registration ----------------------------------------------------------------------------
 
     public void AddCommand(ITextCommand command) => _registry.Commands.Add(command);
+
+    /// <summary>Every module's commands, in the order the search flow tries them (the palette previews them).</summary>
+    internal IReadOnlyList<ITextCommand> Commands => _registry.Commands;
 
     /// <summary>Offer words for voice recognition to expect (e.g. installed app names).</summary>
     public void AddVocabulary(Func<IEnumerable<string>> words) => _registry.Vocabulary.Add(words);
