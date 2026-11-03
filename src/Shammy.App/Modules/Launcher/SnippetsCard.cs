@@ -56,7 +56,7 @@ internal sealed class SnippetsCard
 
     public FrameworkElement BuildDetail()
     {
-        var d = new WallDetail(Fields.List(), "", "Snippets", "Type a trigger anywhere and it becomes the text");
+        var d = new WallDetail(Fields.List(), "", "Snippets", "Type a trigger anywhere, get the text");
         _detail = d;
         _rows = new StackPanel();
         d.Body.Children.Add(WallDetail.Scroll(_rows));

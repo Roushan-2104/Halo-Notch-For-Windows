@@ -280,6 +280,8 @@ public partial class ExpandedView : UserControl
         DetailContent.Margin = new Thickness(0, header ? HeaderBand : 0, 0, 0);
         DetailContent.Width = WallDetail.W;
         DetailFrame.Height = contentHeight + (header ? HeaderBand : 0);
+        // A clip left from the previous view (opened chip to chip) would cut this one at the old height.
+        DetailFrame.Clip = wall ? RoundedFrameClip() : null;
         if (wall) AddBack((WallDetail)content!);
 
         Rail.Visibility = EmptyText.Visibility = Visibility.Collapsed;
