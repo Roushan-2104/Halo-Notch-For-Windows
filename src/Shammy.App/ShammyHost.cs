@@ -174,6 +174,21 @@ internal sealed class ShammyHost : IDisposable
             _activities.Remove("voice-model");
             Post(new Activity("voice-failed", ActivityKind.Message, PriorityMessage, new MessagePayload("", reason, true), In(4)));
         });
+        _whisper.HinglishDownloading += () => _ui.BeginInvoke(() =>
+            Post(new Activity("voice-hinglish-get", ActivityKind.Message, PriorityMessage,
+                new MessagePayload("", "Getting Hinglish voice · 574 MB"), In(3))));
+        _whisper.HinglishProgress += p => _ui.BeginInvoke(() => Post(new Activity("voice-hinglish", ActivityKind.Progress, PriorityProgress,
+            new ProgressPayload("", "Hinglish voice", p))));
+        _whisper.HinglishReady += () => _ui.BeginInvoke(() =>
+        {
+            _activities.Remove("voice-hinglish");
+            Post(new Activity("voice-hinglish-ready", ActivityKind.Message, PriorityMessage, new MessagePayload("", "Hinglish voice ready"), In(2.5)));
+        });
+        _whisper.HinglishFailed += reason => _ui.BeginInvoke(() =>
+        {
+            _activities.Remove("voice-hinglish");
+            Post(new Activity("voice-hinglish-failed", ActivityKind.Message, PriorityMessage, new MessagePayload("", reason, true), In(4)));
+        });
         _ = _whisper.InitAsync();
         if (!WebView2Check.IsInstalled())
         {
@@ -242,6 +257,13 @@ internal sealed class ShammyHost : IDisposable
             {
                 _whisper.Language = _settings.VoiceLanguage;
                 _ = Task.Run(_whisper.ResetProcessors);
+            },
+            () => _whisper.HinglishAvailable,
+            () =>
+            {
+                bool on = _settings.VoiceMode == AppSettings.HinglishVoice;
+                if (!on) _activities.Remove("voice-hinglish");
+                _ = _whisper.SetHinglishAsync(on);
             },
             () =>
             {

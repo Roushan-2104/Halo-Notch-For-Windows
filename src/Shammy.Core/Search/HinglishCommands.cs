@@ -32,10 +32,11 @@ public static class HinglishCommands
     static readonly Regex AlarmWord = new(@"^(?:alarm|alaarm|alaram|alarum|alam)$", Opts);
     static readonly Regex TimerWord = new(@"^(?:timer|taimar|taimer|taaimar|timar|taymar)$", Opts);
 
-    // "laga do", "lagado", "laga dijiye", "set karo", "start kar do", "chalu karo".
-    static readonly Regex SetVerb = new(@"(?<=^|\s)(?:laga\s*(?:do|doo|du|dijiye|dena|de)|lagao|lagaa?|lagado|lagadu|lagadoo|" +
-        @"(?:set|start|shuru|chalu|chaalu)\s*(?:karo|kar\s*do|kardo|kar\s*dijiye|kijiye|kar\s*dena|kar))(?=\s|$)", Opts);
-    static readonly Regex RemindVerb = new(@"\b(?:ya+d\s+(?:dila(?:na|o|do|dena|\s+do|\s+dena|\s+dijiye)?|kara(?:na|o|\s+do|\s+dena)?)|" +
+    // "laga do", "lagado", "laga dijiye", "set karo", "start kar do", "chalu karo", and the Hinglish model's
+    // long vowels ("lagaa doon", "lagaadoo", even "lagaajoo").
+    static readonly Regex SetVerb = new(@"(?<=^|\s)(?:la+ga+\s*(?:do+n?|du+|jo+|dijiye|dena|de)|la+ga+o|la+ga+|" +
+        @"(?:set|start|shuru|chalu|chaalu)\s*(?:karo|kar\s*do+n?|kardo|kar\s*dijiye|kijiye|kar\s*dena|kar))(?=\s|$)", Opts);
+    static readonly Regex RemindVerb = new(@"\b(?:ya+d\s+(?:dil(?:a+)?(?:na|o|do|dena|\s+do|\s+dena|\s+dijiye)?|kara+(?:na|o|\s+do|\s+dena)?)|" +
         @"remind\s+(?:kar(?:na|o|do|\s+do|\s+dena|\s+dijiye)?|karana))\b", Opts);
     static readonly Regex Spaces = new(@"\s+", Opts);
 
@@ -111,6 +112,13 @@ public static class HinglishCommands
             if (w == "kal") { day = "tomorrow"; continue; }
             if (PartOfDay(w) is { } p) { part = p; continue; }
             // "7 baje", "saade 7 baje"
+            // "06:30" / "7:30 baje": a clock reading as is.
+            if (ClockReading.IsMatch(w))
+            {
+                clock = w;
+                if (i + 1 < words.Count && IsBaje(words[i + 1])) i++;
+                continue;
+            }
             if (i + 1 < words.Count && IsBaje(words[i + 1]) && Number(w) is { } h && h == Math.Floor(h) && h is >= 1 and <= 12)
             {
                 bool half = task.Count > 0 && task[^1] is "saade" or "sadhe" or "saadhe";
@@ -139,8 +147,11 @@ public static class HinglishCommands
         return when;
     }
 
-    // Whisper glues the next "ka" on ("sath bajeka alarm").
-    static bool IsBaje(string w) => w is "baje" or "bajay" or "bajey" or "bje" or "baaje" or "bajei" or "baajay" or "baajey" or "bajeka" or "bajayka" or "bajeke";
+    static readonly Regex ClockReading = new(@"^(?:[01]?\d|2[0-3]):[0-5]\d$", Opts);
+
+    // "baje", "baaje", "bajay", and with the next "ka" glued on ("sath bajeka alarm").
+    static readonly Regex Baje = new(@"^b?ba+j(?:e|ay|ey|ei)(?:ka|ke)?$|^bje$", Opts);
+    static bool IsBaje(string w) => Baje.IsMatch(w);
 
     static string? PartOfDay(string w) => w switch
     {

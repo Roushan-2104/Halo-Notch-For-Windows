@@ -26,9 +26,9 @@ namespace Shammy.Search;
 /// </summary>
 internal sealed class WhisperService : IDisposable
 {
-    internal sealed record VoiceModel(string Name, string File, long Bytes, string Sha256, bool FullWindow)
+    internal sealed record VoiceModel(string Name, string File, long Bytes, string Sha256, bool FullWindow, string? Source = null)
     {
-        public string Url => $"https://huggingface.co/ggerganov/whisper.cpp/resolve/{Revision}/{File}";
+        public string Url => Source ?? $"https://huggingface.co/ggerganov/whisper.cpp/resolve/{Revision}/{File}";
         public string LocalPath => Path.Combine(Paths.Models, File);
     }
 
@@ -39,6 +39,15 @@ internal sealed class WhisperService : IDisposable
     static readonly VoiceModel Base = new("base", "ggml-base.bin", 147_951_465, "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe", false);
     static readonly VoiceModel Small = new("small", "ggml-small.bin", 487_601_967, "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b", false);
     static readonly VoiceModel Turbo = new("large-v3-turbo", "ggml-large-v3-turbo-q5_0.bin", 574_041_195, "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", true);
+
+    // Hinglish mode (opt-in, graphics card only): Oriserve's Whisper-Hindi2Hinglish-Apex, a large-v3-turbo
+    // fine-tune (Apache-2.0, revision f3214eed20b4e4d4144e739982d911f87b9cb223) converted to GGML q5_0 and
+    // published with Shammy, since the original isn't in whisper.cpp's format. It writes Hindi as romanized
+    // Hinglish ("kal subah 7 baaje ka alarm laga do"). Always decoded as "en" and without the app prompt:
+    // "hi" makes it hallucinate (up to 11 s), and the prompt made it worse.
+    static readonly VoiceModel Hinglish = new("hinglish", "ggml-apex-hinglish-q5_0.bin", 574_041_195,
+        "9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13", true,
+        "https://github.com/Roushan-2104/Shammy-Notch-For-Windows/releases/download/voice-models-1/ggml-apex-hinglish-q5_0.bin");
 
     // A graphics card that runs "base" over a full window this fast runs large-v3-turbo in about a second.
     static readonly TimeSpan GpuGoodEnough = TimeSpan.FromMilliseconds(450);
@@ -75,7 +84,7 @@ internal sealed class WhisperService : IDisposable
     public string? Failure { get; private set; }
 
     /// <summary>"base", "small" or "large-v3-turbo", plus "(GPU n)" when it runs on a graphics card.</summary>
-    public string ActiveModel => _engine?.Describe() ?? "-";
+    public string ActiveModel => _engine is null ? "-" : _hinglish is { } h ? $"{h.Describe()} + {_engine.Describe()}" : _engine.Describe();
 
     public event Action<double>? Progress;
     public event Action? Ready;
@@ -83,6 +92,89 @@ internal sealed class WhisperService : IDisposable
 
     /// <summary>Raised (with the model name) once a better model has replaced the first one.</summary>
     public event Action<string>? Upgraded;
+
+    // ---- Hinglish mode ---------------------------------------------------------------------------
+
+    Engine? _hinglish;
+    int _hinglishLoading;
+
+    /// <summary>
+    /// Hinglish voice needs the graphics-card engine: it is a large-v3-turbo-sized model, too slow on a CPU,
+    /// and it runs beside the regular English model (about 0.55 GB of video memory each).
+    /// </summary>
+    public bool HinglishAvailable => _engine is { OnGpu: true } e && e.Model == Turbo;
+
+    public bool HinglishActive => _hinglish is not null;
+
+    /// <summary>Raised once when the Hinglish model has to be downloaded first.</summary>
+    public event Action? HinglishDownloading;
+    public event Action<double>? HinglishProgress;
+    public event Action? HinglishReady;
+    public event Action<string>? HinglishFailed;
+
+    /// <summary>Turns the Hinglish model on (downloading it once) or off. Safe to call repeatedly.</summary>
+    public Task SetHinglishAsync(bool on) => on ? EnableHinglishAsync() : Task.Run(DisableHinglish);
+
+    async Task EnableHinglishAsync()
+    {
+        if (_hinglish is not null || Interlocked.Exchange(ref _hinglishLoading, 1) == 1) return;
+        try
+        {
+            if (!HinglishAvailable)
+            {
+                HinglishFailed?.Invoke("Hinglish voice needs a graphics card");
+                return;
+            }
+            ChosenModel(out int gpu);
+            if (!await Task.Run(() => HasExpectedHash(Hinglish)))
+            {
+                HinglishDownloading?.Invoke();
+                await DownloadAsync(Hinglish, report: false, p => HinglishProgress?.Invoke(p));
+            }
+            var engine = await Task.Run(() =>
+            {
+                var e = new Engine(this, Hinglish, WhisperFactory.FromPath(Hinglish.LocalPath, new WhisperFactoryOptions { UseGpu = true, GpuDevice = gpu }), gpu, primed: false);
+                e.Warm();
+                return e;
+            });
+            // Turned off again while it loaded: don't keep it.
+            if (_settings.VoiceMode != AppSettings.HinglishVoice)
+            {
+                engine.Dispose();
+                return;
+            }
+            await _gate.WaitAsync();
+            try { _hinglish = engine; }
+            finally { _gate.Release(); }
+            Log.Info($"Hinglish voice loaded: {engine.Describe()}");
+            HinglishReady?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Hinglish voice failed", ex);
+            HinglishFailed?.Invoke(ex is HttpRequestException ? "Couldn't download the Hinglish voice (offline?)" : "Hinglish voice failed to load");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _hinglishLoading, 0);
+        }
+    }
+
+    void DisableHinglish()
+    {
+        _gate.Wait();
+        Engine? old;
+        try
+        {
+            old = _hinglish;
+            _hinglish = null;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+        old?.Dispose();
+    }
 
     /// <summary>"auto" detects the language per query (Hindi, English...) at the cost of an extra pass.</summary>
     public string Language { get; set; } = "en";
@@ -114,6 +206,7 @@ internal sealed class WhisperService : IDisposable
             Ready?.Invoke();
             if (startWith == Base) _ = UpgradeAsync();
             _ = PrepareSongPassAsync();
+            if (_settings.VoiceMode == AppSettings.HinglishVoice && HinglishAvailable) _ = EnableHinglishAsync();
         }
         catch (Exception ex)
         {
@@ -153,6 +246,7 @@ internal sealed class WhisperService : IDisposable
             Swap(engine);
             Log.Info($"Voice upgraded to {engine.Describe()}");
             Upgraded?.Invoke(target.Name);
+            if (_settings.VoiceMode == AppSettings.HinglishVoice && HinglishAvailable) _ = EnableHinglishAsync();
         }
         catch (Exception ex)
         {
@@ -235,7 +329,12 @@ internal sealed class WhisperService : IDisposable
         old?.Dispose();
     }
 
-    async Task DownloadAsync(VoiceModel model, bool report)
+    /// <summary>
+    /// Downloads a model to "&lt;file&gt;.part", then checks its hash and moves it into place. An interrupted
+    /// download is resumed next time (models are hundreds of MB); a finished one that fails the hash is
+    /// deleted, never loaded.
+    /// </summary>
+    async Task DownloadAsync(VoiceModel model, bool report, Action<double>? progress = null)
     {
         if (report) IsDownloading = true;
         var part = model.LocalPath + ".part";
@@ -243,36 +342,46 @@ internal sealed class WhisperService : IDisposable
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(60) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("Shammy/0.4");
-            using var response = await http.GetAsync(model.Url, HttpCompletionOption.ResponseHeadersRead);
+            long have = File.Exists(part) ? new FileInfo(part).Length : 0;
+            if (have >= model.Bytes) have = 0;
+            using var request = new HttpRequestMessage(HttpMethod.Get, model.Url);
+            if (have > 0) request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(have, null);
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
-            long total = response.Content.Headers.ContentLength ?? model.Bytes;
+            // A server that ignores the range sends the whole file again: start over.
+            bool resumed = have > 0 && response.StatusCode == System.Net.HttpStatusCode.PartialContent;
+            long read = resumed ? have : 0;
+            long total = resumed ? model.Bytes : response.Content.Headers.ContentLength ?? model.Bytes;
+            if (resumed) Log.Info($"Resuming the {model.Name} voice model download at {have * 100 / model.Bytes}%");
             await using (var src = await response.Content.ReadAsStreamAsync())
-            await using (var dst = File.Create(part))
+            await using (var dst = new FileStream(part, resumed ? FileMode.Append : FileMode.Create, FileAccess.Write))
             {
                 var buffer = new byte[1 << 16];
-                long read = 0;
                 double lastReported = -1;
                 int n;
                 while ((n = await src.ReadAsync(buffer)) > 0)
                 {
                     await dst.WriteAsync(buffer.AsMemory(0, n));
                     read += n;
+                    double fraction = (double)read / total;
+                    if (fraction - lastReported < 0.01) continue;
+                    lastReported = fraction;
+                    progress?.Invoke(fraction);
                     if (!report) continue;
-                    DownloadProgress = (double)read / total;
-                    if (DownloadProgress - lastReported >= 0.01)
-                    {
-                        lastReported = DownloadProgress;
-                        Progress?.Invoke(DownloadProgress);
-                    }
+                    DownloadProgress = fraction;
+                    Progress?.Invoke(DownloadProgress);
                 }
             }
-            if (!await Task.Run(() => HasExpectedHash(model, part))) throw new HttpRequestException($"{model.Name} model download failed its integrity check");
+            if (!await Task.Run(() => HasExpectedHash(model, part)))
+            {
+                File.Delete(part);
+                throw new HttpRequestException($"{model.Name} model download failed its integrity check");
+            }
             File.Move(part, model.LocalPath, true);
         }
         finally
         {
             if (report) IsDownloading = false;
-            if (File.Exists(part)) File.Delete(part);
         }
     }
 
@@ -300,12 +409,33 @@ internal sealed class WhisperService : IDisposable
         try
         {
             var engine = _engine;
-            var (result, probability) = await DecodeAsync(engine.For(samples.Length), samples, ct);
-            if (EchoesPrompt(result, engine.CurrentPrompt))
+            var hinglish = _hinglish;
+            string result;
+            float probability;
+            if (hinglish is not null)
             {
-                // It recited the priming text instead of hearing the user: listen again without it.
-                Log.Info("Voice: the transcript echoed the prompt; retrying without it");
-                (result, probability) = await DecodeAsync(engine.Unprimed(samples.Length), samples, ct);
+                (result, probability) = await DecodeAsync(hinglish.For(samples.Length), samples, ct);
+                // Its known junk ("nan", "...", stray CJK) and unsure transcripts are checked against the regular
+                // English model, which still sits on the graphics card next to it.
+                var apexDoubt = TranscriptCheck.AssessHinglish(result, probability);
+                if (apexDoubt != TranscriptDoubt.None)
+                {
+                    var sw = Stopwatch.StartNew();
+                    var (english, englishProbability) = await DecodeAsync(engine.For(samples.Length), samples, ct);
+                    bool use = TranscriptCheck.PreferEnglishRerun(apexDoubt, probability, english, englishProbability);
+                    Log.Info($"Voice: Hinglish transcript doubted ({apexDoubt}); English pass {sw.ElapsedMilliseconds} ms, {(use ? "used it" : "kept Hinglish")}");
+                    if (use) (result, probability) = (english, englishProbability);
+                }
+            }
+            else
+            {
+                (result, probability) = await DecodeAsync(engine.For(samples.Length), samples, ct);
+                if (EchoesPrompt(result, engine.CurrentPrompt))
+                {
+                    // It recited the priming text instead of hearing the user: listen again without it.
+                    Log.Info("Voice: the transcript echoed the prompt; retrying without it");
+                    (result, probability) = await DecodeAsync(engine.Unprimed(samples.Length), samples, ct);
+                }
             }
 
             // Only play commands and doubtful transcripts pay for another pass; plain English never does.
@@ -313,7 +443,7 @@ internal sealed class WhisperService : IDisposable
             {
                 result = await SongPassAsync(samples, result, probability, ct);
             }
-            else if (Language == "en" && TranscriptCheck.Assess(result, probability) is var doubt and not TranscriptDoubt.None)
+            else if (hinglish is null && Language == "en" && TranscriptCheck.Assess(result, probability) is var doubt and not TranscriptDoubt.None)
             {
                 var sw = Stopwatch.StartNew();
                 var (hindi, hindiProbability) = await DecodeAsync(engine.Hindi(samples.Length), samples, ct);
@@ -515,6 +645,8 @@ internal sealed class WhisperService : IDisposable
             _engine = null;
             _songFactory?.Dispose();
             _songFactory = null;
+            _hinglish?.Dispose();
+            _hinglish = null;
         }
         finally
         {
@@ -536,8 +668,12 @@ internal sealed class WhisperService : IDisposable
 
         public string CurrentPrompt => _prompt;
 
-        public Engine(WhisperService owner, VoiceModel model, WhisperFactory factory, int gpu)
+        // false for the Hinglish model: no app prompt, and always decoded as "en".
+        readonly bool _primed;
+
+        public Engine(WhisperService owner, VoiceModel model, WhisperFactory factory, int gpu, bool primed = true)
         {
+            _primed = primed;
             _owner = owner;
             _model = model;
             _factory = factory;
@@ -549,14 +685,17 @@ internal sealed class WhisperService : IDisposable
         /// <summary>Builds (and runs once) the processors a typical query will use, so the first one isn't slow.</summary>
         public void Warm()
         {
-            _prompt = _owner.Prompt();
+            _prompt = _primed ? _owner.Prompt() : "";
             var silence = new float[MicRecorder.SampleRate * 2];
             Run(For(silence.Length), silence);
             // On a GPU the retry's window size is set up now, not on the first Hinglish sentence.
-            if (_gpu >= 0 && _owner.Language == "en") Run(Hindi(silence.Length), silence);
+            if (_primed && _gpu >= 0 && _owner.Language == "en") Run(Hindi(silence.Length), silence);
         }
 
-        public WhisperProcessor For(int sampleCount) => Get(sampleCount, _byContext, _prompt);
+        public bool OnGpu => _gpu >= 0;
+        public VoiceModel Model => _model;
+
+        public WhisperProcessor For(int sampleCount) => Get(sampleCount, _byContext, _prompt.Length > 0 ? _prompt : null);
 
         /// <summary>Same settings without the prompt; made only when a transcript echoed the prompt.</summary>
         public WhisperProcessor Unprimed(int sampleCount) => Get(sampleCount, _unprimed, null);
@@ -576,7 +715,7 @@ internal sealed class WhisperService : IDisposable
             else if (hindi && sampleCount <= MicRecorder.SampleRate * 14) context = 768;
             if (cache.TryGetValue(context, out var p)) return p;
             var builder = _factory.CreateBuilder()
-                .WithLanguage(hindi ? "hi" : _owner.Language)
+                .WithLanguage(hindi ? "hi" : _primed ? _owner.Language : "en")
                 .WithThreads(_owner._threads)
                 .WithNoContext()
                 .WithSingleSegment()
@@ -594,7 +733,7 @@ internal sealed class WhisperService : IDisposable
             _byContext.Clear();
             _unprimed.Clear();
             _hindi.Clear();
-            _prompt = _owner.Prompt();
+            _prompt = _primed ? _owner.Prompt() : "";
         }
 
         public void Dispose()

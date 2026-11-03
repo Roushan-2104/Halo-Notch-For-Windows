@@ -182,6 +182,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - **Updates are automatic.** Shammy downloads new versions in the background, usually just a few MB, and the notch offers *Update ready · click to restart*. If you ignore it, the update installs when Shammy next quits.
 - **No installer?** `Shammy-Portable.zip` runs from any folder and updates itself the same way.
 - **First launch:** Shammy downloads a small offline voice model (~148 MB) so you can talk within a minute. Typing and circling work meanwhile. It then checks your PC once and quietly fetches a sharper model in the background: about 574 MB on a PC with a usable graphics card, or 488 MB otherwise. The notch says *Voice upgraded* when it switches.
+- **Hinglish voice (optional):** on a PC with a graphics card, tick *Hinglish voice (Hindi + English)* in the tray menu to switch to a model that understands Hindi mixed with English, like "kal subah 7 baje ka alarm laga do" (a one-time 574 MB download). It writes Hindi in Latin letters, and anything it isn't sure about is checked against the regular English model. It's off by default, and greyed out on PCs that run voice on the processor, where it would be too slow.
 
 <details>
 <summary><b>Requirements and first-run notes</b></summary>
@@ -297,5 +298,7 @@ Each feature is a module in `src/Shammy.App/Modules/`; its README explains how t
 </details>
 
 ## License
+
+Third-party models and libraries are credited in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 [MIT](LICENSE) © Roushan

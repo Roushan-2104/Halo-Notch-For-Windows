@@ -13,7 +13,8 @@ internal sealed class TrayIcon : IDisposable
     readonly Icon _image;
 
     public TrayIcon(AppSettings settings, Action onQuit, Action<bool> onReplaceVolumeChanged, Action<bool> onVisualizerChanged,
-        Action onPlacementChanged, Action onVoiceLanguageChanged, Action onNotificationSettingsChanged,
+        Action onPlacementChanged, Action onVoiceLanguageChanged, Func<bool> hinglishAvailable, Action onVoiceModeChanged,
+        Action onNotificationSettingsChanged,
         IReadOnlyList<Modules.ModuleTrayItem> moduleItems, UpdateService updates, Action onRestartForUpdate)
     {
         _image = DrawIcon();
@@ -68,6 +69,25 @@ internal sealed class TrayIcon : IDisposable
             onVoiceLanguageChanged();
         };
 
+        // Opt-in Hinglish model. Graphics-card PCs only: on the CPU it would take several seconds per command.
+        const string HinglishText = "Hinglish voice (Hindi + English)";
+        var hinglish = new ToolStripMenuItem(HinglishText) { Checked = settings.VoiceMode == AppSettings.HinglishVoice, CheckOnClick = true };
+        menu.Opening += (_, _) =>
+        {
+            bool available = hinglishAvailable() || hinglish.Checked;
+            hinglish.Enabled = available;
+            hinglish.Text = available ? HinglishText : HinglishText + " - needs a graphics card";
+            hinglish.ToolTipText = available
+                ? "A voice model that understands Hindi mixed with English (one-time 574 MB download)"
+                : "This PC runs voice on the processor, where the Hinglish model would be too slow";
+        };
+        hinglish.CheckedChanged += (_, _) =>
+        {
+            settings.VoiceMode = hinglish.Checked ? AppSettings.HinglishVoice : AppSettings.EnglishVoice;
+            settings.Save();
+            onVoiceModeChanged();
+        };
+
         var notifications = new ToolStripMenuItem("Show notifications in the notch") { Checked = settings.ShowNotifications, CheckOnClick = true };
         notifications.CheckedChanged += (_, _) =>
         {
@@ -92,6 +112,7 @@ internal sealed class TrayIcon : IDisposable
         menu.Items.Add(startup);
         menu.Items.Add(pin);
         menu.Items.Add(autoLang);
+        menu.Items.Add(hinglish);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(notifications);
         menu.Items.Add(windowsPopups);

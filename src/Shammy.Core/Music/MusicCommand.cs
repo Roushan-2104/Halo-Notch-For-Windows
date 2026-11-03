@@ -19,6 +19,9 @@ public static class MusicCommand
         ["pause"] = MusicAction.Pause,
         ["pause music"] = MusicAction.Pause,
         ["pause the music"] = MusicAction.Pause,
+        // How the Hinglish voice model hears "pause the music".
+        ["post the music"] = MusicAction.Pause,
+        ["pose the music"] = MusicAction.Pause,
         ["pause song"] = MusicAction.Pause,
         ["pause the song"] = MusicAction.Pause,
         ["stop music"] = MusicAction.Pause,
@@ -53,12 +56,15 @@ public static class MusicCommand
         ["show me the lyrics"] = MusicAction.ShowLyrics,
     };
 
-    static readonly Regex Play = new(@"^(?:play|put\s+on|bajao|sunao)\s+(?<q>.+)$", Opts);
+    // "bajao", "baja do", and the Hinglish model's "baajao" / "bhaajao" / "sunaao".
+    const string HindiPlayVerb = @"bh?a+ja+(?:o+|u|ao|do|\s+do+n?)|su+na+(?:o|do|\s+do+n?)|play\s+kar(?:o|do|\s+do+n?|iye|ijiye|en)?";
+
+    static readonly Regex Play = new(@"^(?:play|put\s+on|bh?a+ja+o|su+na+o)\s+(?<q>.+)$", Opts);
 
     // Hindi puts the verb last: "kesariya bajao", "tum hi ho spotify pe bajao", "arijit ke gaane play karo".
     // Not "chalao" or "laga do": those also start videos and apps ("youtube chalao") and set timers.
     static readonly Regex PlayLast = new(@"^(?<q>.+?)\s+(?:(?:gaana|gana|song)\s+)?" +
-        @"(?:baja(?:o|u|ao|aao|do|\s+do)|suna(?:o|do|\s+do)|play\s+kar(?:o|do|\s+do|iye|ijiye|en)?)$", Opts);
+        @"(?:" + HindiPlayVerb + @")$", Opts);
 
     // "gaana bajao" / "koi song sunao": no song named, so nothing to search for.
     static readonly Regex NoSongNamed = new(@"^(?:koi|ek|(?:koi\s+|ek\s+)?(?:achha\s+|accha\s+)?(?:gaana|gana|gaane|gane|song|songs|music))$", Opts);
@@ -118,7 +124,7 @@ public static class MusicCommand
     static readonly Regex LeadVerb = new(@"^\W*(?:please\s+)?(?:(?:play|plays|put\s+on|bajao|sunao)\b|" +
         @"play(?!(?:er|ers|station|stations|list|lists|ground|grounds|ful|ing|ed|back|boy|off|offs|able|time|date|dates|house|wright|thing|things|mate|mates|book|books|store|room|set|pen)\b)(?=[a-z]))" +
         @"[\s.,!?:;-]*(?<rest>.*)$", Opts);
-    static readonly Regex TailVerb = new(@"\s(?:baja(?:o|u|ao|aao|do|\s+do)|suna(?:o|do|\s+do)|play\s+kar(?:o|do|\s+do|iye|ijiye|en)?)$", Opts);
+    static readonly Regex TailVerb = new(@"\s(?:" + HindiPlayVerb + @")$", Opts);
 
     /// <summary>
     /// True when the text sounds like asking for a song, even if the song itself came out garbled. Transport

@@ -35,6 +35,14 @@ internal sealed class AppSettings
     /// <summary>Whisper language: "en" is ~4x faster than "auto" (which detects the language per query).</summary>
     public string VoiceLanguage { get; set; } = "en";
 
+    public const string EnglishVoice = "english", HinglishVoice = "hinglish";
+
+    /// <summary>
+    /// "english" (default) or "hinglish": the opt-in Hinglish model (Hindi + English, written in Latin
+    /// letters), only on PCs whose voice runs on a graphics card.
+    /// </summary>
+    public string VoiceMode { get; set; } = EnglishVoice;
+
     /// <summary>The voice model this PC was matched to, e.g. "large-v3-turbo@1" (GPU 1) or "small" (CPU).</summary>
     public string? VoiceEngine { get; set; }
 
@@ -141,6 +149,7 @@ internal sealed class AppSettings
                 s.PinnedApps ??= new();
                 s.PinnedApps.RemoveAll(p => p is null || string.IsNullOrWhiteSpace(p.Launch));
                 if (string.IsNullOrWhiteSpace(s.VoiceLanguage)) s.VoiceLanguage = "en";
+                if (s.VoiceMode != HinglishVoice) s.VoiceMode = EnglishVoice;
                 return s;
             }
         }

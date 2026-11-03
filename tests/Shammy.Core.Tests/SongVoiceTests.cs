@@ -406,3 +406,105 @@ public class HinglishCommandTests
         Assert.Equal(new DateTime(2026, 3, 10, 18, 0, 0), evening.Due);
     }
 }
+
+/// <summary>The Hinglish voice model (Apex) spells romanized Hindi its own way: long vowels, digits, "06:30".</summary>
+public class ApexSpellingTests
+{
+    static readonly DateTime Now = new(2026, 3, 10, 15, 0, 0);
+
+    [Theory]
+    [InlineData("Kal subah 7 baaje ka alarm laga doon", 2026, 3, 11, 7, 0)]
+    [InlineData("Kal subah saat baaje ka alarm lagaadoo.", 2026, 3, 11, 7, 0)]
+    [InlineData("Kal subah saat baaje ka alarm lagaajoo.", 2026, 3, 11, 7, 0)]
+    [InlineData("Kal subah 06:30 baje ka alarm laga do", 2026, 3, 11, 6, 30)]
+    [InlineData("Wake me up at 06:30.", 2026, 3, 11, 6, 30)]
+    public void Alarms(string text, int y, int mo, int d, int h, int mi)
+    {
+        var c = ProductivityParser.Parse(text, Now);
+        Assert.NotNull(c);
+        Assert.Equal(ProductivityAction.Remind, c!.Action);
+        Assert.Equal("Alarm", c.Text);
+        Assert.Equal(new DateTime(y, mo, d, h, mi, 0), c.Due);
+    }
+
+    [Theory]
+    [InlineData("Das minute ka timer laga do.", 10)]
+    [InlineData("10 minute ka timer lagaa do", 10)]
+    [InlineData("Paanch minute ka timer laga do.", 5)]
+    [InlineData("Das minute ka timer lagaajoo.", 10)]
+    public void Timers(string text, int minutes)
+    {
+        var c = ProductivityParser.Parse(text.TrimEnd('.'), Now);
+        Assert.NotNull(c);
+        Assert.Equal(ProductivityAction.StartTimer, c!.Action);
+        Assert.Equal(TimeSpan.FromMinutes(minutes), c.Duration);
+    }
+
+    [Theory]
+    [InlineData("Kal subah nau baaje yaad dilna ki doctor ko call karna.")]
+    [InlineData("Kal subah nau baaje yaad dilaana ki doctor ko call karna")]
+    public void Reminders(string text)
+    {
+        var c = ProductivityParser.Parse(text, Now);
+        Assert.NotNull(c);
+        Assert.Equal(ProductivityAction.Remind, c!.Action);
+        Assert.Equal(new DateTime(2026, 3, 11, 9, 0, 0), c.Due);
+        Assert.Equal("Doctor ko call karna", c.Text);
+    }
+
+    [Theory]
+    [InlineData("Kesriya baajao.", "Kesriya")]
+    [InlineData("Kesriya bhaajao.", "Kesriya")]
+    [InlineData("Tum hi ho sunaao", "Tum hi ho")]
+    [InlineData("baajao pasoori", "pasoori")]
+    public void Play_verbs(string text, string query)
+    {
+        var intent = MusicCommand.Parse(text);
+        Assert.NotNull(intent);
+        Assert.Equal(MusicAction.PlayYouTubeMusic, intent!.Action);
+        Assert.Equal(query, intent.Query);
+    }
+
+    [Theory]
+    [InlineData("Post the music.")]
+    [InlineData("Pose the music")]
+    public void Misheard_pause(string text) => Assert.Equal(MusicAction.Pause, MusicCommand.Parse(text)!.Action);
+
+    [Theory]
+    [InlineData("Mujhe 50000 ke andar ek achchha laptop batao")]
+    [InlineData("Mujhe pachaas hazaar ke under ek achchha laptop baantao.")]
+    [InlineData("Aaj moesam kaaza hai?")]
+    public void Questions_stay_searches(string text)
+    {
+        Assert.Null(ProductivityParser.Parse(text, Now));
+        Assert.Null(MusicCommand.Parse(text));
+    }
+
+    [Theory]
+    [InlineData("nan", TranscriptDoubt.Hallucination)]
+    [InlineData("NaN.", TranscriptDoubt.Hallucination)]
+    [InlineData("...", TranscriptDoubt.Hallucination)]
+    [InlineData(",aar.", TranscriptDoubt.Hallucination)]
+    [InlineData("ok", TranscriptDoubt.Hallucination)]
+    [InlineData("Kesriya bhaajao. вступ", TranscriptDoubt.Hallucination)]
+    [InlineData("Play kesariya 好", TranscriptDoubt.Hallucination)]
+    [InlineData("Play kesariya شكرا", TranscriptDoubt.Hallucination)]
+    public void Apex_junk_is_caught(string text, TranscriptDoubt expected) => Assert.Equal(expected, TranscriptCheck.AssessHinglish(text, 0.9f));
+
+    [Theory]
+    [InlineData("Kal subah saat baaje ka alarm lagaadoo.", 0.86f, TranscriptDoubt.None)]
+    [InlineData("Turn on Bluetooth.", 0.71f, TranscriptDoubt.None)]
+    [InlineData("कल सुबह सात बजे", 0.8f, TranscriptDoubt.None)]
+    [InlineData("Play channa mirea.", 0.56f, TranscriptDoubt.LowConfidence)]
+    [InlineData("Next", 0.9f, TranscriptDoubt.None)]
+    public void Apex_good_output_passes(string text, float p, TranscriptDoubt expected) => Assert.Equal(expected, TranscriptCheck.AssessHinglish(text, p));
+
+    [Fact]
+    public void English_rerun_wins_only_when_better()
+    {
+        Assert.True(TranscriptCheck.PreferEnglishRerun(TranscriptDoubt.Hallucination, 0.9f, "Kessria Bajau.", 0.5f));
+        Assert.False(TranscriptCheck.PreferEnglishRerun(TranscriptDoubt.Hallucination, 0.9f, "nan", 0.9f));
+        Assert.True(TranscriptCheck.PreferEnglishRerun(TranscriptDoubt.LowConfidence, 0.56f, "Play Chan-na-mi-reya.", 0.64f));
+        Assert.False(TranscriptCheck.PreferEnglishRerun(TranscriptDoubt.LowConfidence, 0.58f, "Play something", 0.5f));
+    }
+}
