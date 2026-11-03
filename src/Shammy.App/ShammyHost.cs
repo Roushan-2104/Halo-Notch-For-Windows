@@ -239,6 +239,8 @@ internal sealed class ShammyHost : IDisposable
         // Typing in an open detail: "v2-type-focus" acts like a click into its first text box; "v2-typing" reports.
         _modules.PipeCommands["v2-type-focus"] = _ => _notch.FocusFirstInputForTest();
         _modules.PipeCommands["v2-typing"] = _ => _notch.DescribeTyping();
+        // The command confirmation on screen and what its Copy button would copy ("search 5 ft in cm", then this).
+        _modules.PipeCommands["answer-state"] = _ => $"mode={_notch.Mode} {_notch.AnswerView.Describe()} result={_notch.ResultView.CurrentUrl?.Host ?? "-"}";
         NotchSound.Enabled = _settings.NotchSounds;
         _modules.TrayItems.Add(new Modules.ModuleTrayItem("Notch sounds (ping and chime)", null, () => _settings.NotchSounds, on =>
         {

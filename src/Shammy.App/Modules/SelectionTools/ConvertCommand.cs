@@ -2,8 +2,8 @@ using Shammy.Core.Conversions;
 
 namespace Shammy.Modules.SelectionTools;
 
-/// <summary>What a conversion produced, plus a page to open (translations), kept apart so the test pipe can dry-run.</summary>
-internal sealed record ConvertOutcome(CommandResult Result, string? OpenUrl = null);
+/// <summary>What a conversion produced, plus a page to open (translations) and what it's about, kept apart so the test pipe can dry-run.</summary>
+internal sealed record ConvertOutcome(CommandResult Result, string? OpenUrl = null, string? OpenQuery = null);
 
 /// <summary>
 /// Typed or spoken conversions: units ("5 ft in cm"), money ("100 usd to inr"), time zones ("5pm ist in pst",
@@ -27,8 +27,8 @@ internal sealed class ConvertCommand : ITextCommand, ICommandPreview
     {
         var outcome = await EvaluateAsync(text);
         if (outcome is null) return new CommandResult(Glyphs.Error, "Couldn't convert that", text, IsError: true);
-        // A command can't open the results card, so translations go to the browser.
-        if (outcome.OpenUrl is not null) _ctx.Open(outcome.OpenUrl);
+        // Translations open in the notch's results card, as the Translate chip does (not the browser).
+        if (outcome.OpenUrl is { } url) return outcome.Result with { OpenInResults = new ResultsPage(new Uri(url), outcome.OpenQuery ?? text) };
         return outcome.Result;
     }
 
@@ -86,7 +86,7 @@ internal sealed class ConvertCommand : ITextCommand, ICommandPreview
                 try
                 {
                     var answer = WorldClock.Answer(time, DateTime.UtcNow, TimeZoneInfo.Local);
-                    return new ConvertOutcome(new CommandResult(Glyphs.Clock, answer.Title, answer.Detail));
+                    return new ConvertOutcome(new CommandResult(Glyphs.Clock, answer.Title, answer.Detail) { CopyText = answer.Title });
                 }
                 catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException)
                 {
@@ -96,10 +96,10 @@ internal sealed class ConvertCommand : ITextCommand, ICommandPreview
             case CurrencyQuery money:
                 return new ConvertOutcome(await ConvertMoneyAsync(money).ConfigureAwait(false));
             case UnitConversion units:
-                return new ConvertOutcome(new CommandResult(Glyphs.Measure, units.Title, units.Detail));
+                return new ConvertOutcome(new CommandResult(Glyphs.Measure, units.Title, units.Detail) { CopyText = units.Title });
             case TranslateRequest translate:
                 return new ConvertOutcome(new CommandResult(Glyphs.Translate, "Translating\u2026", translate.Language),
-                    Translation.BuildUrl(translate.Text, translate.LanguageCode).AbsoluteUri);
+                    Translation.BuildUrl(translate.Text, translate.LanguageCode).AbsoluteUri, translate.Text);
             default:
                 return null;
         }
@@ -112,7 +112,8 @@ internal sealed class ConvertCommand : ITextCommand, ICommandPreview
         if (!Currency.TryConvert(q.From.Amount, q.From.Code, q.To, table.Rates, out var value)
             || !Currency.TryConvert(1, q.From.Code, q.To, table.Rates, out var rate))
             return new CommandResult(Glyphs.Error, $"No rate for {q.From.Code} to {q.To}", null, IsError: true);
-        return new CommandResult(Glyphs.Money, Currency.Format(value, q.To),
-            $"{Currency.Format(q.From.Amount, q.From.Code)} \u00B7 1 {q.From.Code} = {Currency.Format(rate, q.To)}");
+        var shown = Currency.Format(value, q.To);
+        return new CommandResult(Glyphs.Money, shown,
+            $"{Currency.Format(q.From.Amount, q.From.Code)} \u00B7 1 {q.From.Code} = {Currency.Format(rate, q.To)}") { CopyText = shown };
     }
 }

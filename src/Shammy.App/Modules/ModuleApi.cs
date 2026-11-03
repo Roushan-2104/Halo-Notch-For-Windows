@@ -53,7 +53,17 @@ internal sealed record CommandPreview(string Glyph, string Title, string? Detail
 /// that text is searched on the web instead: for a command that only learns while running that it can't answer
 /// ("weather in" a place the geocoder doesn't know).
 /// </summary>
-internal sealed record CommandResult(string Glyph, string Title, string? Detail = null, bool IsError = false, string? SearchInstead = null);
+internal sealed record CommandResult(string Glyph, string Title, string? Detail = null, bool IsError = false, string? SearchInstead = null)
+{
+    /// <summary>What the confirmation's Copy button copies (a converted amount, a time); null = no Copy button.</summary>
+    public string? CopyText { get; init; }
+
+    /// <summary>A page to show in the results card instead of the confirmation (a translation), like a search would.</summary>
+    public ResultsPage? OpenInResults { get; init; }
+}
+
+/// <param name="Query">What the results card's header shows (and its Translate chip works on).</param>
+internal sealed record ResultsPage(Uri Url, string Query);
 
 /// <summary>
 /// Content a module draws in the compact notch's two ears. Put an instance in

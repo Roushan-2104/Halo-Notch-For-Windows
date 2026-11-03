@@ -7,6 +7,7 @@ namespace Shammy.Views;
 public partial class AnswerView : UserControl
 {
     string _query = "";
+    string? _copyText;
 
     public AnswerView() => InitializeComponent();
 
@@ -22,6 +23,8 @@ public partial class AnswerView : UserControl
         Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
         CopyButton.Content = "";
         GlyphOrb.Visibility = Visibility.Collapsed;
+        _copyText = null;
+        SearchWebButton.Visibility = Visibility.Visible;
         Actions.Visibility = Visibility.Visible;
     }
 
@@ -36,14 +39,21 @@ public partial class AnswerView : UserControl
         Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
         Expression.Text = r.Detail ?? "";
         Expression.Visibility = string.IsNullOrEmpty(r.Detail) ? Visibility.Collapsed : Visibility.Visible;
-        Actions.Visibility = Visibility.Collapsed;
+        // An answer worth pasting (a converted amount, a time elsewhere) gets the Copy button; the rest need none.
+        _copyText = r.CopyText;
+        CopyButton.Content = "";
+        SearchWebButton.Visibility = Visibility.Collapsed;
+        Actions.Visibility = r.CopyText is null ? Visibility.Collapsed : Visibility.Visible;
     }
+
+    /// <summary>For the test pipe: the shown answer and whether it offers Copy.</summary>
+    internal string Describe() => $"title={Result.Text} copy={(Actions.Visibility == Visibility.Visible && CopyButton.IsVisible ? _copyText ?? Result.Text : "-")}";
 
     void OnCopy(object sender, RoutedEventArgs e)
     {
         try
         {
-            Clipboard.SetText(Result.Text.Replace(",", ""));
+            Clipboard.SetText(_copyText ?? Result.Text.Replace(",", ""));
             CopyButton.Content = "";
         }
         catch (System.Runtime.InteropServices.ExternalException)

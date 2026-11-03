@@ -46,6 +46,9 @@ internal sealed class SearchCoordinator
     sealed record Context(string Query, string DisplayQuery, SearchMode Mode, SearchFilter Filters, byte[]? Png, BitmapSource? Thumb)
     {
         public Modules.SelectionInfo? Selection { get; init; }
+
+        /// <summary>A page to show instead of a search (a command's translation); a mode or filter chip searches as usual.</summary>
+        public Uri? Page { get; init; }
     }
 
     public SearchCoordinator(NotchWindow notch, GlobalKeys keys, WhisperService whisper, AppSettings settings, Modules.ModuleRegistry modules)
@@ -91,13 +94,13 @@ internal sealed class SearchCoordinator
                 notch.ResultView.SetModeChips(_ctx.Mode);
                 return;
             }
-            _ctx = _ctx with { Mode = mode };
+            _ctx = _ctx with { Mode = mode, Page = null };
             _ = NavigateAsync(_ctx);
         };
         notch.ResultView.FiltersChanged += filters =>
         {
             if (_ctx is null) return;
-            _ctx = _ctx with { Filters = filters, Mode = _ctx.Mode == SearchMode.Lens ? _settings.DefaultSearchMode : _ctx.Mode };
+            _ctx = _ctx with { Filters = filters, Mode = _ctx.Mode == SearchMode.Lens ? _settings.DefaultSearchMode : _ctx.Mode, Page = null };
             _ = NavigateAsync(_ctx);
         };
         notch.AnswerView.SearchWebRequested += query => _ = ShowResultAsync(new Context(query, query, _settings.DefaultSearchMode, SearchFilter.None, null, null));
@@ -409,6 +412,9 @@ internal sealed class SearchCoordinator
         if (session != _session) return true;
         // The command found out it can't answer after all (an unknown place): search as if it never claimed the text.
         if (result.SearchInstead is { Length: > 0 } search) await SearchWebAsync(search);
+        // A translation opens in the results card, the way the Translate chip shows it.
+        else if (result.OpenInResults is { } page)
+            await ShowResultAsync(new Context(page.Query, page.Query, _settings.DefaultSearchMode, SearchFilter.None, null, null) { Page = page.Url });
         else ShowCommandResult(result);
         return true;
     }
@@ -433,7 +439,8 @@ internal sealed class SearchCoordinator
         _notch.SetSearchMode(NotchMode.Answer);
         Log.Info($"Command result ({(result.IsError ? "error" : "ok")})");
         int session = _session;
-        _ = Task.Delay(result.IsError ? 4000 : 2600).ContinueWith(_ =>
+        // An answer with a Copy button stays long enough to reach it.
+        _ = Task.Delay(result.IsError ? 4000 : result.CopyText is not null ? 5000 : 2600).ContinueWith(_ =>
         {
             if (session == _session) Cancel();
         }, TaskScheduler.FromCurrentSynchronizationContext());
@@ -500,6 +507,7 @@ internal sealed class SearchCoordinator
 
     Task NavigateAsync(Context ctx)
     {
+        if (ctx.Page is { } page) return _notch.ResultView.NavigateAsync(page);
         if (ctx.Mode == SearchMode.Lens && ctx.Png is not null) return _notch.ResultView.NavigateLensAsync(ctx.Png);
         var mode = ctx.Mode == SearchMode.Lens ? SearchMode.Ai : ctx.Mode;
         var q = ctx.Query.Length > 0 ? ctx.Query : ctx.DisplayQuery;
