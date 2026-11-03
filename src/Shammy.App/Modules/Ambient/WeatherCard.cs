@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Shammy.Core.Ambient;
 using Shammy.Core.Cards;
+using Shammy.Views;
 using Shammy.Views.Cards;
 
 namespace Shammy.Modules.Ambient;
@@ -21,7 +22,7 @@ internal sealed class WeatherCard
     const int MiniHours = 6, ChartHours = 12, DaysShown = 5;
 
     readonly WallTile _tile = new();
-    readonly Tracked _temp = CardKit.Poster("", 34), _cityRest = CardKit.Label("");
+    readonly TrackedText _temp = CardKit.Poster("", 34), _cityRest = CardKit.Label("");
     readonly TextBlock _city, _condition;
     readonly UniformGrid _mini = new() { Rows = 1, Columns = MiniHours, Height = 28 };
     readonly TextBlock _status = CardKit.Text("Finding the weather…", 12, FontWeights.Medium);
@@ -183,7 +184,8 @@ internal sealed class WeatherCard
             };
             var slot = new Grid { Height = maxBar, Margin = new Thickness(0, 4, 0, 4) };
             slot.Children.Add(bar);
-            var label = CardKit.Text(points[i].Label, 11, FontWeights.Medium, secondary: true);
+            var label = CardKit.Text(points[i].Label, 11, points[i].IsNow ? FontWeights.Bold : FontWeights.Medium, secondary: !points[i].IsNow);
+            label.TextTrimming = TextTrimming.None;
             label.HorizontalAlignment = HorizontalAlignment.Center;
             var column = CardKit.Column(0, temp, slot, label);
             column.Margin = new Thickness(3.5, 0, 3.5, 0);

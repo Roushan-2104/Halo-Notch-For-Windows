@@ -23,7 +23,7 @@ internal sealed class PeekView : Grid
     readonly ShammyServices _services;
     readonly GlanceFeed _feed;
     readonly Border _swatch;
-    readonly Tracked _kicker;
+    readonly TrackedText _kicker;
     readonly TextBlock _title, _line;
     readonly ContentControl _primary = new() { Focusable = false, VerticalAlignment = VerticalAlignment.Center };
     string _primaryText = "-", _cardId = "-";
@@ -79,7 +79,14 @@ internal sealed class PeekView : Grid
     public string Describe() =>
         $"card={_cardId} kicker={_kicker.Text} title={_title.Text} subtitle={_line.Text} pill={_primaryText}";
 
-    ExpandedView? Wall => Window.GetWindow(this) is Shell.NotchWindow w ? w.ExpandedView : null;
+    /// <summary>The open notch whose focused tile this shows (found through the window when not set).</summary>
+    internal ExpandedView? Wall
+    {
+        get => _wall ?? (Window.GetWindow(this) is Shell.NotchWindow w ? w.ExpandedView : null);
+        set => _wall = value;
+    }
+
+    ExpandedView? _wall;
 
     /// <summary>Fresh content each time the peek opens (and when the song changes while it's open).</summary>
     public void Refresh()

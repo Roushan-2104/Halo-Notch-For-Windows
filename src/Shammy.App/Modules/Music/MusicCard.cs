@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Shammy.Core.Cards;
 using Shammy.Core.Music;
+using Shammy.Infrastructure;
 using Shammy.Playback;
 using Shammy.Views;
 using Shammy.Views.Cards;
@@ -23,7 +24,7 @@ internal sealed class MusicCard
 
     // Tile parts, built once and updated in place.
     readonly WallTile _tile = new();
-    readonly Tracked _state = CardKit.Label("Now playing", null, 10), _poster = CardKit.Poster("", 24);
+    readonly TrackedText _state = CardKit.Label("Now playing", null, 10), _poster = CardKit.Poster("", 24);
     readonly TextBlock _title, _artist;
     readonly TextBlock _elapsed = CardKit.Text("0:00", 10.5, FontWeights.Medium), _total = CardKit.Text("0:00", 10.5, FontWeights.Medium);
     readonly CardTrack _scrub = new() { TrackHeight = 3, KnobSize = 0, Interactive = false, Track = CardKit.Hex("#40F5F5F7") };
@@ -153,14 +154,14 @@ internal sealed class MusicCard
     sealed class Detail
     {
         readonly MusicCard _card;
-        readonly Tracked _poster = CardKit.Poster("", 44), _sub = CardKit.Label("");
+        readonly TrackedText _poster = CardKit.Poster("", 44), _sub = CardKit.Label("");
         readonly TextBlock _elapsed = CardKit.Text("", 12, FontWeights.Medium, secondary: true), _left = CardKit.Text("", 12, FontWeights.Medium, secondary: true);
         readonly CardTrack _scrub = new() { TrackHeight = 4, KnobSize = 10 };
         readonly CardTrack _volume = new() { TrackHeight = 4, KnobSize = 0 };
         readonly Grid _timeline = new();
         readonly ContentControl _playSlot = new() { Focusable = false };
         readonly Border _lyricsHost = new();
-        readonly Tracked _synced = CardKit.Label("Synced", CardKit.Ink2, 10);
+        readonly TrackedText _synced = CardKit.Label("Synced", CardKit.Ink2, 10);
         bool _attached;
 
         public Detail(MusicCard card)

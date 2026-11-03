@@ -73,7 +73,11 @@ public partial class ExpandedView
     /// </summary>
     internal NotchCard? PeekCard()
     {
-        if (_openId is null) RebuildRail(animate: false);
+        if (_openId is null)
+        {
+            if (!IsVisible) _focusedId = null;
+            RebuildRail(animate: false);
+        }
         return FocusedCard;
     }
 

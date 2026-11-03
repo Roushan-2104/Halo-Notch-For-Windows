@@ -6,6 +6,7 @@ using System.Windows.Media;
 using Shammy.Core.Cards;
 using Shammy.Core.MeetingSystem;
 using Shammy.SystemInfo;
+using Shammy.Views;
 using Shammy.Views.Cards;
 
 namespace Shammy.Modules.MeetingSystem;
@@ -30,7 +31,7 @@ internal sealed class SystemCard
 {
     readonly WallTile _tile = new();
     readonly Grid _meters = new() { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(14, 0, 0, WallTile.Pad) };
-    readonly Tracked _big = CardKit.Poster("", 28), _restLabel = CardKit.Label("Battery");
+    readonly TrackedText _big = CardKit.Poster("", 28), _restLabel = CardKit.Label("Battery");
     readonly TextBlock _litTitle, _litLine;
 
     SystemCardData? _data;
@@ -43,6 +44,8 @@ internal sealed class SystemCard
         _tile.Art.Children.Add(_meters);
         _big.HorizontalAlignment = HorizontalAlignment.Right;
         _tile.Art.Children.Add(CardKit.At(_big, HorizontalAlignment.Right, VerticalAlignment.Bottom, 0, 0, WallTile.Pad, WallTile.Pad + 20));
+        // Focused, the poster steps up to make room for the two lines under it.
+        _tile.FocusChanged += on => _big.Margin = new Thickness(0, 0, WallTile.Pad, WallTile.Pad + (on ? 36 : 20));
         _restLabel.HorizontalAlignment = HorizontalAlignment.Right;
         _tile.Rest.Children.Add(CardKit.At(_restLabel, HorizontalAlignment.Right, VerticalAlignment.Bottom, 0, 0, WallTile.Pad, WallTile.Pad));
         var words = WallTile.Words("", "", out _litTitle, out _litLine);
@@ -161,7 +164,7 @@ internal sealed class SystemCard
     sealed class Detail
     {
         readonly Grid _meters = new() { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(24, 0, 0, 20) };
-        readonly Tracked _big = CardKit.Poster("", 52), _bigLabel = CardKit.Label("Battery");
+        readonly TrackedText _big = CardKit.Poster("", 52), _bigLabel = CardKit.Label("Battery");
         readonly UniformGrid _rings = new() { Columns = 2, VerticalAlignment = VerticalAlignment.Top };
 
         public Detail()

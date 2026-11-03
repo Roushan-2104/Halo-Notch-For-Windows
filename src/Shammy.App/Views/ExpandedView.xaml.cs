@@ -35,7 +35,7 @@ public partial class ExpandedView : UserControl
     readonly Dictionary<UIElement, ChipSpec> _chipIds = new();
     RadioButton? _moreChip;
     IReadOnlyList<ChipSpec> _chips = Array.Empty<ChipSpec>();
-    Tracked? _shelfCount;
+    TrackedText? _shelfCount;
     string? _openId;
     int _alertsNewAtOpen;
 
@@ -58,7 +58,12 @@ public partial class ExpandedView : UserControl
             ClearTabHover();
             DisarmHover();
             Refresh();
-            if (_openId is null) RebuildRail(animate: false);
+            // Each open starts on the most live tile (relevance and liveness changed while it was closed).
+            if (_openId is null)
+            {
+                _focusedId = null;
+                RebuildRail(animate: false);
+            }
         };
         PreviewKeyDown += OnKey;
         // The hover-opened notch never takes focus, so a click into a text box (Notes' add box, the clipboard
@@ -389,7 +394,7 @@ public partial class ExpandedView : UserControl
         {
             var chip = new RadioButton
             {
-                Style = (Style)FindResource("WallChip"),
+                Style = (Style)FindResource("NotchChip"),
                 GroupName = "WallChips",
                 Content = ChipContent(spec),
             };
@@ -419,13 +424,17 @@ public partial class ExpandedView : UserControl
         return CardKit.Row(0, label, _shelfCount);
     }
 
-    static Tracked ChipLabel(string text)
+    static TrackedText ChipLabel(string text)
     {
         var t = CardKit.Label(text, null, 11);
         t.FontWeight = FontWeights.SemiBold;
+        t.FontFamily = CardKit.Face(FontWeights.SemiBold);
         t.Tracking = 0.1;
         // Follow the chip's foreground (grey, white when hovered or open).
-        t.ClearValue(Tracked.ForegroundProperty);
+        t.SetBinding(TrackedText.ForegroundProperty, new System.Windows.Data.Binding(nameof(Foreground))
+        {
+            RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(RadioButton), 1),
+        });
         return t;
     }
 
@@ -434,7 +443,7 @@ public partial class ExpandedView : UserControl
 
     RadioButton CreateMoreChip()
     {
-        var more = new RadioButton { Style = (Style)FindResource("WallChip"), GroupName = "WallMore", Content = ChipLabel("More"), ToolTip = "More views" };
+        var more = new RadioButton { Style = (Style)FindResource("NotchChip"), GroupName = "WallMore", Content = ChipLabel("More"), ToolTip = "More views" };
         System.Windows.Automation.AutomationProperties.SetName(more, "More views");
         more.Click += (_, _) => ShowMoreMenu(more);
         TabHover.Track(more);

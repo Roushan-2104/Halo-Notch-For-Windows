@@ -52,59 +52,67 @@ internal static class CardKit
 
     // ---- Type ------------------------------------------------------------------------------------
 
-    /// <summary>Schibsted Grotesk; its five embedded weights share one family, so FontWeight picks the cut.</summary>
+    /// <summary>Schibsted Grotesk at Regular/Bold. Medium, SemiBold and ExtraBold are their own embedded families:
+    /// use <see cref="Face"/> (asking this family for SemiBold renders Regular).</summary>
     public static FontFamily Font => (FontFamily)Application.Current.Resources["WallFont"];
+
+    /// <summary>The embedded cut for a weight (see <see cref="WallParts.Family"/>).</summary>
+    public static FontFamily Face(FontWeight weight) => WallParts.Family(weight);
 
     static FontFamily IconFont => (FontFamily)Application.Current.Resources["IconFont"];
 
-    /// <summary>Body text: white, or the secondary grey (≥ 4.5:1 on tiles), tabular figures.</summary>
-    public static TextBlock Text(string text, double size, FontWeight weight, bool secondary = false)
+    /// <summary>
+    /// Body text: white, or the secondary grey (≥ 4.5:1 on tiles). Proportional figures (this face's tabular set
+    /// widens ":" and "."); live numbers that tick use <see cref="Big"/>, which keeps only the digits even.
+    /// </summary>
+    public static TextBlock Text(string text, double size, FontWeight weight, bool secondary = false) => new()
     {
-        var t = new TextBlock
-        {
-            Text = text,
-            FontFamily = Font,
-            FontSize = size,
-            FontWeight = weight,
-            Foreground = secondary ? Ink2 : Ink,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
-        return t;
-    }
+        Text = text,
+        FontFamily = Face(weight),
+        FontSize = size,
+        FontWeight = weight,
+        Foreground = secondary ? Ink2 : Ink,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>A run inside a mixed TextBlock, on the right cut for its weight.</summary>
+    public static System.Windows.Documents.Run Run(string text, FontWeight weight, Brush brush) =>
+        new(text) { FontFamily = Face(weight), FontWeight = weight, Foreground = brush };
 
     /// <summary>The small tracked uppercase label (11 px Bold, +0.12 em), white unless given a brush.</summary>
-    public static Tracked Label(string text, Brush? brush = null, double size = 11) => new()
+    public static TrackedText Label(string text, Brush? brush = null, double size = 11) => new()
     {
         Text = text,
         Uppercase = true,
         FontSize = size,
+        FontFamily = Face(FontWeights.Bold),
         FontWeight = FontWeights.Bold,
         Tracking = 0.12,
-        LineFactor = 1.2,
+        LineFactor = 1.25,
         Foreground = brush ?? Ink,
-        VerticalAlignment = VerticalAlignment.Center,
     };
 
-    /// <summary>A poster: the big tight ExtraBold title or number (−0.035 em, line-height 0.9).</summary>
-    public static Tracked Poster(string text, double size) => new()
+    /// <summary>A poster: the big tight ExtraBold title or number (−0.035 em, line-height about 1), even digits.</summary>
+    public static TrackedText Poster(string text, double size) => new()
     {
         Text = text,
+        Uppercase = false,
         FontSize = size,
+        FontFamily = Face(FontWeights.ExtraBold),
         FontWeight = FontWeights.ExtraBold,
         Tracking = -0.035,
-        LineFactor = 0.98,
+        LineFactor = 1.0,
+        TabularDigits = true,
         Foreground = Ink,
-        VerticalAlignment = VerticalAlignment.Center,
     };
 
-    /// <summary>A big number that isn't a poster (ring centres, meters): ExtraBold, tight, tabular.</summary>
-    public static Tracked Big(string text, double size)
+    /// <summary>A big number that isn't a poster (ring centres, meters): ExtraBold, a little less tight.</summary>
+    public static TrackedText Big(string text, double size)
     {
         var t = Poster(text, size);
         t.Tracking = -0.02;
-        t.LineFactor = 1.1;
+        t.LineFactor = 1.15;
         return t;
     }
 

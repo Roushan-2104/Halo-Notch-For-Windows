@@ -223,7 +223,8 @@ public partial class ExpandedView
         var history = _s.Notifications.History;
         if (history.Count == 0)
         {
-            _alertRows.Children.Add(Empty(_s.Notifications.IsAvailable ? "All caught up" : _s.Notifications.Problem ?? "Notifications are starting…"));
+            // The line above already says why when notifications aren't available.
+            if (_s.Notifications.IsAvailable) _alertRows.Children.Add(Empty("All caught up"));
             return;
         }
         foreach (var n in history) _alertRows.Children.Add(AlertRow(n));
@@ -240,9 +241,9 @@ public partial class ExpandedView
             icon.Children.Add(img);
         }
         var text = new TextBlock { FontFamily = CardKit.Font, FontSize = 13.5, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-        text.Inlines.Add(new System.Windows.Documents.Run(n.ListTitle) { FontWeight = FontWeights.SemiBold, Foreground = CardKit.Ink });
+        text.Inlines.Add(CardKit.Run(n.ListTitle, FontWeights.SemiBold, CardKit.Ink));
         if (n.ListDetail.Length > 0)
-            text.Inlines.Add(new System.Windows.Documents.Run("  " + n.ListDetail) { FontWeight = FontWeights.Medium, Foreground = CardKit.Ink2 });
+            text.Inlines.Add(CardKit.Run("  " + n.ListDetail, FontWeights.Medium, CardKit.Ink2));
         var time = CardKit.Text(n.TimeText, 12, FontWeights.Medium, secondary: true);
         var dismiss = CardKit.Quiet("Dismiss", CardKit.Icon(CardKit.Paths.Close, CardKit.Ink, 10, 2.4), () => _s?.Notifications.History.Remove(n), 22);
         dismiss.Visibility = Visibility.Hidden;
@@ -277,7 +278,7 @@ public partial class ExpandedView
     // ---- Now playing (no music module) ----------------------------------------------------------
 
     WallTile? _npTile;
-    Tracked? _npState, _npPoster;
+    TrackedText? _npState, _npPoster;
     TextBlock? _npTitle, _npArtist;
     ContentControl? _npPlay;
 

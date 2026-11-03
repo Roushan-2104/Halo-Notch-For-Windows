@@ -10,7 +10,7 @@ namespace Shammy.Views.Cards;
 /// tight title, one metadata line and the card's controls. <see cref="Corner"/> holds a top-right primary
 /// control (Join); <see cref="Aside"/> a full-height right column (lyrics, the 5-day list).
 /// </summary>
-internal sealed class WallDetail : Grid
+internal class WallDetail : Grid
 {
     public const double W = 924, H = 248, ArtWidth = 300, Radius = 18;
 
@@ -69,8 +69,8 @@ internal sealed class WallDetail : Grid
         set => _field.Background = value;
     }
 
-    public Tracked Kicker { get; }
-    public Tracked TitleText { get; }
+    public TrackedText Kicker { get; }
+    public TrackedText TitleText { get; }
     public TextBlock Line { get; }
 
     /// <summary>The card's controls under the line (about 574 × 118, less an aside).</summary>

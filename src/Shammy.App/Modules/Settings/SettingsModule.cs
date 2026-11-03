@@ -30,7 +30,7 @@ internal sealed class SettingsModule : IShammyModule
             Order = 90,
             Chip = true,
             IsRelevant = () => false,
-            Compact = _card.Compact,
+            Compact = SettingsTile.Build(() => ctx.OpenCard("settings")),
             Detail = _card.BuildDetail,
         });
         // A change from the pipe shows on the card if it's open.

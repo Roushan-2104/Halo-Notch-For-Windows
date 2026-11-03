@@ -79,9 +79,11 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             Id = "notes",
             Title = "Notes",
             Width = 176,
-            Order = 50,
+            Order = 45,
             Chip = true,
             IsRelevant = ReminderDueToday,
+            Live = () => _notes.Live,
+            Peek = _notes.Peek,
             Compact = _notes.Compact,
             Detail = _notes.BuildDetail,
         });

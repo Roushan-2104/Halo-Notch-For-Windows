@@ -255,6 +255,8 @@ internal sealed class ShammyHost : IDisposable
         // The v2 open notch, for scripted checks: "v2-state", "v2-open <id|chip label>", "v2-back".
         _modules.PipeCommands["v2-state"] = _ => $"mode={_notch.Mode} {_notch.ExpandedView.DescribeV2()}";
         _modules.PipeCommands["v2-open"] = arg => _notch.OpenView(arg) ? "ok" : $"error: no view '{arg.Trim()}'";
+        // The Focus Wall rail: "wall-focus <id|next|prev>" moves the focus as hover or the arrow keys would (v2-state shows focus=).
+        _modules.PipeCommands["wall-focus"] = arg => _notch.ExpandedView.WallFocus(arg);
         _modules.PipeCommands["v2-back"] = _ =>
         {
             _notch.ExpandedView.ShowHome();

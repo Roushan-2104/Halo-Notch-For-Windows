@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Shammy.Core.Productivity;
+using Shammy.Views;
 using Shammy.Views.Cards;
 
 namespace Shammy.Modules.Productivity;
@@ -31,7 +32,7 @@ internal sealed class TimerCard
     readonly ITimerCardHost _host;
     readonly WallTile _tile = new();
     readonly Ring _ring = new() { Width = 72, Height = 72, Thickness = 6 };
-    readonly Tracked _digits = CardKit.Big("", 18), _rest = CardKit.Label("");
+    readonly TrackedText _digits = CardKit.Big("", 18), _rest = CardKit.Label("");
     readonly TextBlock _name, _of;
     readonly StackPanel _buttons = new() { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 12, 10, 0) };
     readonly DispatcherTimer _doneTimer = new(DispatcherPriority.Normal) { Interval = DoneShown };
@@ -97,7 +98,7 @@ internal sealed class TimerCard
         var now = DateTime.UtcNow;
         if (Active is not { } c)
             return _done is { } d ? new WallPeek("Time's up", d, "Finished just now", Fields.Alarm(), new WallAction("Dismiss", Dismiss, Stays: true)) : null;
-        var line = c.IsCountdown ? $"{TimerCardText.Of(c.Total)} · {TimerCardText.Ends(c.EndsLocal(now) ?? DateTime.Now, c.Paused, c.Display(now), CardKit.H24).ToLowerInvariant()}" : c.Paused ? "Paused" : "Counting up";
+        var line = c.IsCountdown ? $"{TimerCardText.Of(c.Total)} · {Lower(TimerCardText.Ends(c.EndsLocal(now) ?? DateTime.Now, c.Paused, c.Display(now), CardKit.H24))}" : c.Paused ? "Paused" : "Counting up";
         return new WallPeek(c.Paused ? "Timer · paused" : "Timer", $"{Name(c)} · {c.Display(now)}", line, Fields.Timer(),
             new WallAction(c.Paused ? "Resume" : "Pause", () => _host.TogglePause(c), Stays: true));
     }
@@ -110,6 +111,9 @@ internal sealed class TimerCard
         _doneTimer.Start();
         Refresh();
     }
+
+    /// <summary>"Ends at 10:25 AM" → "ends at 10:25 AM" in the middle of a line.</summary>
+    static string Lower(string s) => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
 
     static string Name(RunningClock c) => c.Kind switch
     {
@@ -205,7 +209,7 @@ internal sealed class TimerCard
     {
         readonly TimerCard _card;
         readonly Ring _ring = new() { Width = 156, Height = 156, Thickness = 10 };
-        readonly Tracked _digits = CardKit.Poster("", 40), _of = CardKit.Label("");
+        readonly TrackedText _digits = CardKit.Poster("", 40), _of = CardKit.Label("");
         readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top };
         readonly WrapPanel _quick = new() { Margin = new Thickness(0, 8, 0, 0) };
         readonly StackPanel _others = new();
@@ -279,7 +283,7 @@ internal sealed class TimerCard
                 Root.Kicker.Text = c.Paused ? "Timer · paused" : "Timer · running";
                 Root.TitleText.Text = Name(c);
                 Root.Line.Text = c.IsCountdown
-                    ? $"{display} {TimerCardText.Of(c.Total)} · {TimerCardText.Ends(c.EndsLocal(now) ?? DateTime.Now, c.Paused, display, CardKit.H24).ToLowerInvariant()}"
+                    ? $"{display} {TimerCardText.Of(c.Total)} · {Lower(TimerCardText.Ends(c.EndsLocal(now) ?? DateTime.Now, c.Paused, display, CardKit.H24))}"
                     : c.Paused ? "Stopwatch · paused" : "Stopwatch · counting up";
             }
 
@@ -329,8 +333,8 @@ internal sealed class TimerCard
             time.Foreground = c.Paused ? CardKit.Ink2 : CardKit.Ink;
             var meta = c.Kind == ClockKind.Pomodoro ? TimerCardText.PomodoroLine(c.PomodoroStep) : c.Paused ? "paused" : c.IsCountdown ? TimerCardText.Of(c.Total) : "counting up";
             var name = new TextBlock { FontFamily = CardKit.Font, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-            name.Inlines.Add(new System.Windows.Documents.Run(Name(c)) { FontWeight = FontWeights.SemiBold, Foreground = CardKit.Ink });
-            name.Inlines.Add(new System.Windows.Documents.Run("  " + meta) { FontWeight = FontWeights.Medium, Foreground = CardKit.Ink2 });
+            name.Inlines.Add(CardKit.Run(Name(c), FontWeights.SemiBold, CardKit.Ink));
+            name.Inlines.Add(CardKit.Run("  " + meta, FontWeights.Medium, CardKit.Ink2));
             var row = WallDetail.ListRow(WallDetail.Bullet(), name, time, 30);
             row.Tag = time;
             return row;
