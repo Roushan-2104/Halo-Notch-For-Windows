@@ -164,8 +164,10 @@ internal sealed class CompactView : Grid
     double BuildBluetooth(BluetoothPayload p)
     {
         _left.Content = Glyph("", 15, (Brush)Application.Current.Resources["AccentBrush"]);
-        var name = Label(p.Name, (Brush)Application.Current.Resources["Fg"]);
-        name.MaxWidth = 120;
+        // "Airdopes 311 Pro · 80%" once the headset has reported its battery.
+        var name = Label(Shammy.Core.Devices.BluetoothBattery.Pill(p.Name, p.Battery), (Brush)Application.Current.Resources["Fg"]);
+        double width = p.Battery is null ? 120 : 150;
+        name.MaxWidth = width;
         var state = Label(p.Connected ? "Connected" : "Disconnected", (Brush)Application.Current.Resources["Fg2"]);
         state.FontWeight = FontWeights.Normal;
         state.FontSize = 10.5;
@@ -176,7 +178,7 @@ internal sealed class CompactView : Grid
         stack.Children.Add(name);
         stack.Children.Add(state);
         _right.Content = stack;
-        return 120;
+        return width;
     }
 
     double BuildDownloading(DownloadPayload p)

@@ -6,9 +6,9 @@ using Shammy.Core.MeetingSystem;
 namespace Shammy.Modules.MeetingSystem;
 
 /// <summary>
-/// System monitor: a "System" tab with CPU, memory and battery, refreshed every second only while it
-/// is on screen, plus a cheap 10 s background sample that raises alerts for runaway apps, full memory
-/// and fast battery drain.
+/// System monitor: the v2 "System" card (laptop battery, Bluetooth headsets' battery, CPU and memory),
+/// refreshed every second only while it is on screen, plus a cheap 10 s background sample that raises
+/// alerts for runaway apps, full memory and fast battery drain.
 /// </summary>
 internal sealed class SystemModule : IShammyModule
 {
@@ -22,22 +22,29 @@ internal sealed class SystemModule : IShammyModule
     static readonly double HogPercent = Math.Min(80, 150.0 / Environment.ProcessorCount);
     static readonly TimeSpan VisibleInterval = TimeSpan.FromSeconds(1);
     static readonly TimeSpan HiddenInterval = TimeSpan.FromSeconds(10);
-    static readonly TimeSpan HistorySpan = TimeSpan.FromSeconds(60);
+    static readonly TimeSpan BatteryStep = TimeSpan.FromMinutes(30);
+    static readonly TimeSpan HeadsetRefresh = TimeSpan.FromSeconds(60);
+    const int BatteryPoints = 12;
 
-    readonly List<(DateTime At, double Value)> _history = new();
+    /// <summary>The battery level every half hour since Shammy started (the detail's last-6-hours bars).</summary>
+    readonly List<(DateTime At, int Percent)> _batteryHistory = new();
     readonly DrainEstimator _drain = new();
     readonly TimeSmoother _reportedDrain = new(TimeSpan.FromMinutes(2));
+    readonly TimeSmoother _reportedCharge = new(TimeSpan.FromMinutes(2));
     readonly AlertCooldown _cooldown = new(TimeSpan.FromMinutes(10));
     readonly SustainedCondition _hog = new(TimeSpan.FromSeconds(30));
     readonly SustainedCondition _fastDrain = new(TimeSpan.FromMinutes(2));
 
     ModuleContext? _ctx;
     SystemSampler? _sampler;
-    SystemPanel? _panel;
+    SystemCard? _card;
     DispatcherTimer? _timer;
     SystemSample? _last;
-    double? _drainRate;
-    bool _sampling;
+    double? _drainRate, _chargeRate;
+    bool _sampling, _relevant;
+    DateTime _headsetsReadUtc;
+
+    Shammy.SystemInfo.BluetoothService? Bluetooth => _ctx?.Services.Bluetooth;
 
     public string Name => "system";
 
@@ -45,9 +52,25 @@ internal sealed class SystemModule : IShammyModule
     {
         _ctx = ctx;
         _sampler = new SystemSampler(ctx.Warn);
-        _panel = new SystemPanel();
-        ctx.AddTab("", "System", _panel);
-        _panel.IsVisibleChanged += (_, _) => OnVisibilityChanged();
+        // v2: the System card replaces the System tab; it also gets a chip, since people open it on purpose.
+        _card = new SystemCard();
+        _card.VisibilityChanged += OnVisibilityChanged;
+        ctx.AddCard(new NotchCard
+        {
+            Id = "battery",
+            Title = "System",
+            Width = 176,
+            Compact = _card.Compact,
+            Detail = _card.BuildDetail,
+            Order = 50,
+            Chip = true,
+            IsRelevant = () => _relevant,
+        });
+        Views.Cards.CardPipes.Register(ctx, "battery", _card.DescribeCompact, _card.DescribeDetail);
+        ctx.AddPipeCommand("bt-battery", _ => Bluetooth?.Describe() ?? "error: Bluetooth unavailable");
+        if (Bluetooth is { } bt) bt.Changed += Render;
+        // Know right away whether the card belongs on the home row (a laptop, or a headset connected).
+        _ = SampleAsync();
 
         _timer = new DispatcherTimer(HiddenInterval, DispatcherPriority.Background, (_, _) => _ = SampleAsync(), ctx.Ui);
         _timer.Start();
@@ -63,22 +86,31 @@ internal sealed class SystemModule : IShammyModule
 
     void OnVisibilityChanged()
     {
-        if (_panel is null || _timer is null) return;
-        bool visible = _panel.IsVisible;
+        if (_card is null || _timer is null) return;
+        bool visible = _card.IsShowing;
         _timer.Interval = visible ? VisibleInterval : HiddenInterval;
         if (!visible) return;
         if (_last is not null) Render();
         _ = SampleAsync();
     }
 
+    /// <summary>Headset levels change slowly and reading them walks the device tree: once a minute, only while shown.</summary>
+    void RefreshHeadsets(DateTime nowUtc)
+    {
+        if (Bluetooth is not { } bt || bt.AudioDevices.Count == 0 || nowUtc - _headsetsReadUtc < HeadsetRefresh) return;
+        _headsetsReadUtc = nowUtc;
+        _ = bt.RefreshBatteryAsync();
+    }
+
     async Task SampleAsync()
     {
-        if (_sampling || _sampler is null || _panel is null) return;
+        if (_sampling || _sampler is null || _card is null) return;
         _sampling = true;
         try
         {
             var sampler = _sampler;
-            bool visible = _panel.IsVisible;
+            bool visible = _card.IsShowing;
+            if (visible) RefreshHeadsets(DateTime.UtcNow);
             var sample = await Task.Run(() => sampler.Sample(visible, HogPercent));
             Apply(sample);
         }
@@ -95,8 +127,11 @@ internal sealed class SystemModule : IShammyModule
     void Apply(SystemSample s)
     {
         _last = s;
-        _history.Add((s.At, s.Cpu));
-        _history.RemoveAll(p => s.At - p.At > HistorySpan + TimeSpan.FromSeconds(2));
+        if (s.HasBattery && (_batteryHistory.Count == 0 || s.At - _batteryHistory[^1].At >= BatteryStep))
+        {
+            _batteryHistory.Add((s.At, s.BatteryPercent));
+            if (_batteryHistory.Count > BatteryPoints) _batteryHistory.RemoveAt(0);
+        }
 
         if (s.HasBattery && !s.PluggedIn)
         {
@@ -111,15 +146,27 @@ internal sealed class SystemModule : IShammyModule
             _reportedDrain.Reset();
             _drainRate = null;
         }
+        // While charging the same report runs the other way (negative drain): that gives "Full by".
+        _chargeRate = s.Charging && s.ReportedDrain is double c && c < 0 ? _reportedCharge.Add(-c, s.At) : null;
+        if (!s.Charging) _reportedCharge.Reset();
 
         CheckAlerts(s);
-        if (_panel?.IsVisible == true) Render();
+        Render();
     }
 
     void Render()
     {
-        if (_panel is null || _last is null) return;
-        _panel.Show(_last, _history, _drainRate);
+        if (_card is null || _ctx is null || _last is not { } s) return;
+        var headsets = Bluetooth?.AudioDevices ?? Array.Empty<Shammy.SystemInfo.BluetoothAudioDevice>();
+        bool relevant = _card.IsRelevant(s.HasBattery, headsets.Count);
+        if (relevant != _relevant)
+        {
+            _relevant = relevant;
+            _ctx.CardsChanged();
+        }
+        var left = s.HasBattery && !s.PluggedIn ? DrainEstimator.Remaining(s.BatteryPercent, _drainRate) : null;
+        var full = s.Charging ? Shammy.Core.Cards.PowerText.FullAt(s.BatteryPercent, _chargeRate, DateTime.Now) : null;
+        _card.Show(new SystemCardData(s, left, full, _batteryHistory.ToList(), headsets));
     }
 
     void CheckAlerts(SystemSample s)
@@ -192,8 +239,8 @@ internal sealed class SystemModule : IShammyModule
     // OpenTab waits for a command's confirmation card and holds the tab until it's been looked at.
     void OpenTab()
     {
-        if (_ctx is null || _panel is null) return;
-        _ctx.OpenTab(_panel);
+        if (_ctx is null || _card is null) return;
+        _ctx.OpenTab(_card.Compact);
     }
 
     string State()
@@ -216,12 +263,13 @@ internal sealed class SystemModule : IShammyModule
         string top = s.Top is { } p ? $"{p.Name} {p.Percent.ToString("0.0", inv)}%" : "-";
         return $"cpu={s.Cpu.ToString("0.0", inv)}% ram={s.MemoryLoad}% ({SystemFormat.Gigabytes(s.UsedMemory)}/{SystemFormat.Gigabytes(s.TotalMemory)} GB) " +
                $"battery={battery} plugged={s.PluggedIn} charging={s.Charging} drain={drain} remaining={left} top={top} " +
-               $"history={_history.Count} visible={_panel?.IsVisible == true}";
+               $"batteryHistory={_batteryHistory.Count} visible={_card?.IsShowing == true}";
     }
 
     public void Dispose()
     {
         _timer?.Stop();
+        if (Bluetooth is { } bt) bt.Changed -= Render;
     }
 
     sealed class SystemCommand : ITextCommand

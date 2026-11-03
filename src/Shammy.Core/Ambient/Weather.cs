@@ -48,6 +48,9 @@ public static class IpLocation
 
 public sealed record HourForecast(DateTime Time, double Temperature, int? RainChance, int Code);
 
+/// <summary>One day of the forecast (local date at the forecast location).</summary>
+public sealed record DayForecast(DateTime Date, double High, double Low, int Code, int? RainChance);
+
 /// <summary>One Open-Meteo forecast. Times are local to the forecast location.</summary>
 public sealed record WeatherReport(
     DateTime ObservedLocal,
@@ -64,6 +67,15 @@ public sealed record WeatherReport(
     int? TomorrowRainChance,
     IReadOnlyList<HourForecast> Hours)
 {
+    /// <summary>Relative humidity now (%), when the forecast has it.</summary>
+    public int? Humidity { get; init; }
+
+    /// <summary>Wind speed now (km/h), when the forecast has it.</summary>
+    public double? WindKmh { get; init; }
+
+    /// <summary>Today first, then the following days the forecast covers.</summary>
+    public IReadOnlyList<DayForecast> Days { get; init; } = Array.Empty<DayForecast>();
+
     /// <summary>Current wall-clock time at the forecast location.</summary>
     public DateTime LocalNow(DateTime nowUtc) => DateTime.SpecifyKind(nowUtc.AddSeconds(UtcOffsetSeconds), DateTimeKind.Unspecified);
 
@@ -78,10 +90,10 @@ public static class OpenMeteo
 {
     public static string ForecastUrl(double lat, double lon) =>
         string.Create(CultureInfo.InvariantCulture, $"https://api.open-meteo.com/v1/forecast?latitude={lat:0.####}&longitude={lon:0.####}") +
-        "&current=temperature_2m,weather_code,is_day,apparent_temperature" +
+        "&current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,wind_speed_10m" +
         "&hourly=temperature_2m,precipitation_probability,weather_code" +
         "&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max" +
-        "&timezone=auto&forecast_days=2";
+        "&timezone=auto&forecast_days=5";
 
     public static WeatherReport? Parse(string json)
     {
@@ -119,6 +131,20 @@ public static class OpenMeteo
                 }
             }
 
+            var days = new List<DayForecast>();
+            if (daily.TryGetProperty("time", out var dates) && dates.ValueKind == JsonValueKind.Array)
+            {
+                int d = 0;
+                foreach (var t in dates.EnumerateArray())
+                {
+                    if (DateTime.TryParseExact(t.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+                        && At(highs, d) is { } hi && At(lows, d) is { } lo)
+                        days.Add(new DayForecast(date, hi, lo, At(codes, d) is { } dc ? (int)dc : (int)code,
+                            At(rain, d) is { } dr ? (int)Math.Round(dr) : null));
+                    d++;
+                }
+            }
+
             return new WeatherReport(
                 observed,
                 (int)(AmbientJson.Num(root, "utc_offset_seconds") ?? 0),
@@ -132,7 +158,12 @@ public static class OpenMeteo
                 At(lows, 1),
                 At(codes, 1) is { } tc ? (int)tc : null,
                 At(rain, 1) is { } tr ? (int)Math.Round(tr) : null,
-                hours);
+                hours)
+            {
+                Humidity = AmbientJson.Num(cur, "relative_humidity_2m") is { } rh ? (int)Math.Round(rh) : null,
+                WindKmh = AmbientJson.Num(cur, "wind_speed_10m"),
+                Days = days,
+            };
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -182,6 +213,16 @@ public static class WeatherText
         int h = t.Hour % 12 == 0 ? 12 : t.Hour % 12;
         return $"{h} {(t.Hour < 12 ? "AM" : "PM")}";
     }
+
+    /// <summary>"31° Pune" for the resting notch's glance.</summary>
+    public static string Glance(WeatherReport r, string city) => $"{Temp(r.Temperature)} {city}";
+
+    /// <summary>"9 km/h".</summary>
+    public static string Wind(double kmh) => $"{(int)Math.Round(kmh, MidpointRounding.AwayFromZero)} km/h";
+
+    /// <summary>"Today", then "Wed", "Thu"… for the 5-day list.</summary>
+    public static string DayLabel(DateTime date, DateTime today) =>
+        date.Date == today.Date ? "Today" : date.ToString("ddd", CultureInfo.InvariantCulture);
 
     /// <summary>"24° Overcast in Pune · feels 30° · H 31° L 22°".</summary>
     public static string Now(WeatherReport r, string city) =>

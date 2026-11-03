@@ -7,17 +7,15 @@ namespace Shammy.Modules.Ambient;
 
 /// <summary>
 /// Approximate location from the IP (cached a day), an Open-Meteo forecast every 20 minutes, the
-/// Weather tab, and a one-off "rain likely" nudge. Pauses while offline and resumes when the network
+/// weather card (v2 notch), and a one-off "rain likely" nudge. Pauses while offline and resumes when the network
 /// comes back.
 /// </summary>
 internal sealed class WeatherFeature : IDisposable
 {
-    const string TabGlyph = "\uE706";
-
     readonly ModuleContext _ctx;
     readonly AmbientData _data;
     readonly Action _save;
-    readonly WeatherPanel _panel = new();
+    readonly WeatherCard _card = new();
     readonly DispatcherTimer _timer;
     WeatherReport? _report;
     DateTime? _updatedUtc;
@@ -46,8 +44,20 @@ internal sealed class WeatherFeature : IDisposable
 
     public void Start()
     {
-        _ctx.AddTab(TabGlyph, "Weather", _panel);
-        _panel.ShowStatus("Finding the weather\u2026");
+        // v2: the weather card replaces the Weather tab.
+        _ctx.AddCard(new NotchCard
+        {
+            Id = "weather",
+            Title = "Weather",
+            Width = 176,
+            Compact = _card.Compact,
+            Detail = _card.BuildDetail,
+            Order = 40,
+            IsRelevant = () => _card.IsRelevant,
+        });
+        _ctx.AddGlance("weather", _card.Glance);
+        Views.Cards.CardPipes.Register(_ctx, "weather", _card.DescribeCompact, _card.DescribeDetail);
+        _card.ShowStatus("Finding the weather\u2026");
         NetworkChange.NetworkAvailabilityChanged += OnNetworkChanged;
         // Let startup settle before the first request.
         Schedule(TimeSpan.FromSeconds(4));
@@ -78,7 +88,7 @@ internal sealed class WeatherFeature : IDisposable
         {
             // Nothing to do until the network returns (OnNetworkChanged); check again later anyway.
             _lastError = "offline";
-            if (_report is null) _panel.ShowStatus("Weather will appear when you\u2019re back online");
+            if (_report is null) _card.ShowStatus("Weather will appear when you\u2019re back online");
             Schedule(TimeSpan.FromMinutes(10));
             return;
         }
@@ -137,7 +147,7 @@ internal sealed class WeatherFeature : IDisposable
             _failures++;
             _lastError = result.Error;
             _ctx.Warn($"weather refresh failed ({_failures}): {result.Error}");
-            if (_report is null) _panel.ShowStatus("Weather unavailable right now \u00B7 retrying");
+            if (_report is null) _card.ShowStatus("Weather unavailable right now \u00B7 retrying");
             Schedule(RefreshSchedule.WeatherAfterFailure(_failures));
             return;
         }
@@ -147,7 +157,9 @@ internal sealed class WeatherFeature : IDisposable
         _updatedUtc = DateTime.UtcNow;
         _failures = 0;
         _lastError = null;
-        _panel.Show(report, City, DateTime.UtcNow);
+        bool wasRelevant = _card.IsRelevant;
+        _card.Show(report, City);
+        if (!wasRelevant) _ctx.CardsChanged();
         Schedule(RefreshSchedule.Weather);
 
         if (RainAlert.Check(previous, report, DateTime.UtcNow, _data.LastRainAlertUtc) is { } minutes)
@@ -307,8 +319,8 @@ internal sealed class WeatherFeature : IDisposable
             : $"city={q.City} when={q.When} -> {result.Title} | {result.Detail}{(result.IsError ? " (error)" : "")}";
     }
 
-    /// <summary>OpenTab waits for the command's confirmation card and holds the tab until it's been looked at.</summary>
-    void OpenTabSoon() => _ctx.OpenTab(_panel);
+    /// <summary>Opens the notch once the command's confirmation card has closed (the weather card sits on its home row).</summary>
+    void OpenTabSoon() => _ctx.OpenTab(_card.Compact);
 
     public void Dispose()
     {

@@ -13,7 +13,7 @@ namespace Shammy.Modules.Productivity;
 /// spoken commands ("timer 25m", "remind me at 6pm to take medicine", "note: buy milk").
 /// Running clocks live in the compact ears; reminders and notes persist and show in a Notes tab.
 /// </summary>
-internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview
+internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview, ITimerCardHost
 {
     // Above downloads (40), below messages (50): a running timer yields to anything more urgent.
     const int ClockPriority = 45;
@@ -40,6 +40,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     ModuleContext _ctx = null!;
     ProductivityStore _store = new();
     NotesPanel _panel = null!;
+    TimerCard _timerCard = null!;
+    bool _timerCardRelevant;
     ReminderCard? _card;
     bool _glowing;
     int _nextId;
@@ -64,6 +66,22 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _panel = new NotesPanel(() => _store, Delete, Copy);
         ctx.AddTab(NoteGlyph, "Notes", _panel);
         ctx.AddCommand(this);
+
+        // v2: the timer card shows the live clocks (relevant while one runs).
+        _timerCard = new TimerCard(this);
+        _timerCard.Changed += UpdateCard;
+        ctx.AddCard(new NotchCard
+        {
+            Id = "timer",
+            Title = "Timers",
+            Width = 176,
+            Compact = _timerCard.Compact,
+            Detail = _timerCard.BuildDetail,
+            Order = 20,
+            IsRelevant = () => _timerCard.IsRelevant,
+        });
+        ctx.AddGlance("timer", _timerCard.Glance);
+        Views.Cards.CardPipes.Register(ctx, "timer", _timerCard.DescribeCompact, _timerCard.DescribeDetail);
 
         ctx.AddPipeCommand("productivity-timer", PipeTimer);
         ctx.AddPipeCommand("productivity-remind-now", PipeRemindNow);
@@ -347,10 +365,45 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         ScheduleTick();
     }
 
+    // ---- Timer card (ITimerCardHost) -------------------------------------------------------------
+
+    IReadOnlyList<RunningClock> ITimerCardHost.Clocks => _clocks;
+
+    void ITimerCardHost.TogglePause(RunningClock clock)
+    {
+        if (_clocks.Contains(clock)) SetPaused(clock, !clock.Paused);
+    }
+
+    void ITimerCardHost.Stop(RunningClock clock)
+    {
+        if (_clocks.Contains(clock)) RemoveClock(clock);
+    }
+
+    void ITimerCardHost.Extend(RunningClock clock, TimeSpan more)
+    {
+        if (!_clocks.Contains(clock) || !clock.IsCountdown) return;
+        clock.Extend(more);
+        clock.Content.Refresh(DateTime.UtcNow);
+        ScheduleTick();
+    }
+
+    void ITimerCardHost.QuickStart(TimeSpan duration) => StartTimer(duration, "");
+
+    void UpdateCard()
+    {
+        if (_timerCard is null) return;
+        _timerCard.Refresh();
+        if (_timerCard.IsRelevant == _timerCardRelevant) return;
+        _timerCardRelevant = _timerCard.IsRelevant;
+        _ctx.CardsChanged();
+    }
+
     /// <summary>Ticks land just after the next second boundary of whichever clock changes first; off when all are paused.</summary>
     void ScheduleTick()
     {
         _tick.Stop();
+        // Every clock change and every tick passes through here, so the timer card follows along.
+        UpdateCard();
         var now = DateTime.UtcNow;
         var running = _clocks.Where(c => !c.Paused).ToList();
         if (running.Count == 0) return;
@@ -373,10 +426,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
                 });
                 break;
             case ClockKind.Focus:
+                _timerCard.ShowDone("Focus");
                 RemoveClock(clock);
                 Alert(FocusGlyph, $"Focus done \u00B7 {TimeFormat.Describe(clock.Total)}");
                 break;
             default:
+                _timerCard.ShowDone(clock.Label);
                 RemoveClock(clock);
                 Alert(TimerGlyph, $"Timer done \u00B7 {(clock.Label.Length > 0 ? clock.Label : TimeFormat.Describe(clock.Total))}");
                 break;

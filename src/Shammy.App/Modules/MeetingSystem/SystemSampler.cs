@@ -64,7 +64,8 @@ internal sealed class SystemSampler
                 plugged = PowerManager.PowerSupplyStatus != PowerSupplyStatus.NotPresent;
                 percent = PowerManager.RemainingChargePercent;
                 charging = PowerManager.BatteryStatus == BatteryStatus.Charging;
-                if (hasBattery && !plugged) reported = ReportedDrain();
+                // On battery this is the drain; while charging it comes out negative (the charge rate, for "Full by").
+                if (hasBattery && (!plugged || charging)) reported = ReportedDrain();
             }
             catch (Exception ex)
             {
