@@ -5,6 +5,8 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Shammy.Core.Activities;
+using Shammy.Core.Music;
+using Shammy.Core.Notch;
 using Shammy.Infrastructure;
 using Shammy.Interop;
 using Shammy.Motion;
@@ -13,7 +15,7 @@ using Shammy.Views;
 
 namespace Shammy.Shell;
 
-public enum NotchMode { Hidden, Idle, Compact, Notification, Card, Expanded, Drop, Listening, Circling, Thinking, Typing, Answer, Result }
+public enum NotchMode { Hidden, Idle, Compact, Notification, Card, Expanded, Drop, Listening, Circling, Thinking, Typing, Answer, Result, Peek }
 
 /// <summary>
 /// The notch. One fixed-width transparent window pinned to the top-centre of the primary monitor; the
@@ -58,6 +60,18 @@ public partial class NotchWindow : Window
     readonly DispatcherTimer _holdTimeout;
     int _holdOpen;
 
+    // v2 resting notch: eyes + rotating glance when idle, the peek on a resting pointer (see HoverIntent).
+    readonly Layer _rest, _peek;
+    readonly RestView _restView;
+    readonly PeekView _peekView;
+    readonly GlanceFeed _glances;
+    readonly HoverIntent _intent = new();
+    readonly WiggleDetector _wiggle = new();
+    readonly System.Diagnostics.Stopwatch _hoverClock = System.Diagnostics.Stopwatch.StartNew();
+    bool _peeking, _wasPlaying;
+    string _lastTrack = "";
+    (Point At, TimeSpan T)? _press;
+
     internal NotchWindow(ShammyServices services)
     {
         _services = services;
@@ -81,7 +95,17 @@ public partial class NotchWindow : Window
         _card = AddLayer(CardHost);
         _compactActive = _compactA;
 
-        _hoverIn = new DispatcherTimer(TimeSpan.FromMilliseconds(110), DispatcherPriority.Input, OnHoverIn, Dispatcher) { IsEnabled = false };
+        _glances = new GlanceFeed(services);
+        _restView = new RestView(services, _glances);
+        _peekView = new PeekView(services, _glances);
+        ContentHost.Children.Insert(0, _peekView);
+        ContentHost.Children.Insert(0, _restView);
+        _rest = AddLayer(_restView);
+        _peek = AddLayer(_peekView);
+        _peekView.GlanceClicked += OnPeekGlanceClicked;
+
+        // While the pointer is on the notch, sample it often enough to tell resting from passing through.
+        _hoverIn = new DispatcherTimer(TimeSpan.FromMilliseconds(40), DispatcherPriority.Input, OnHoverTick, Dispatcher) { IsEnabled = false };
         _hoverOut = new DispatcherTimer(TimeSpan.FromMilliseconds(320), DispatcherPriority.Input, OnHoverOut, Dispatcher) { IsEnabled = false };
         _dragOut = new DispatcherTimer(TimeSpan.FromMilliseconds(140), DispatcherPriority.Input, OnDragOut, Dispatcher) { IsEnabled = false };
         _holdTimeout = new DispatcherTimer(TimeSpan.FromSeconds(8), DispatcherPriority.Input, (timer, _) =>
@@ -110,12 +134,29 @@ public partial class NotchWindow : Window
         Root.DragLeave += (_, _) => _dragOut.Start();
         Root.Drop += OnDrop;
         Bubble.MouseLeftButtonUp += (_, _) => _secondary?.Click?.Invoke();
-        // Pressing on the notch means a click is coming; don't let a pending hover expand it away first.
-        Root.PreviewMouseLeftButtonDown += (_, _) => _hoverIn.Stop();
+        // Pressing on the notch means a click (or a drag-swipe) is coming; don't let a pending hover expand it away first.
+        Root.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            _hoverIn.Stop();
+            _press = _mode is NotchMode.Idle or NotchMode.Compact or NotchMode.Peek ? (e.GetPosition(Root), _hoverClock.Elapsed) : null;
+        };
+        Root.PreviewMouseLeftButtonUp += OnPressReleased;
+        Root.MouseMove += (_, e) =>
+        {
+            if (_hoverIn.IsEnabled) SampleHover();
+            // Petting: a little wiggle over the resting pet makes it happy.
+            if (_mode == NotchMode.Idle && _wiggle.Add(e.GetPosition(Root).X, _hoverClock.Elapsed))
+            {
+                _restView.Mood.Petted();
+                _intent.Reset();
+            }
+        };
         // The pill has already run its click (it handles the event first); a done action then goes away.
+        // Clicking the resting notch or the peek opens the notch straight away.
         Root.MouseLeftButtonUp += (_, _) =>
         {
             if (_mode == NotchMode.Compact && IsAction(_activity)) ActionClicked?.Invoke(_activity!.Id);
+            else if (_mode is NotchMode.Idle or NotchMode.Peek || (_mode == NotchMode.Compact && _activity is { Click: null })) OpenFromHover();
         };
         // Moving from the side bubble onto the pill (both inside Root) raises no new MouseEnter.
         Bubble.MouseLeave += (_, _) =>
@@ -129,9 +170,12 @@ public partial class NotchWindow : Window
         };
         Root.MouseWheel += (_, e) =>
         {
-            if (_mode is NotchMode.Idle or NotchMode.Compact or NotchMode.Notification)
+            if (_mode is NotchMode.Idle or NotchMode.Compact or NotchMode.Notification or NotchMode.Peek)
             {
-                NotchWheel?.Invoke(e.Delta);
+                // Shift+wheel is the usual horizontal scroll on a mouse without a tilt wheel: wheel down = right = next.
+                const int VK_SHIFT = 0x10;
+                if (Native.GetAsyncKeyState(VK_SHIFT) < 0) NotchHorizontalWheel?.Invoke(-e.Delta);
+                else NotchWheel?.Invoke(e.Delta);
                 e.Handled = true;
             }
         };
@@ -327,9 +371,11 @@ public partial class NotchWindow : Window
     public void SetSearchMode(NotchMode? mode)
     {
         _searchMode = mode;
+        _restView.Mood.SetSearch(mode);
         if (mode is not null)
         {
             _hoverExpanded = false;
+            _peeking = false;
             _hoverIn.Stop();
         }
         Recompute();
@@ -347,7 +393,7 @@ public partial class NotchWindow : Window
     {
         if (_fullscreen == fullscreen) return;
         _fullscreen = fullscreen;
-        if (fullscreen) _hoverExpanded = false;
+        if (fullscreen) _hoverExpanded = _peeking = false;
         Recompute();
         UpdateBubble();
     }
@@ -375,6 +421,14 @@ public partial class NotchWindow : Window
         ((CompactView)_compactActive.El).RefreshMedia(_services.Media);
         if (Expanded.IsVisible) Expanded.Refresh();
         UpdateBubble();
+
+        _restView.RefreshMedia();
+        if (_mode == NotchMode.Peek) _peekView.Refresh();
+        // A song starting makes Shammy happy (seen when the eyes are on screen, e.g. a song resumed from the peek).
+        var media = _services.Media;
+        if (media.IsPlaying && (!_wasPlaying || media.Title != _lastTrack)) _restView.Pet.Bounce();
+        _wasPlaying = media.IsPlaying;
+        _lastTrack = media.Title;
     }
 
     public void RefreshExpanded()
@@ -416,6 +470,7 @@ public partial class NotchWindow : Window
     {
         selectTab();
         _hoverExpanded = true;
+        _peeking = false;
         if (hold)
         {
             if (!_held)
@@ -473,7 +528,7 @@ public partial class NotchWindow : Window
         // Over a fullscreen app the card must not take focus from it (a game would minimise or lose input);
         // its buttons still work by mouse, since clicks reach a no-activate window.
         _cardInteractive = interactive && !(breaksFullscreen && _fullscreen);
-        _hoverExpanded = false;
+        _hoverExpanded = _peeking = false;
         Recompute();
         if (_cardInteractive && _searchMode is null) SetInteractive(true);
     }
@@ -494,6 +549,8 @@ public partial class NotchWindow : Window
     internal void SetGlow(Color? color)
     {
         _moduleGlow = color;
+        // A module holds the edge lit for something you asked to be told about (a finished timer or alarm).
+        _restView.Mood.SetTimerDone(color is not null);
         UpdateEdgeHold();
     }
 
@@ -512,6 +569,7 @@ public partial class NotchWindow : Window
         if (a is null || (a.Id == _flashedId && ReferenceEquals(a.Payload, _flashedPayload))) return;
         _flashedId = a.Id;
         _flashedPayload = a.Payload;
+        if (a.Payload is NotificationPayload np) _restView.Mood.Notified(np.Notification.AppName, np.Notification.Title);
         Color? color = a switch
         {
             { Kind: ActivityKind.Notification } => Theme.Accent.Current,
@@ -539,7 +597,7 @@ public partial class NotchWindow : Window
             _held = false;
             _holdOpen--;
         }
-        _hoverExpanded = false;
+        _hoverExpanded = _peeking = false;
         Recompute();
     }
 
@@ -559,7 +617,9 @@ public partial class NotchWindow : Window
         else if (_cardOpen) mode = NotchMode.Card;
         else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded) mode = NotchMode.Notification;
         else if (_hoverExpanded) mode = NotchMode.Expanded;
-        else if (_activity is not null) mode = NotchMode.Compact;
+        else if (_peeking) mode = NotchMode.Peek;
+        // Music at rest is shown by the pet (swaying, with the song beside it), not the old music pill.
+        else if (_activity is not null && _activity.Kind != ActivityKind.NowPlaying) mode = NotchMode.Compact;
         else mode = NotchMode.Idle;
 
         if (mode == NotchMode.Compact) PrepareCompact();
@@ -590,7 +650,8 @@ public partial class NotchWindow : Window
     (double W, double H, double R) SpecFor(NotchMode mode) => mode switch
     {
         NotchMode.Hidden => (150, 0, 0),
-        NotchMode.Idle => (186, 32, 11),
+        NotchMode.Idle => (RestView.RestWidth, RestView.RestHeight, 12),
+        NotchMode.Peek => (PeekView.PeekWidth, PeekView.PeekHeight, 26),
         NotchMode.Compact => (_compactWidth, 32, 12),
         NotchMode.Notification => (460, 92, 30),
         NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
@@ -605,6 +666,8 @@ public partial class NotchWindow : Window
 
     Layer? LayerFor(NotchMode mode) => mode switch
     {
+        NotchMode.Idle => _rest,
+        NotchMode.Peek => _peek,
         NotchMode.Compact => _compactActive,
         NotchMode.Notification => _notification,
         NotchMode.Card => _card,
@@ -759,6 +822,8 @@ public partial class NotchWindow : Window
     {
         _hoverOut.Stop();
         if (_held) _visitedWhileHeld = true;
+        _wiggle.Reset();
+        _restView.Mood.Noticed();
         if (_mode == NotchMode.Card) return;
         // Hovering a notification holds it on screen (to read or click) instead of opening the card.
         if (_mode == NotchMode.Notification)
@@ -776,20 +841,26 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>
-    /// Hovering opens the notch quickly, except over a pill that does something when clicked (the meeting
-    /// mic, a running timer): there it waits long enough for a click to land first.
+    /// Hovering no longer opens the notch at once: the pointer has to slow down and rest on it, which shows
+    /// the peek, and rest a little longer (or click) to open it (<see cref="HoverIntent"/>). A pointer on its
+    /// way to a browser tab or the address bar passes straight through. Over a pill that does something when
+    /// clicked (the meeting mic, a running timer) there's no peek and the wait is longer, so a click lands first.
     /// </summary>
     void StartHoverIn()
     {
         if (!CanHover || Bubble.IsMouseOver) return;
         bool clickable = _mode == NotchMode.Compact && _activity is { Click: not null, Kind: not ActivityKind.NowPlaying };
-        _hoverIn.Interval = TimeSpan.FromMilliseconds(clickable ? 700 : 110);
+        _intent.Reset();
+        _intent.AllowPeek = !clickable;
+        if (_peeking) _intent.ForcePeek(_hoverClock.Elapsed);
         _hoverIn.Start();
+        SampleHover();
     }
 
     void OnRootMouseLeave(object sender, MouseEventArgs e)
     {
         _hoverIn.Stop();
+        _press = null;
         if (_heldActionId is not null) SetActionHold(false);
         if (_hoveringNotification)
         {
@@ -798,20 +869,88 @@ public partial class NotchWindow : Window
         }
         // A tab opened for the user (by a command or a click) closes once they've looked and moved on.
         if (_held && _visitedWhileHeld) ReleaseHold();
-        if (_hoverExpanded) _hoverOut.Start();
+        // Leaving the peek (or the open notch) goes back to resting.
+        if (_hoverExpanded || _peeking) _hoverOut.Start();
     }
 
-    void OnHoverIn(object? sender, EventArgs e)
+    /// <summary>The pointer may be standing still (no mouse moves), so the timer keeps sampling it.</summary>
+    void OnHoverTick(object? sender, EventArgs e) => SampleHover();
+
+    void SampleHover()
+    {
+        if (!Root.IsMouseOver || !CanHover || Bubble.IsMouseOver || _hoverExpanded)
+        {
+            _hoverIn.Stop();
+            return;
+        }
+        // A pressed button means a drag is passing through (the drop zone handles that) or a click is coming.
+        if (Mouse.LeftButton == MouseButtonState.Pressed)
+        {
+            _intent.Reset();
+            return;
+        }
+        // Hovering a notification holds it to be read, and an action pill waits to be clicked: neither peeks.
+        if (_mode == NotchMode.Notification || (_mode == NotchMode.Compact && IsAction(_activity))) return;
+
+        var p = Mouse.GetPosition(Root);
+        switch (_intent.Sample(p.X, p.Y, _hoverClock.Elapsed))
+        {
+            case HoverDecision.Peek:
+                ShowPeek();
+                break;
+            case HoverDecision.Open:
+                OpenFromHover();
+                break;
+        }
+    }
+
+    void ShowPeek()
+    {
+        _peekView.Refresh();
+        _peeking = true;
+        Recompute();
+        UpdateBubble();
+    }
+
+    /// <summary>Open the full notch from the resting notch or the peek (rested long enough, or clicked).</summary>
+    void OpenFromHover()
     {
         _hoverIn.Stop();
-        // A pressed button means a drag is passing through; the drop zone handles that case.
-        if (Mouse.LeftButton == MouseButtonState.Pressed || !Root.IsMouseOver || !CanHover || Bubble.IsMouseOver) return;
-        if (_mode == NotchMode.Compact && IsAction(_activity)) return;
-        // Hovering a notification holds it to be read; it never opens the notch over it.
-        if (_mode == NotchMode.Notification) return;
+        if (!CanHover) return;
+        _peeking = false;
         _hoverExpanded = true;
         Recompute();
         UpdateBubble();
+        if (!Root.IsMouseOver) _hoverOut.Start();
+    }
+
+    void OnPeekGlanceClicked(Modules.GlanceItem? item)
+    {
+        if (item?.OnClick is not { } click)
+        {
+            OpenFromHover();
+            return;
+        }
+        // Done with the peek; it doesn't come back until the pointer leaves and rests on the notch again.
+        _hoverIn.Stop();
+        _peeking = false;
+        Recompute();
+        UpdateBubble();
+        try { click(); }
+        catch (Exception ex) { Log.Warn("Glance click failed", ex); }
+    }
+
+    /// <summary>A quick sideways drag with the button held skips tracks, instead of being a click.</summary>
+    void OnPressReleased(object sender, MouseButtonEventArgs e)
+    {
+        if (_press is not { } press) return;
+        _press = null;
+        var p = e.GetPosition(Root);
+        int direction = DragSwipe.Classify(p.X - press.At.X, p.Y - press.At.Y, _hoverClock.Elapsed - press.T);
+        if (direction == 0) return;
+        e.Handled = true;
+        NotchHorizontalWheel?.Invoke(direction * 120);
+        if (Root.IsMouseOver && !_hoverExpanded) StartHoverIn();
     }
 
     void OnHoverOut(object? sender, EventArgs e)
@@ -819,8 +958,83 @@ public partial class NotchWindow : Window
         _hoverOut.Stop();
         if (Root.IsMouseOver || _holdOpen > 0) return;
         _hoverExpanded = false;
+        _peeking = false;
         Recompute();
         UpdateBubble();
+    }
+
+    // ---- v2 test hooks (pipe commands) -----------------------------------------------------------
+
+    internal string DescribeIdle()
+    {
+        var pet = _restView.Pet;
+        var mood = _restView.Mood;
+        return $"mode={_mode} peeking={_peeking} mood={mood.Mood}{(mood.Forced is null ? "" : "(forced)")} " +
+               $"eyes={pet.Mood} sleepyHours={EyeLogic.IsSleepy(DateTime.Now)} following={pet.IsFollowing} " +
+               $"look={pet.FollowOffset:0.0} glance='{_restView.CurrentText}' items=[{_glances.Describe()}] " +
+               $"intent={_intent.Stage} speed={_intent.Speed:0.00}";
+    }
+
+    internal string DescribePeek() => $"mode={_mode} {_peekView.Describe()}";
+
+    internal void BounceEyes() => _restView.Pet.Bounce();
+
+    /// <summary>Force the pet's mood for testing ("auto" follows the real inputs again).</summary>
+    internal string SetPetMood(string name)
+    {
+        var controller = _restView.Mood;
+        string key = name.Trim().Replace("-", "").ToLowerInvariant();
+        key = key switch { "timer" => "timerdone", "meeting" => "meetingsoon", "listen" => "listening", "think" => "thinking", "sleep" => "sleepy", _ => key };
+        if (key == "auto") controller.Forced = null;
+        else if (Enum.TryParse<PetMood>(key, ignoreCase: true, out var mood) && Enum.IsDefined(mood)) controller.Forced = mood;
+        else return "error: usage pet-mood idle|music|notify|timer|listen|think|meeting|tired|sleepy|happy|auto";
+        controller.Update();
+        return DescribeIdle();
+    }
+
+    /// <summary>Show the peek (or go back to resting) as if the pointer had rested on, or left, the notch.</summary>
+    internal string ForcePeek(bool on)
+    {
+        if (on)
+        {
+            if (!CanHover) return "not now: search, fullscreen or a drag is active";
+            _hoverExpanded = false;
+            _intent.ForcePeek(_hoverClock.Elapsed);
+            ShowPeek();
+        }
+        else
+        {
+            _hoverIn.Stop();
+            _hoverExpanded = _peeking = false;
+            Recompute();
+            UpdateBubble();
+        }
+        return DescribePeek();
+    }
+
+    /// <summary>The same events a real swipe or wheel over the notch raises; a dry run only says what it would do.</summary>
+    internal string SimulateGesture(string gesture, bool dryRun)
+    {
+        (bool horizontal, int delta) = gesture switch
+        {
+            "next" => (true, 120),
+            "prev" or "previous" => (true, -120),
+            "volup" => (false, 120),
+            "voldown" => (false, -120),
+            _ => (false, 0),
+        };
+        if (delta == 0) return "error: usage v2-gesture next|prev|volup|voldown [dry]";
+        string what = horizontal ? (delta > 0 ? "next track" : "previous track") : (delta > 0 ? "volume up" : "volume down");
+        if (dryRun) return $"would: {what} (horizontal={horizontal} delta={delta})";
+        if (horizontal) NotchHorizontalWheel?.Invoke(delta);
+        else NotchWheel?.Invoke(delta);
+        return $"sent: {what}";
+    }
+
+    /// <summary>The modules' glance providers (ModuleRegistry.Glances), for the resting glance and the peek.</summary>
+    internal IReadOnlyDictionary<string, Func<Modules.GlanceItem?>>? GlanceProviders
+    {
+        set => _glances.Providers = value;
     }
 
     // ---- Drag and drop onto the shelf -----------------------------------------------------------
@@ -835,6 +1049,7 @@ public partial class NotchWindow : Window
         if (files && !_dragging)
         {
             _dragging = true;
+            _peeking = false;
             _hoverIn.Stop();
             Recompute();
         }

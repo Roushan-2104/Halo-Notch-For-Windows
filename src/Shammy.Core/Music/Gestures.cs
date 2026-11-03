@@ -57,3 +57,24 @@ public sealed class WheelStepper
         return steps;
     }
 }
+
+/// <summary>
+/// A quick sideways flick with the mouse button held over the notch (for mice without a horizontal wheel):
+/// right = next track, left = previous. Slow drags and mostly-vertical ones are not swipes, so a click
+/// with a little wobble still counts as a click.
+/// </summary>
+public static class DragSwipe
+{
+    /// <summary>At least this far sideways (DIPs).</summary>
+    public const double MinDistance = 40;
+
+    /// <summary>Within this long from press to release.</summary>
+    public static readonly TimeSpan MaxDuration = TimeSpan.FromMilliseconds(600);
+
+    /// <returns>+1 right (next), -1 left (previous), 0 not a swipe.</returns>
+    public static int Classify(double dx, double dy, TimeSpan duration)
+    {
+        if (duration > MaxDuration || Math.Abs(dx) < MinDistance || Math.Abs(dx) < 2 * Math.Abs(dy)) return 0;
+        return Math.Sign(dx);
+    }
+}

@@ -62,8 +62,58 @@ internal sealed class GlobalKeys : IDisposable
     /// <summary>+1 volume up, -1 volume down, 0 mute toggle.</summary>
     public event Action<int>? VolumeKey;
 
+    /// <summary>Caps Lock went down (once per press, not per auto-repeat); its new state isn't known yet.</summary>
+    public event Action? CapsLockPressed;
+
+    /// <summary>A language-switch shortcut started (Left Alt+Shift, Ctrl+Shift, Win+Space): note the layout now.</summary>
+    public event Action? LanguageComboStarted;
+
+    /// <summary>That shortcut was released, which is when Windows switches; compare the layout shortly after.</summary>
+    public event Action? LanguageComboEnded;
+
+    const int VK_CAPITAL = 0x14, VK_SPACE = 0x20, VK_LMENU = 0xA4;
+    bool _capsDown, _altKey, _ctrlKey, _shiftKey, _langCombo, _langComboWin;
+
+    /// <summary>
+    /// Watches for the keys behind the Caps Lock and input-language pills. Only posts on those keys, so the
+    /// UI does nothing while you type; nothing here is swallowed.
+    /// </summary>
+    void TrackKeyboardPills(int vk, bool down)
+    {
+        if (vk == VK_CAPITAL)
+        {
+            if (down && !_capsDown) Post(() => CapsLockPressed?.Invoke());
+            _capsDown = down;
+            return;
+        }
+        bool shift = vk is VK_LSHIFT or VK_RSHIFT, alt = vk == VK_LMENU, ctrl = vk is VK_LCONTROL or VK_RCONTROL;
+        bool win = vk is VK_LWIN or VK_RWIN;
+        if (shift) _shiftKey = down;
+        if (alt) _altKey = down;
+        if (ctrl) _ctrlKey = down;
+
+        if (down && !_langCombo)
+        {
+            bool altShift = (shift && (_altKey || _ctrlKey)) || ((alt || ctrl) && _shiftKey);
+            bool winSpace = vk == VK_SPACE && _winDown;
+            if (altShift || winSpace)
+            {
+                _langCombo = true;
+                _langComboWin = winSpace;
+                Post(() => LanguageComboStarted?.Invoke());
+            }
+        }
+        // Win+Space cycles while Win is held and switches when it's released; Alt+Shift switches on release.
+        else if (!down && _langCombo && (_langComboWin ? win : shift || alt || ctrl))
+        {
+            _langCombo = false;
+            Post(() => LanguageComboEnded?.Invoke());
+        }
+    }
+
     bool Filter(int vk, bool down, uint time)
     {
+        TrackKeyboardPills(vk, down);
         // Any other key while Right Ctrl is down means a shortcut (Ctrl+C), not a hold.
         if (down && vk != VK_RCONTROL && _rightCtrlCandidate) _rightCtrlCandidate = false;
         // Any other key while AltGr is down means a character (AltGr+4 = ₹), not talking. AltGr's own
