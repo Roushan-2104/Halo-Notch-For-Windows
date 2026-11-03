@@ -318,12 +318,7 @@ internal sealed class MusicCard
             row.Children.Add(info);
             row.Children.Add(CardKit.Section(lyricsBody));
 
-            Root = new Grid
-            {
-                Width = NotchPalette.DetailWidth,
-                Height = NotchPalette.DetailHeight,
-                ClipToBounds = true,
-            };
+            Root = new Grid { ClipToBounds = true };
             Root.Children.Add(_glow);
             Root.Children.Add(row);
 

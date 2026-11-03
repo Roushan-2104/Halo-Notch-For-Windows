@@ -113,7 +113,7 @@ internal sealed class WeatherCard
 
     public FrameworkElement BuildDetail()
     {
-        var root = new Grid { Width = NotchPalette.DetailWidth, Height = NotchPalette.DetailHeight, ClipToBounds = true };
+        var root = new Grid { ClipToBounds = true };
         var glow = CardKit.Glow(CardKit.Color(NotchPalette.Weather), 320, 0.16);
         glow.HorizontalAlignment = HorizontalAlignment.Left;
         glow.VerticalAlignment = VerticalAlignment.Top;

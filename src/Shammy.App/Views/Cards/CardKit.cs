@@ -91,18 +91,8 @@ internal static class CardKit
         Child = child,
     };
 
-    /// <summary>A whole detail drawn as one card (timer, system), with the Back button's room on the left.</summary>
-    public static Border DetailPanel(UIElement child) => new()
-    {
-        Width = Shammy.Modules.NotchPalette.DetailWidth,
-        Height = Shammy.Modules.NotchPalette.DetailHeight,
-        Background = Res("CardBg"),
-        BorderBrush = Res("CardStroke"),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(20),
-        Padding = DetailPadding,
-        Child = child,
-    };
+    /// <summary>A whole detail (timer, system): fills the area the notch's frame gives it, which draws the card itself.</summary>
+    public static Border DetailPanel(UIElement child) => new() { Padding = DetailPadding, Child = child };
 
     /// <summary>A hairline column divider with the mockup's 18 px gutter after it.</summary>
     public static Border VerticalDivider() => new() { Width = 1, Background = Divider, Margin = new Thickness(18, 0, 18, 0) };
