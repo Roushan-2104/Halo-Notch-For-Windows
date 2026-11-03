@@ -350,6 +350,10 @@ public class PaletteSourcesTests
         Assert.Equal(0, PaletteSources.TextMatch("bread", "Buy milk and eggs"));
         Assert.Equal(0, PaletteSources.TextMatch("bu", "Buy milk"));
         Assert.Equal(80, PaletteSources.TextMatch("buy  MILK", "buy milk"));
+        // Only the start of a huge copy is searched.
+        var log = new string('x', PaletteSources.MaxScan) + " needle";
+        Assert.Equal(0, PaletteSources.TextMatch("needle", log));
+        Assert.Equal(80, PaletteSources.TextMatch("xxx", log));
     }
 
     [Fact]

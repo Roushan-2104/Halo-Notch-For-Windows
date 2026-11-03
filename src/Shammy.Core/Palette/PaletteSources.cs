@@ -18,6 +18,9 @@ public sealed record PaletteText(string Key, string Text, string Trigger = "");
 /// </summary>
 public static class PaletteSources
 {
+    /// <summary>How much of a remembered text is searched.</summary>
+    public const int MaxScan = 2000;
+
     /// <summary>What the empty palette offers to try.</summary>
     public static readonly IReadOnlyList<string> Examples = new[] { "play kesariya", "remind me at 6 pm", "100 usd to inr" };
 
@@ -72,7 +75,8 @@ public static class PaletteSources
     {
         var q = Normalize(query);
         if (q.Length < minLength || string.IsNullOrEmpty(text)) return 0;
-        var t = Normalize(text);
+        // Runs on every keystroke over the whole history: a copied log only has its start looked at.
+        var t = Normalize(text.Length > MaxScan ? text[..MaxScan] : text);
         if (t.StartsWith(q, StringComparison.Ordinal)) return 80;
         int at = t.IndexOf(q, StringComparison.Ordinal);
         if (at < 0) return 0;
@@ -114,7 +118,9 @@ public static class PaletteSources
     /// <summary>One line for a row's title: the first non-empty line, at most <paramref name="max"/> characters.</summary>
     public static string Line(string text, int max = 70)
     {
-        var line = (text ?? "").Replace("\r", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
+        var head = text ?? "";
+        if (head.Length > MaxScan) head = head[..MaxScan];
+        var line = head.Replace("\r", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
         line = Regex.Replace(line, @"\s+", " ");
         return line.Length <= max ? line : line[..(max - 1)].TrimEnd() + "…";
     }
