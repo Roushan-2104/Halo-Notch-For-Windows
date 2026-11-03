@@ -47,3 +47,14 @@ public static class NotchPalette
 
     public const double CardHeight = 176, DetailWidth = 924, DetailHeight = 248;
 }
+
+/// <summary>
+/// One line of glanceable info for the resting notch's rotating glance and the hover peek ("31° Pune",
+/// "Standup 10:30"). Modules register a provider with <see cref="ModuleContext.AddGlance"/>; it is asked
+/// again each time the glance rotates, and returns null when it has nothing worth showing.
+/// </summary>
+/// <param name="Text">Short, at most ~18 characters ("Standup 10:30").</param>
+/// <param name="AccentHex">The dot colour, one of <see cref="NotchPalette"/>.</param>
+/// <param name="Priority">Higher shows first and, in the peek, wins the single slot.</param>
+/// <param name="OnClick">What clicking it in the peek does (join a meeting, open the card); null = open the notch.</param>
+public sealed record GlanceItem(string Text, string AccentHex, int Priority = 0, Action? OnClick = null);

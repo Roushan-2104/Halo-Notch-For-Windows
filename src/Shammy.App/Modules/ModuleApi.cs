@@ -95,6 +95,9 @@ internal sealed class ModuleRegistry
     public List<ModuleTrayItem> TrayItems { get; } = new();
     public Dictionary<string, Func<string, string>> PipeCommands { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Glance providers by id, for the resting notch and the peek (see <see cref="GlanceItem"/>).</summary>
+    public Dictionary<string, Func<GlanceItem?>> Glances { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Words voice recognition is primed with (app names, ...); read when a voice model loads.</summary>
     public List<Func<IEnumerable<string>>> Vocabulary { get; } = new();
 
@@ -187,6 +190,9 @@ internal sealed class ModuleContext
 
     /// <summary>A card on the open notch's home row (v2 design); see <see cref="NotchCard"/>.</summary>
     public void AddCard(NotchCard card) => Notch.ExpandedView.AddCard(card);
+
+    /// <summary>A source for the resting notch's rotating glance and the hover peek; see <see cref="GlanceItem"/>.</summary>
+    public void AddGlance(string id, Func<GlanceItem?> provider) => _registry.Glances[id] = provider;
 
     /// <summary>Call when a card's <see cref="NotchCard.IsRelevant"/> answer may have changed.</summary>
     public void CardsChanged() => Notch.ExpandedView.CardsChanged();
