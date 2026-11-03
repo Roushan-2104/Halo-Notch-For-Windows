@@ -26,7 +26,7 @@ internal sealed class ClipStore
 /// Namespace is ClipboardHistory, not Clipboard, so that "Clipboard.SetText" in sibling modules keeps
 /// resolving to System.Windows.Clipboard instead of this namespace.
 /// </remarks>
-internal sealed class ClipboardModule : IShammyModule
+internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
 {
     const int PreviewPriority = 35, ScreenshotPriority = 55;
     const string PreviewId = "clipboard.preview", ScreenshotId = "clipboard.screenshot";
@@ -76,6 +76,7 @@ internal sealed class ClipboardModule : IShammyModule
             Detail = _card2.BuildDetail,
         });
         ctx.AddCommand(new ClipboardCommand(this));
+        Connect.Links.Clipboard = this;
         ctx.AddPipeCommand("clipboard-copy", PipeCopy);
         ctx.AddPipeCommand("clipboard-screenshot", PipeScreenshot);
         ctx.AddPipeCommand("clipboard-state", _ => State());
@@ -568,8 +569,12 @@ internal sealed class ClipboardModule : IShammyModule
         timer.Start();
     }
 
+    IReadOnlyList<ClipEntry> Connect.IClipboardLink.Items => _history.Items;
+    void Connect.IClipboardLink.CopyBack(ClipEntry entry) => CopyBack(entry);
+
     public void Dispose()
     {
+        if (Connect.Links.Clipboard == this) Connect.Links.Clipboard = null;
         _listener?.Dispose();
         _screens?.Dispose();
         _readDelay?.Stop();

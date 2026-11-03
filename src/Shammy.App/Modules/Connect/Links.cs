@@ -15,6 +15,13 @@ internal interface INotesLink
     CommandResult AddReminder(DateTime due, string text);
 }
 
+/// <summary>What the clipboard module offers the palette: its history, and copying an entry back.</summary>
+internal interface IClipboardLink
+{
+    IReadOnlyList<Shammy.Core.Clipboard.ClipEntry> Items { get; }
+    void CopyBack(Shammy.Core.Clipboard.ClipEntry entry);
+}
+
 internal static class LinkExtensions
 {
     /// <summary>A command's confirmation as a short notch message (for context-menu actions that aren't commands).</summary>
@@ -29,6 +36,8 @@ internal static class LinkExtensions
 internal static class Links
 {
     public static INotesLink? Notes { get; set; }
+
+    public static IClipboardLink? Clipboard { get; set; }
 
     /// <summary>Opens a card's detail (or "shelf", "alerts") in the open notch. One place, so it can move to ctx.OpenCard later.</summary>
     public static bool OpenCard(ModuleContext ctx, string id) => ctx.Notch.OpenView(id);

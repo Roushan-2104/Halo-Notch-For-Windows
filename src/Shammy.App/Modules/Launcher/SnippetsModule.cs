@@ -140,7 +140,10 @@ internal sealed class SnippetsModule : IShammyModule, ITextCommand
         _panel.Show(_snippets);
     }
 
-    void Publish() => _live = new Dictionary<string, string>(_snippets, StringComparer.OrdinalIgnoreCase);
+    void Publish() => Current = _live = new Dictionary<string, string>(_snippets, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Trigger → template for the palette to search (a snapshot; replaced on every change).</summary>
+    internal static IReadOnlyDictionary<string, string> Current { get; private set; } = new Dictionary<string, string>();
 
     void Save()
     {

@@ -4,7 +4,7 @@ namespace Shammy.Core.Palette;
 
 /// <summary>One of Shammy's own views the palette can open ("calendar" opens the Calendar card).</summary>
 /// <param name="Id">The view id the notch opens (a card id, "shelf", "alerts").</param>
-public sealed record PaletteView(string Id, string Title, string Glyph, IReadOnlyList<string> Words);
+public sealed record ShammyView(string Id, string Title, string Glyph, IReadOnlyList<string> Words);
 
 /// <summary>A remembered text the palette can find: a copied text, a note, a reminder or a snippet.</summary>
 /// <param name="Key">Stable id within its source (clip index, note id, snippet trigger).</param>
@@ -24,7 +24,7 @@ public static class PaletteSources
     /// <summary>"Try: play kesariya · remind me at 6 pm · 100 usd to inr".</summary>
     public static string TryRow => "Try: " + string.Join(" · ", Examples);
 
-    public static readonly IReadOnlyList<PaletteView> Views = new PaletteView[]
+    public static readonly IReadOnlyList<ShammyView> Views = new ShammyView[]
     {
         new("calendar", "Calendar", "", new[] { "calendar", "agenda", "schedule", "meetings" }),
         new("mirror", "Mirror", "", new[] { "mirror", "camera", "selfie" }),
@@ -44,10 +44,10 @@ public static class PaletteSources
         !(presenting && kind is PaletteKind.Clip or PaletteKind.Note);
 
     /// <summary>Views a word names: 100 for a whole word ("calendar"), 90 for a prefix of 2+ letters ("cal").</summary>
-    public static List<(PaletteView View, int Match)> FindViews(string query, Func<string, bool>? canOpen = null)
+    public static List<(ShammyView View, int Match)> FindViews(string query, Func<string, bool>? canOpen = null)
     {
         var q = Normalize(query);
-        var found = new List<(PaletteView, int)>();
+        var found = new List<(ShammyView, int)>();
         if (q.Length < 2) return found;
         foreach (var v in Views)
         {
