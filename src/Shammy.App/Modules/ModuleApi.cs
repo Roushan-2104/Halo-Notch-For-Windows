@@ -185,6 +185,12 @@ internal sealed class ModuleContext
     /// <summary>A command for the local test pipe, e.g. "timer-test 5".</summary>
     public void AddPipeCommand(string name, Func<string, string> handler) => _registry.PipeCommands[name] = handler;
 
+    /// <summary>A card on the open notch's home row (v2 design); see <see cref="NotchCard"/>.</summary>
+    public void AddCard(NotchCard card) => Notch.ExpandedView.AddCard(card);
+
+    /// <summary>Call when a card's <see cref="NotchCard.IsRelevant"/> answer may have changed.</summary>
+    public void CardsChanged() => Notch.ExpandedView.CardsChanged();
+
     /// <summary>A tab in the expanded notch (the card is 480×204; your panel gets about 436×150).</summary>
     public void AddTab(string glyph, string tooltip, FrameworkElement panel) => Notch.ExpandedView.AddTab(glyph, tooltip, panel);
 

@@ -110,6 +110,22 @@ public partial class ExpandedView : UserControl
         _moduleTabs.Add((tab, panel));
     }
 
+    readonly List<Modules.NotchCard> _cards = new();
+
+    /// <summary>The v2 home-row cards registered so far, in display order.</summary>
+    internal IReadOnlyList<Modules.NotchCard> Cards => _cards.OrderBy(c => c.Order).ToList();
+
+    /// <summary>Registers a v2 card. (Placeholder: the redesigned layout that shows them is being built.)</summary>
+    internal void AddCard(Modules.NotchCard card)
+    {
+        _cards.RemoveAll(c => c.Id == card.Id);
+        _cards.Add(card);
+        CardsChanged();
+    }
+
+    /// <summary>A card's relevance may have changed: re-lay the home row.</summary>
+    internal void CardsChanged() { }
+
     internal void ShowTab(FrameworkElement panel)
     {
         foreach (var (tab, p) in _moduleTabs)
