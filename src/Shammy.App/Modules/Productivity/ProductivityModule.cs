@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Shammy.Core.Activities;
+using Shammy.Core.Connect;
 using Shammy.Core.Productivity;
 using Shammy.Infrastructure;
 
@@ -13,7 +14,7 @@ namespace Shammy.Modules.Productivity;
 /// spoken commands ("timer 25m", "remind me at 6pm to take medicine", "note: buy milk").
 /// Running clocks live in the compact ears; reminders and notes persist and show on the Notes card.
 /// </summary>
-internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview, ITimerCardHost
+internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview, ITimerCardHost, Connect.INotesLink
 {
     // Above downloads (40), below messages (50): a running timer yields to anything more urgent.
     const int ClockPriority = 45;
@@ -112,10 +113,19 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // Reminders that fell due while Shammy wasn't running fire shortly after start.
         _reminders.Interval = TimeSpan.FromSeconds(3);
         _reminders.Start();
+        Connect.Links.Notes = this;
     }
+
+    // ---- For other modules (Connect.INotesLink): save as note, remind me later, today's reminders ------
+
+    IReadOnlyList<ReminderItem> Connect.INotesLink.Reminders => _store.Reminders;
+    IReadOnlyList<NoteItem> Connect.INotesLink.Notes => _store.Notes;
+    CommandResult Connect.INotesLink.SaveNote(string text) => AddNote(text);
+    CommandResult Connect.INotesLink.AddReminder(DateTime due, string text) => AddReminder(due, text);
 
     public void Dispose()
     {
+        if (Connect.Links.Notes == this) Connect.Links.Notes = null;
         _tick.Stop();
         _reminders.Stop();
         _cardClose.Stop();
@@ -249,6 +259,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         if (Find(ClockKind.Pomodoro) is { } existing)
             return new CommandResult(PomodoroGlyph, $"Pomodoro \u00B7 {existing.Label}", $"{existing.Display(DateTime.UtcNow)} left");
         AddClock(ClockKind.Pomodoro, Pomodoro.Label(0), PomodoroGlyph, Pomodoro.FocusLength);
+        PomodoroFocusSession(PomodoroPhase.Focus, Pomodoro.FocusLength);
         return new CommandResult(PomodoroGlyph, "Pomodoro started",
             $"{TimeFormat.Describe(Pomodoro.FocusLength)} focus, then a {TimeFormat.Describe(Pomodoro.ShortBreakLength)} break");
     }
@@ -338,7 +349,32 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _clocks.Remove(clock);
         _ctx.Remove(clock.ActivityId);
         if (clock.Kind == ClockKind.Focus) _focus.End();
+        // A pomodoro's Windows focus session ends with it, unless a separate focus session still runs.
+        if (clock.Kind == ClockKind.Pomodoro && Find(ClockKind.Focus) is null) _focus.End();
         ScheduleTick();
+    }
+
+    /// <summary>
+    /// Pomodoro focus phases start a Windows focus session (Do Not Disturb) like "focus" does; breaks end it.
+    /// A separate "focus" session that's running owns the Windows session and is left alone.
+    /// </summary>
+    void PomodoroFocusSession(PomodoroPhase phase, TimeSpan length)
+    {
+        if (Find(ClockKind.Focus) is not null) return;
+        if (phase == PomodoroPhase.Focus)
+        {
+            _focus.TryStart(DateTimeOffset.Now + length);
+            _ctx.Info($"Pomodoro focus; Windows focus session: {_focus.Status}");
+        }
+        else _focus.End();
+    }
+
+    /// <summary>A focus clock or a pomodoro's focus phase keeps the notch quiet (see QuietRules.FocusQuiet).</summary>
+    void UpdateQuiet()
+    {
+        var pomodoro = Find(ClockKind.Pomodoro);
+        PomodoroPhase? phase = pomodoro is null ? null : Pomodoro.PhaseAt(pomodoro.PomodoroStep);
+        QuietState.Set(QuietReason.Focus, QuietRules.FocusQuiet(Find(ClockKind.Focus) is not null, phase));
     }
 
     void SetPaused(RunningClock clock, bool pause)
@@ -418,8 +454,9 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     void ScheduleTick()
     {
         _tick.Stop();
-        // Every clock change and every tick passes through here, so the timer card follows along.
+        // Every clock change and every tick passes through here, so the timer card and quiet mode follow along.
         UpdateCard();
+        UpdateQuiet();
         var now = DateTime.UtcNow;
         var running = _clocks.Where(c => !c.Paused).ToList();
         if (running.Count == 0) return;
@@ -463,6 +500,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // The label width changed, so the ears need building again.
         clock.Content = new ClockContent(clock);
         PostClock(clock);
+        PomodoroFocusSession(phase, clock.Total);
         ScheduleTick();
     }
 

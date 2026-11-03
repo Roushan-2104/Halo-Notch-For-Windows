@@ -36,7 +36,7 @@ internal sealed class ShammyHost : IDisposable
     KeyboardIndicators? _keyboardPills;
     WhisperService _whisper = null!;
     UpdateService _updates = null!;
-    int _testActionClicks, _testBubbleClicks;
+    int _testActionClicks, _testBubbleClicks, _held;
     DateTime _lastPing;
     DispatcherTimer? _updateReminder;
     SearchCoordinator _search = null!;
@@ -160,6 +160,17 @@ internal sealed class ShammyHost : IDisposable
                 Post(new Activity("muted", ActivityKind.Message, PriorityMessage, new MessagePayload("", $"Muted {n.AppName}"), In(2.5)));
             };
             _notch.ExpandedView.NotificationOpened += OpenNotificationApp;
+            // Quiet mode ended (call, meeting or focus over): say how many waited, and open them on click.
+            QuietState.Changed += quiet =>
+            {
+                if (!quiet) _ui.BeginInvoke(ReleaseHeld);
+            };
+            _modules.PipeCommands["quiet-test"] = arg =>
+            {
+                QuietState.Set(Shammy.Core.Connect.QuietReason.Test, arg.Trim() != "off");
+                return $"quiet={QuietState.IsQuiet} ({QuietState.Describe()}) held={_held}";
+            };
+            _modules.PipeCommands["quiet-state"] = _ => $"quiet={QuietState.IsQuiet} ({QuietState.Describe()}) held={_held}";
             if (_settings.ShowNotifications) _ = StartNotificationsAsync();
         });
 
@@ -349,6 +360,13 @@ internal sealed class ShammyHost : IDisposable
     void OnNotification(ShammyNotification n)
     {
         if (!_settings.ShowNotifications || _settings.MutedNotificationApps.Contains(n.AppId)) return;
+        // Quiet mode (a call, a meeting, focus): no ping and no pop-up; it waits in the Notifications view
+        // (the service already added it there) and a "3 held" pill points to it when quiet ends.
+        if (QuietState.IsQuiet)
+        {
+            _held++;
+            return;
+        }
         // During a call or screen capture others may see the notch: show who it's from, not what it says.
         if (PrivacyState.Presenting)
         {
@@ -371,6 +389,16 @@ internal sealed class ShammyHost : IDisposable
         Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(6))
         {
             Click = () => OpenNotificationApp(n),
+        });
+    }
+
+    void ReleaseHeld()
+    {
+        if (QuietState.IsQuiet || Shammy.Core.Connect.QuietRules.HeldText(_held) is not { } text) return;
+        _held = 0;
+        Post(new Activity("notifications-held", ActivityKind.Message, PriorityMessage, new MessagePayload("", text), In(8))
+        {
+            Click = () => _notch.OpenView("alerts"),
         });
     }
 
