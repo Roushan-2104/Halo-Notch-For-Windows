@@ -65,7 +65,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _glowOff.Tick += (_, _) => ClearGlow();
         _cardClose.Tick += (_, _) => CloseCard();
 
-        _notes = new NotesCard(() => _store, ToggleDone, Delete, text => AddNote(text));
+        _notes = new NotesCard(() => _store, ToggleDone, Delete, text => AddNote(text))
+        {
+            // Today's calendar sits with the day's notes and reminders.
+            Events = () => Calendar.CalendarModule.Agenda,
+            Join = JoinMeeting,
+        };
         ctx.AddCard(new NotchCard
         {
             Id = "notes",
@@ -114,6 +119,13 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _reminders.Interval = TimeSpan.FromSeconds(3);
         _reminders.Start();
         Connect.Links.Notes = this;
+    }
+
+    /// <summary>Only links the calendar parser recognised as Meet/Zoom/Teams are ever opened.</summary>
+    void JoinMeeting(Shammy.Core.Calendar.CalendarOccurrence o)
+    {
+        if (o.Link is not { } link || Shammy.Core.Calendar.MeetingLinks.Classify(link) is null) return;
+        if (!_ctx.Open(link)) _ctx.ShowMessage("", "Couldn't open the meeting link", error: true);
     }
 
     // ---- For other modules (Connect.INotesLink): save as note, remind me later, today's reminders ------

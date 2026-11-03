@@ -191,6 +191,52 @@ public class MeetingReminderTests
     }
 }
 
+public class DayLinksTests
+{
+    static readonly DateTime Now = new(2026, 11, 4, 11, 0, 0);
+
+    static CalendarOccurrence Event(string title, int hour, int length = 30, int days = 0, bool link = false, bool allDay = false) =>
+        new(title, title, "", Now.Date.AddDays(days).AddHours(hour), Now.Date.AddDays(days).AddHours(hour).AddMinutes(length), allDay,
+            link ? "https://zoom.us/j/1" : null, link ? "Zoom" : null);
+
+    [Fact]
+    public void Upcoming_today_keeps_ongoing_and_later_timed_events()
+    {
+        var items = new[]
+        {
+            Event("Standup", 10, 30),          // over
+            Event("Review", 10, 90),           // going on
+            Event("Lunch", 13),
+            Event("Tomorrow", 9, days: 1),
+            Event("Holiday", 0, 24 * 60, allDay: true),
+            Event("Late", 18),
+        };
+        Assert.Equal(new[] { "Review", "Lunch", "Late" }, DayLinks.UpcomingToday(items, Now).Select(o => o.Title));
+        Assert.Equal(new[] { "Review" }, DayLinks.UpcomingToday(items, Now, max: 1).Select(o => o.Title));
+    }
+
+    [Fact]
+    public void Reminders_today_are_open_ones_by_time()
+    {
+        var reminders = new[]
+        {
+            (Text: "pay rent", Due: Now.AddHours(3), Done: false),
+            (Text: "call mom", Due: Now.AddHours(-1), Done: false),
+            (Text: "done one", Due: Now.AddHours(1), Done: true),
+            (Text: "tomorrow", Due: Now.AddDays(1), Done: false),
+        };
+        var today = DayLinks.RemindersToday(reminders, r => r.Due, r => r.Done, Now);
+        Assert.Equal(new[] { "call mom", "pay rent" }, today.Select(r => r.Text));
+    }
+
+    [Fact]
+    public void Event_meta_shows_time_or_now_and_the_provider()
+    {
+        Assert.Equal("1:00 PM · Zoom", DayLinks.EventMeta(Event("Sync", 13, link: true), Now));
+        Assert.Equal("now", DayLinks.EventMeta(Event("Review", 10, 90), Now));
+    }
+}
+
 public class EarbudAlertsTests
 {
     const string Buds = "25BF04C71669";

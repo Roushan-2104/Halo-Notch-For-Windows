@@ -50,6 +50,15 @@ internal sealed class NotesCard
 
     static bool Private => PrivacyState.Presenting;
 
+    /// <summary>The calendar's occurrences, for today's upcoming events on the card (read-only rows).</summary>
+    public Func<IReadOnlyList<Shammy.Core.Calendar.CalendarOccurrence>>? Events { get; init; }
+
+    /// <summary>Joins an event's call (only events with a recognised meeting link get a Join button).</summary>
+    public Action<Shammy.Core.Calendar.CalendarOccurrence>? Join { get; init; }
+
+    List<Shammy.Core.Calendar.CalendarOccurrence> Today(DateTime now, int max) =>
+        Events is null ? new() : DayLinks.UpcomingToday(Events(), now, max);
+
     public FrameworkElement Compact => _compact;
 
     /// <summary>Open items first (reminders by time, then notes newest first), then ticked-off ones, newest first.</summary>
@@ -110,17 +119,25 @@ internal sealed class NotesCard
             hidden.Margin = new Thickness(0, 4, 0, 0);
             items.Children.Add(hidden);
         }
-        else if (open.Count == 0)
+        // Today's next calendar event shares the card with the first open item.
+        var events = Private ? new() : Today(now, 1);
+        if (!Private && open.Count == 0 && events.Count == 0)
         {
             var empty = CardKit.Label(lines.Count == 0 ? "Try “note: buy milk”" : "Nothing left to do", 12, FontWeights.Medium, CardKit.Text2);
             empty.TextWrapping = TextWrapping.Wrap;
             empty.TextTrimming = TextTrimming.None;
             items.Children.Add(empty);
         }
-        for (int i = 0; i < (Private ? 0 : Math.Min(2, open.Count)); i++)
+        int shown = Private ? 0 : Math.Min(events.Count > 0 ? 1 : 2, open.Count);
+        for (int i = 0; i < shown; i++)
         {
-            if (i > 0) items.Children.Add(new Border { Height = 1, Background = CardKit.Brush(NotchPalette.CardStroke), Margin = new Thickness(0, 8, 0, 8) });
+            if (i > 0) items.Children.Add(Separator());
             items.Children.Add(CompactItem(open[i], now));
+        }
+        foreach (var e in events)
+        {
+            if (items.Children.Count > 0) items.Children.Add(Separator());
+            items.Children.Add(CompactEvent(e, now));
         }
         Grid.SetRow(items, 1);
         _compact.Children.Add(items);
@@ -159,6 +176,26 @@ internal sealed class NotesCard
             r.Margin = new Thickness(0, 3, 0, 0);
             text.Children.Add(r);
         }
+        row.Children.Add(text);
+        return row;
+    }
+
+    static Border Separator() => new() { Height = 1, Background = CardKit.Brush(NotchPalette.CardStroke), Margin = new Thickness(0, 8, 0, 8) };
+
+    /// <summary>A read-only calendar line: a blue calendar glyph, the title and "10:30 AM · Zoom".</summary>
+    static FrameworkElement CompactEvent(Shammy.Core.Calendar.CalendarOccurrence e, DateTime now)
+    {
+        var row = new DockPanel();
+        var glyph = CardKit.Glyph("", 13, CardKit.Brush(NotchPalette.Calendar));
+        glyph.VerticalAlignment = VerticalAlignment.Top;
+        glyph.Width = 16;
+        glyph.Margin = new Thickness(0, 1, 9, 0);
+        row.Children.Add(glyph);
+        var text = new StackPanel();
+        text.Children.Add(CardKit.Label(e.Title, 13, FontWeights.SemiBold));
+        var meta = CardKit.Label(DayLinks.EventMeta(e, now), 11, FontWeights.Medium, CardKit.Text2);
+        meta.Margin = new Thickness(0, 3, 0, 0);
+        text.Children.Add(meta);
         row.Children.Add(text);
         return row;
     }
@@ -281,9 +318,55 @@ internal sealed class NotesCard
                 _empty.Visibility = Visibility.Visible;
                 return;
             }
+            // Today's calendar first (read-only, Join where there's a call link), then notes and reminders.
+            var events = _card.Today(now, 4);
+            foreach (var e in events) _grid.Children.Add(EventItem(e, now));
             foreach (var line in lines) _grid.Children.Add(Item(line, now));
             _empty.Text = "No notes or reminders yet";
-            _empty.Visibility = lines.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _empty.Visibility = lines.Count == 0 && events.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        FrameworkElement EventItem(Shammy.Core.Calendar.CalendarOccurrence e, DateTime now)
+        {
+            var row = new DockPanel();
+            var glyph = CardKit.Glyph("", 14, CardKit.Brush(NotchPalette.Calendar));
+            glyph.Width = 18;
+            glyph.Margin = new Thickness(0, 0, 10, 0);
+            row.Children.Add(glyph);
+            if (e.HasLink && _card.Join is { } join)
+            {
+                var button = CardKit.PillButton("Join", () => join(e), 24, "", CardKit.Brush(NotchPalette.Calendar), CardKit.Brush("#6AACFF"),
+                    CardKit.Brush("#000000"), 11, $"Join {e.Title}");
+                button.Margin = new Thickness(8, 0, 0, 0);
+                DockPanel.SetDock(button, Dock.Right);
+                row.Children.Add(button);
+            }
+            var pill = new Border
+            {
+                Height = 22,
+                CornerRadius = new CornerRadius(11),
+                Background = CardKit.Tint(NotchPalette.Calendar, 0.12),
+                Padding = new Thickness(8, 0, 8, 0),
+                Margin = new Thickness(8, 0, 0, 0),
+                Child = CardKit.Label(DayLinks.EventMeta(e, now), 11, FontWeights.SemiBold, CardKit.Brush(NotchPalette.Calendar)),
+            };
+            DockPanel.SetDock(pill, Dock.Right);
+            row.Children.Add(pill);
+            row.Children.Add(CardKit.Label(e.Title, 13, FontWeights.SemiBold));
+            var item = new Border
+            {
+                Height = 44,
+                Margin = new Thickness(0, 0, 12, 8),
+                Padding = new Thickness(12, 0, 12, 0),
+                CornerRadius = new CornerRadius(12),
+                Background = CardKit.Raised,
+                BorderBrush = CardKit.RaisedStroke,
+                BorderThickness = new Thickness(1),
+                Child = row,
+                ToolTip = $"{e.Title} · {Shammy.Core.Calendar.CalendarText.Range(e.Start, e.End)}",
+            };
+            CardKit.AutomationName(item, $"{e.Title}, {DayLinks.EventMeta(e, now)}, from your calendar");
+            return item;
         }
 
         FrameworkElement Item(NoteLine line, DateTime now)

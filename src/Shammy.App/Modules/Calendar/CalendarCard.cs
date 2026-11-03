@@ -230,9 +230,23 @@ internal sealed class CalendarCard
     {
         var outer = new Border { BorderBrush = CardKit.Brush(NotchPalette.CardStroke), BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(18, 0, 0, 0) };
         var stack = new StackPanel();
-        stack.Children.Add(CardKit.Caption("Next 3 days"));
+
+        // Today's open reminders (from Notes) come first; they take the room of one day row.
+        var reminders = Connect.Links.Notes is { } notes
+            ? Shammy.Core.Connect.DayLinks.RemindersToday(notes.Reminders, r => r.Due, r => r.Done, now, 2)
+            : new();
+        if (reminders.Count > 0)
+        {
+            stack.Children.Add(CardKit.Caption("Reminders today"));
+            foreach (var r in reminders) stack.Children.Add(ReminderRow(r, now));
+            var gap = CardKit.Caption("Next days");
+            gap.Margin = new Thickness(0, 10, 0, 0);
+            stack.Children.Add(gap);
+        }
+        else stack.Children.Add(CardKit.Caption("Next 3 days"));
+        int days = reminders.Count > 0 ? 2 : 3;
         int shown = 0;
-        for (int i = 1; i <= 3; i++)
+        for (int i = 1; i <= 3 && shown < days; i++)
         {
             var day = now.Date.AddDays(i);
             var list = CalendarAgenda.OnDay(items, day).Where(o => o.Start >= day || o.AllDay).ToList();
@@ -252,6 +266,28 @@ internal sealed class CalendarCard
         }
         outer.Child = stack;
         return outer;
+    }
+
+    /// <summary>A compact reminder line: bell, text (just "Reminder" while the screen is shared), time.</summary>
+    static Border ReminderRow(Productivity.ReminderItem r, DateTime now)
+    {
+        var row = new DockPanel();
+        var bell = CardKit.Glyph("", 11, CardKit.Brush(NotchPalette.Purple));
+        bell.Margin = new Thickness(0, 0, 8, 0);
+        row.Children.Add(bell);
+        var time = CardKit.Label(r.Due <= now ? "due" : CalendarText.ClockAmPm(r.Due), 11, FontWeights.SemiBold, CardKit.Text2);
+        time.Margin = new Thickness(8, 0, 0, 0);
+        DockPanel.SetDock(time, Dock.Right);
+        row.Children.Add(time);
+        row.Children.Add(CardKit.Label(Shammy.Core.Connect.PrivacyText.Reminder(r.Title, Infrastructure.PrivacyState.Presenting), 12, FontWeights.SemiBold));
+        return new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Background = CardKit.Brush("#18181B"),
+            Padding = new Thickness(10, 6, 10, 6),
+            Margin = new Thickness(0, 6, 0, 0),
+            Child = row,
+        };
     }
 
     static Border UpcomingRow(DateTime day, string title, string meta, string colour)
