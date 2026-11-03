@@ -35,7 +35,7 @@ large-v3-turbo:
 
 - Model card: https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Apex
 - Revision used: `f3214eed20b4e4d4144e739982d911f87b9cb223`
-- License: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+- License: Apache License 2.0, full text in [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt) (also https://www.apache.org/licenses/LICENSE-2.0). The upstream repository has no NOTICE file.
 
 **Modification:** Shammy converted the model to the GGML format used by whisper.cpp and quantized it to
 q5_0, giving `ggml-apex-hinglish-q5_0.bin` (SHA-256
