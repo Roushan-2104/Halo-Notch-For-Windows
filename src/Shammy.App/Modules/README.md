@@ -23,14 +23,19 @@ The whole API is in [`ModuleApi.cs`](ModuleApi.cs); read it first.
 |---|---|
 | React to typed (tap Right Alt) or spoken (hold Right Alt) text | `ctx.AddCommand(ITextCommand)`; `CanHandle` must be cheap and specific so it never steals normal web searches |
 | Say what your command will do in the typing palette ("= 42", "Start a 25 min timer") | Also implement `ICommandPreview` on the command; cheap, no side effects, null if unsure |
-| Show something live in the compact notch | `ctx.Post(new Activity("<module>.<id>", ActivityKind.Custom, priority, payload))` where payload implements `ICompactContent` |
-| A tab in the expanded notch | `ctx.AddTab(glyph, tooltip, panel)` (panel gets ~436×150), `ctx.OpenTab(panel)` |
+| A command that must win over broader matchers (the launcher's "open …") | `ctx.AddCommandFirst(ITextCommand)`, only for fixed phrase lists |
+| Show something live in the compact notch | `ctx.Post(new Activity("<module>.<id>", ActivityKind.Custom, priority, payload))` where payload implements `ICompactContent`. Keep it for events (a timer running, a call); anything that is just nice to know belongs in a glance, so the resting notch stays the pet's |
+| A card in the open notch | `ctx.AddCard(new NotchCard { Id, Title, Width = 340/260/176, Compact, Detail, Order, IsRelevant, Chip })`: `Compact` is drawn at Width × 176 (content only; the notch frames it), `Detail` builds the 924×248 view it opens into in place. `IsRelevant` decides whether it sits on the home row right now; a card that can leave the row needs `Chip = true` (chips that don't fit go under "More") or nothing can open it |
+| The card's relevance changed | `ctx.CardsChanged()` (cheap; call it whenever `IsRelevant` may have flipped) |
+| Open your card from a command or a pill | `ctx.OpenCard("<card id>")`: opens its detail in place once the command's confirmation has closed, held until the pointer has visited and left (or 8 s) |
+| A line in the resting notch's rotating glance and the hover peek | `ctx.AddGlance("<id>", () => GlanceItem?)`: ~18 characters, an accent from `NotchPalette`, a priority, an optional click, and `StartsAt` for events (the pet uses it for "meeting soon"); return null when there's nothing to say. Providers are asked often, so keep them cheap and pick rotating text by the clock |
+| Older modules only | `ctx.AddTab` / `ctx.OpenTab` (a ~436×150 panel). Don't use them for new features: use a card |
 | A bigger popup (QR code, picker) | `ctx.ShowCard(element, width, height, interactive)` / `ctx.CloseCard()` |
 | Show over a fullscreen app (only for things the user asked to be interrupted for, like alarms) | `BreaksFullscreen = true` on the `Activity`, or `ctx.ShowCard(..., breaksFullscreen: true)`; it never takes focus there |
 | Act on a circle before it becomes a search | `ctx.AddSelectionHandler(ISelectionHandler)` (return null to pass) |
 | A chip on the results card | `ctx.AddResultChip(...)` |
 | Right-click action on shelf files | `ctx.AddShelfAction(...)` |
-| Tray menu item or toggle | `ctx.AddTrayItem` / `ctx.AddTrayToggle` |
+| Tray menu item or toggle | `ctx.AddTrayItem(text, onClick, visible)` (`visible` is asked each time the menu opens) / `ctx.AddTrayToggle` |
 | Mouse wheel / swipe over the notch | `ctx.NotchWheel`, `ctx.NotchHorizontalWheel` |
 | Flash the notch edge for an event | `ctx.FlashEdge(color)` |
 | Keep the edge lit while a state lasts | `ctx.SetGlow(color)` / `ctx.SetGlow(null)` |
@@ -41,6 +46,12 @@ Activity priorities: HUD 90, notification 80, low battery 75, charging 70, Bluet
 messages 50, downloads 40, voice-model 30, media 20. Pick something that fits between them.
 
 ## Look and feel
+
+Cards follow the v2 design: background `CardBg` (#121214) with a 1 px `CardStroke`, text `CardText` / `CardText2`, one
+accent per kind of thing (`NotchPalette` and the matching `MusicAccent`, `CalendarAccent`, `TimerAccent`,
+`BatteryAccent`, `WeatherAccent`, `PurpleAccent`, `AlarmAccent` brushes), big bold numbers with tiny uppercase
+labels. `Modules/Kit/CardKit` has builders for the common pieces, and `CardKit.H24` says whether to write times
+on a 24-hour clock.
 
 Pure black notch, white text. Use the theme resources from `Theme/Theme.xaml`: brushes `Fg`, `Fg2`
 (secondary text), `Fg3` (hints), `Fill1`–`Fill3` (subtle surfaces), `AccentBrush` (the Windows accent),

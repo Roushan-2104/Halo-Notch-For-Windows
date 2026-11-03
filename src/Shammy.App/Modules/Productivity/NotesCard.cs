@@ -196,7 +196,7 @@ internal sealed class NotesCard
             header.Children.Add(_bar);
 
             _input = new TextBox { Style = (Style)Application.Current.Resources["BareTextBox"], FontSize = 12, FontFamily = CardKit.Font };
-            var hint = CardKit.Label("Add a note, or say “Hey Shammy, remind me…”", 12, FontWeights.Normal, CardKit.Text2);
+            var hint = CardKit.Label("Add a note, or hold Right Alt and say “remind me…”", 12, FontWeights.Normal, CardKit.Text2);
             hint.IsHitTestVisible = false;
             _input.TextChanged += (_, _) => hint.Visibility = _input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
             _input.KeyDown += (_, e) =>
