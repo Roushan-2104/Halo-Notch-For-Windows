@@ -35,6 +35,27 @@ internal sealed class ListeningHistoryStore
         return new ListeningHistory();
     }
 
+    /// <summary>Removes the file (and cancels any save still queued).</summary>
+    public void Delete()
+    {
+        Interlocked.Increment(ref _version);
+        _ = Task.Run(() =>
+        {
+            lock (_lock)
+            {
+                try
+                {
+                    File.Delete(FilePath);
+                    File.Delete(FilePath + ".tmp");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Log.Warn("Deleting the song history failed", ex);
+                }
+            }
+        });
+    }
+
     /// <summary>Writes a snapshot off the UI thread; the latest snapshot wins.</summary>
     public void SaveInBackground(IReadOnlyList<HeardSong> songs)
     {

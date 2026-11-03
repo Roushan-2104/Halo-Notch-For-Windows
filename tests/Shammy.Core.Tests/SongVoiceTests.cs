@@ -331,8 +331,53 @@ public class HinglishCommandTests
     public void Reminders(string hinglish, string english) => Assert.Equal(english, HinglishCommands.ToEnglish(hinglish));
 
     [Theory]
-    [InlineData("kal subah 7 baje ka alarm laga do")]
+    [InlineData("kal subah 7 baje ka alarm laga do", "alarm tomorrow morning at 7")]
+    [InlineData("kal subah saat baajay ka alarm laga do.", "alarm tomorrow morning at 7")]
+    [InlineData("kal subah sath bajeka alarm laga do.", "alarm tomorrow morning at 7")]
+    [InlineData("Kal Subah Saat Bajay Ka Alam Lagado.", "alarm tomorrow morning at 7")]
+    [InlineData("aaj raat 10 baje alarm set karo", "alarm tonight at 10")]
+    [InlineData("कल सुबह 7 बजे का अलार्म लगा दो", "alarm tomorrow morning at 7")]
+    public void Alarms(string hinglish, string english) => Assert.Equal(english, HinglishCommands.ToEnglish(hinglish));
+
+    [Theory]
+    [InlineData("set an alarm for 7 am", 2026, 3, 11, 7, 0)]
+    [InlineData("alarm at 7 tomorrow", 2026, 3, 11, 7, 0)]
+    [InlineData("Wake me up at 6:30 am.", 2026, 3, 11, 6, 30)]
+    [InlineData("set alarm for 5 pm", 2026, 3, 10, 17, 0)]
+    [InlineData("alarm in 20 minutes", 2026, 3, 10, 15, 20)]
+    [InlineData("kal subah 7 baje ka alarm laga do", 2026, 3, 11, 7, 0)]
+    [InlineData("Kal Subah Saat Bajay Ka Alam Lagado.", 2026, 3, 11, 7, 0)]
+    public void Alarms_are_reminders_titled_alarm(string text, int y, int mo, int d, int h, int mi)
+    {
+        var command = ProductivityParser.Parse(text, Now);
+        Assert.NotNull(command);
+        Assert.Equal(ProductivityAction.Remind, command!.Action);
+        Assert.Equal("Alarm", command.Text);
+        Assert.Equal(new DateTime(y, mo, d, h, mi, 0), command.Due);
+        Assert.Contains("Alarm", Shammy.Core.Palette.PaletteQuery.DescribeProductivity(command, Now));
+    }
+
+    [Theory]
+    [InlineData("alarm clock app")]
+    [InlineData("alarm sounds")]
+    [InlineData("best alarm clock")]
+    [InlineData("alarm")]
+    public void Alarm_searches_stay_searches(string text) => Assert.Null(ProductivityParser.Parse(text, Now));
+
+    [Fact]
+    public void Set_an_alarm_without_a_time_asks_for_one() =>
+        Assert.Equal(ProductivityAction.ReminderNeedsTime, ProductivityParser.Parse("set an alarm", Now)!.Action);
+
+    [Fact]
+    public void Typed_hinglish_parses_directly_so_the_palette_can_preview_it()
+    {
+        Assert.Equal(ProductivityAction.StartTimer, ProductivityParser.Parse("paanch minute ka timer laga do", Now)!.Action);
+        Assert.Equal(ProductivityAction.Remind, ProductivityParser.Parse("kal subah 7 baje yaad dilana ki doctor ko call karna", Now)!.Action);
+    }
+
+    [Theory]
     [InlineData("mujhe 50000 ke under ek achha laptop batao")]
+    [InlineData("alarm laga do gaana")]
     [InlineData("Set a timer for 10 minutes.")]
     [InlineData("aaj mausam kaisa hai")]
     [InlineData("")]

@@ -83,7 +83,11 @@ public static class ProductivityParser
         "for", "called", "named", "labelled", "labeled", "label", "titled", "to", "the", "my",
     };
 
-    static readonly HashSet<string> ReminderLead = new(StringComparer.OrdinalIgnoreCase) { "to", "that", "about", "of" };
+    // Alarms are reminders titled "Alarm": "set an alarm for 7 am", "alarm at 7 tomorrow", "wake me up at 6".
+    static readonly Regex AlarmCommand = new(@"^(?:(?:set|create|make|add|start)\s+(?:me\s+)?)?(?:an?\s+|the\s+|my\s+)?alarm(?:\s+(?:for|on)\b)?\s*(?<when>.*)$", Opts);
+    static readonly Regex WakeMe = new(@"^wake\s+me(?:\s+up)?\s+(?<when>.+)$", Opts);
+
+    static readonly HashSet<string> ReminderLead =new(StringComparer.OrdinalIgnoreCase) { "to", "that", "about", "of" };
 
     const int MaxCommand = 300, MaxNote = 4000;
 
@@ -99,9 +103,17 @@ public static class ProductivityParser
         // A long dictated note is still a note; anything else that long is a search, not a command.
         if (s.Length > MaxCommand) return ParseNote(s);
 
+        // Hinglish ("5 minute ka timer laga do", "kal subah 7 baje ka alarm laga do") reads as its English.
+        return ParseBody(s, now)
+            ?? (Shammy.Core.Search.HinglishCommands.ToEnglish(s) is { } english ? ParseBody(english, now) : null);
+    }
+
+    static ProductivityCommand? ParseBody(string s, DateTime now)
+    {
         return ParseNote(s)
             ?? ParseShowNotes(s)
             ?? ParseReminder(s, now)
+            ?? ParseAlarm(s, now)
             ?? ParseTimerControl(s)
             ?? ParseStopwatch(s)
             ?? ParsePomodoro(s)
@@ -168,6 +180,27 @@ public static class ProductivityParser
         return remindMe && ReminderLead.Contains(words[0]) && words.Count > 1
             ? new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = ReminderText(original) }
             : null;
+    }
+
+    // ---- Alarms ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// An alarm is a reminder titled "Alarm" (it pings and shows like any reminder). Only with a time, or the
+    /// bare "set an alarm": "alarm clock app" and "alarm sounds" are searches.
+    /// </summary>
+    static ProductivityCommand? ParseAlarm(string s, DateTime now)
+    {
+        var m = AlarmCommand.Match(s);
+        if (!m.Success) m = WakeMe.Match(s);
+        if (!m.Success) return null;
+        var when = WhenParser.Normalize(m.Groups["when"].Value.Trim());
+        bool asked = s.StartsWith("set", StringComparison.OrdinalIgnoreCase) || s.StartsWith("wake", StringComparison.OrdinalIgnoreCase);
+        if (when.Length == 0)
+            return asked ? new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = "Alarm" } : null;
+        // "alarm 7 am" / "for 7 am": a lone clock reads as "at 7 am".
+        var due = WhenParser.Parse(when, now) ?? WhenParser.Parse("at " + when, now);
+        if (due is null) return null;
+        return new ProductivityCommand(ProductivityAction.Remind) { Due = due.Value, Text = "Alarm" };
     }
 
     static ProductivityCommand Reminder(DateTime due, IEnumerable<string> words)

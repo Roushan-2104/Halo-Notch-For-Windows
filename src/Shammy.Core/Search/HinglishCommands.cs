@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace Shammy.Core.Search;
 
 /// <summary>
-/// Timer and reminder commands said in Hinglish, rewritten as the English the command parsers know:
+/// Timer, alarm and reminder commands said in Hinglish, rewritten as the English the command parsers know
+/// ("kal subah 7 baje ka alarm laga do" becomes "alarm tomorrow morning at 7"):
 /// "paanch minute ka timer laga do" becomes "timer 5 minutes", "kal subah 7 baje yaad dilana ki doctor ko
 /// call karna" becomes "remind me tomorrow morning at 7 to doctor ko call karna". Devanagari is spelt out
 /// first. Anything else returns null and is searched as said (Google understands Hindi).
@@ -16,7 +17,7 @@ public static class HinglishCommands
     static readonly Dictionary<string, double> Numbers = new(StringComparer.OrdinalIgnoreCase)
     {
         ["ek"] = 1, ["do"] = 2, ["teen"] = 3, ["tin"] = 3, ["char"] = 4, ["chaar"] = 4, ["paanch"] = 5, ["panch"] = 5,
-        ["paanchh"] = 5, ["chhe"] = 6, ["chhah"] = 6, ["che"] = 6, ["chah"] = 6, ["saat"] = 7, ["sat"] = 7, ["aath"] = 8,
+        ["paanchh"] = 5, ["chhe"] = 6, ["chhah"] = 6, ["che"] = 6, ["chah"] = 6, ["saat"] = 7, ["sat"] = 7, ["sath"] = 7, ["aath"] = 8,
         ["ath"] = 8, ["nau"] = 9, ["das"] = 10, ["dus"] = 10, ["gyarah"] = 11, ["gyara"] = 11, ["barah"] = 12, ["bara"] = 12,
         ["terah"] = 13, ["chaudah"] = 14, ["pandrah"] = 15, ["pandra"] = 15, ["solah"] = 16, ["satrah"] = 17,
         ["atharah"] = 18, ["unnis"] = 19, ["bees"] = 20, ["bis"] = 20, ["pachees"] = 25, ["pachis"] = 25, ["tees"] = 30,
@@ -27,6 +28,8 @@ public static class HinglishCommands
     static readonly Regex Minute = new(@"^(?:minutes?|minat|minit|mint|minute|minton|mins?)$", Opts);
     static readonly Regex Second = new(@"^(?:seconds?|sekand|second|secs?)$", Opts);
     static readonly Regex Hour = new(@"^(?:ghanta|ghante|ghanton|ghante|hours?|hrs?)$", Opts);
+    // "alam" is how the English pass hears it ("Ka Alam Lagado").
+    static readonly Regex AlarmWord = new(@"^(?:alarm|alaarm|alaram|alarum|alam)$", Opts);
     static readonly Regex TimerWord = new(@"^(?:timer|taimar|taimer|taaimar|timar|taymar)$", Opts);
 
     // "laga do", "lagado", "laga dijiye", "set karo", "start kar do", "chalu karo".
@@ -41,7 +44,7 @@ public static class HinglishCommands
         "mujhe", "please", "zara", "jara", "ki", "ke", "ka", "ko", "liye", "mera", "meri", "mere", "ek", "aap", "plz",
     };
 
-    /// <summary>English for a Hinglish timer or reminder command, or null when it isn't one.</summary>
+    /// <summary>English for a Hinglish timer, alarm or reminder command, or null when it isn't one.</summary>
     public static string? ToEnglish(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
@@ -55,7 +58,7 @@ public static class HinglishCommands
         t = Regex.Replace(t, @"(?<!\d)\.|\.(?!\d)", " ");
         t = Spaces.Replace(t, " ").Trim();
         if (t.Length == 0) return null;
-        return Reminder(t) ?? Timer(t);
+        return Reminder(t) ?? Alarm(t) ?? Timer(t);
     }
 
     static string? Timer(string t)
@@ -77,9 +80,30 @@ public static class HinglishCommands
         var verb = RemindVerb.Match(t);
         if (!verb.Success) return null;
         var words = (t[..verb.Index] + " " + t[(verb.Index + verb.Length)..]).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (When(words, out var task) is not { } when) return null;
+        return task.Count == 0 ? $"remind me {when}" : $"remind me {when} to {string.Join(' ', task)}";
+    }
 
+    /// <summary>"kal subah 7 baje ka alarm laga do" as "alarm tomorrow morning at 7" (an alarm is a reminder titled Alarm).</summary>
+    static string? Alarm(string t)
+    {
+        var verb = SetVerb.Match(t);
+        if (!verb.Success) return null;
+        var words = (t[..verb.Index] + " " + t[(verb.Index + verb.Length)..]).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        int alarm = words.FindIndex(w => AlarmWord.IsMatch(w));
+        if (alarm < 0) return null;
+        words.RemoveAt(alarm);
+        // Nothing but the time may be left ("ka", "mera" aside): "alarm laga do gaana" isn't an alarm.
+        if (When(words, out var rest) is not { } when || rest.Count > 0) return null;
+        return "alarm " + when;
+    }
+
+    /// <summary>The time phrase in Hinglish words, as English ("tomorrow morning at 7", "in 10 minutes"); the
+    /// other words are left in <paramref name="task"/> with filler trimmed from both ends.</summary>
+    static string? When(List<string> words, out List<string> task)
+    {
         string? day = null, part = null, clock = null, inTime = null;
-        var task = new List<string>();
+        task = new List<string>();
         for (int i = 0; i < words.Count; i++)
         {
             var w = words[i];
@@ -112,10 +136,11 @@ public static class HinglishCommands
         string when = inTime is not null ? "in " + inTime
             : string.Join(' ', new[] { day, part, clock is null ? null : "at " + clock }.Where(s => s is not null));
         if (day == "today" && part == "night") when = when.Replace("today night", "tonight", StringComparison.Ordinal);
-        return task.Count == 0 ? $"remind me {when}" : $"remind me {when} to {string.Join(' ', task)}";
+        return when;
     }
 
-    static bool IsBaje(string w) => w is "baje" or "bajay" or "bajey" or "bje" or "baaje" or "bajay" or "bajei";
+    // Whisper glues the next "ka" on ("sath bajeka alarm").
+    static bool IsBaje(string w) => w is "baje" or "bajay" or "bajey" or "bje" or "baaje" or "bajei" or "baajay" or "baajey" or "bajeka" or "bajayka" or "bajeke";
 
     static string? PartOfDay(string w) => w switch
     {

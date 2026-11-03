@@ -13,6 +13,9 @@ namespace Shammy.Modules.Music;
 public sealed class MusicSettings
 {
     public bool AlbumGlow { get; set; } = true;
+
+    /// <summary>Record songs played on this PC so voice expects their names ("Remember songs for voice").</summary>
+    public bool RememberSongs { get; set; } = true;
 }
 
 /// <summary>
@@ -64,7 +67,15 @@ internal sealed class MusicModule : IShammyModule
         ctx.AddCommand(new MusicTextCommand(this));
         _history = _historyStore.Load();
         _historyNames = _history.Names().ToArray();
-        ctx.AddSongVocabulary(() => _historyNames);
+        // Off means off: nothing recorded and nothing remembered offered to voice (the built-in list still is).
+        ctx.AddSongVocabulary(() => _settings.RememberSongs ? _historyNames : Array.Empty<string>());
+        ctx.AddTrayToggle("Remember songs for voice", () => _settings.RememberSongs, on =>
+        {
+            _settings.RememberSongs = on;
+            ctx.Save(_settings);
+            if (!on) _heardTimer?.Stop();
+        });
+        ctx.AddTrayItem("Clear song history", ClearHistory);
         ctx.AddTab("\uE8D6", "Lyrics", _panel);
         ctx.AddTrayToggle("Flash album colour on new songs", () => _settings.AlbumGlow, on =>
         {
@@ -213,7 +224,7 @@ internal sealed class MusicModule : IShammyModule
     void WatchForHeard()
     {
         var m = Media;
-        if (!m.HasSession || !m.IsPlaying || _trackKey == _heardKey) return;
+        if (!_settings.RememberSongs || !m.HasSession || !m.IsPlaying || _trackKey == _heardKey) return;
         _heardTimer ??= new DispatcherTimer(HeardAfter, DispatcherPriority.Background, (_, _) => RecordHeard(), _ctx.Ui) { IsEnabled = false };
         if (_heardTimer.IsEnabled && _heardTimer.Tag as string == _trackKey) return;
         _heardTimer.Tag = _trackKey;
@@ -226,11 +237,22 @@ internal sealed class MusicModule : IShammyModule
         _heardTimer!.Stop();
         var m = Media;
         // Still the same track and still playing; nothing is recorded while the screen may be watched.
-        if (!m.HasSession || !m.IsPlaying || _heardTimer.Tag as string != _trackKey || PrivacyState.Presenting) return;
+        if (!_settings.RememberSongs || !m.HasSession || !m.IsPlaying || _heardTimer.Tag as string != _trackKey || PrivacyState.Presenting) return;
         _heardKey = _trackKey;
         if (!_history.Record(m.Title, m.Artist, DateTime.UtcNow)) return;
         _historyNames = _history.Names().ToArray();
         _historyStore.SaveInBackground(_history.Songs);
+    }
+
+    void ClearHistory()
+    {
+        _heardTimer?.Stop();
+        _history = new ListeningHistory();
+        _historyNames = Array.Empty<string>();
+        // The track playing now isn't re-recorded straight away; the next one is (if remembering is on).
+        _heardKey = _trackKey;
+        _historyStore.Delete();
+        _ctx.ShowMessage("", "Song history cleared");
     }
 
     void LoadLyricsForCurrentTrack(bool debounce)
@@ -433,7 +455,7 @@ internal sealed class MusicModule : IShammyModule
         var glow = _glow is { } c ? $"last #{c.R:X2}{c.G:X2}{c.B:X2}" : "none";
         return $"track={(m.HasSession ? NowPlaying() : "-")} playing={m.IsPlaying} glow={glow} glowSetting={_settings.AlbumGlow} " +
                $"lyrics={_panel.Kind} lines={_panel.LineCount} index={_panel.CurrentIndex} ticking={_panel.IsTicking} tabVisible={_panel.IsVisible} " +
-               $"volume={volume} lastPlayed={_lastPlayed?.VideoId ?? "-"} ytmApp={_player.Describe()} heardSongs={_history.Songs.Count}";
+               $"volume={volume} lastPlayed={_lastPlayed?.VideoId ?? "-"} ytmApp={_player.Describe()} heardSongs={_history.Songs.Count} rememberSongs={_settings.RememberSongs}";
     }
 
     public void Dispose()
