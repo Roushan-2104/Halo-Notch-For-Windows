@@ -241,18 +241,11 @@ public partial class NotchWindow : Window
         var monitor = Native.PrimaryMonitor();
         if (Native.GetDpiForMonitor(monitor, 0, out uint dpi, out _) != 0 || dpi == 0) return false;
         var info = Native.MonitorInfo(monitor);
-        var r = _services.Settings.PinToScreenEdge || StripTopPx is not null ? info.rcMonitor : info.rcWork;
+        var r = _services.Settings.PinToScreenEdge ? info.rcMonitor : info.rcWork;
         int width = (int)Math.Round(WindowWidth * dpi / 96.0);
         int x = r.Left + (r.Right - r.Left - width) / 2;
-        return Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, x, StripTopPx ?? r.Top, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        return Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, x, r.Top, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
     }
-
-    /// <summary>
-    /// Set by the app wings while they reserve a strip along the top of the primary monitor (its top edge,
-    /// in pixels): the notch sits on that strip, centred between the wings, instead of below it at the top
-    /// of the shrunken work area.
-    /// </summary>
-    internal int? StripTopPx { get; set; }
 
     public void BringToFront()
     {

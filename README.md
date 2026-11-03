@@ -88,18 +88,6 @@ Tap <kbd>Right Alt</kbd> and start typing. Results rank live, keyboard first (<k
 </td>
 </tr>
 <tr>
-<td valign="top" colspan="2">
-
-### 🪽 App wings
-Hide the Windows taskbar and Shammy takes over: your apps sit beside the notch in a thin black strip at the top of every screen.
-- **Pinned apps on the left, open apps on the right.** Your taskbar pins are imported once, then drag to reorder and right-click to pin or unpin.
-- **It behaves like the taskbar:** click to bring an app forward, click again to minimise. An app with several windows shows a list. Right-click to close. Hold a dragged file over an app to bring it forward.
-- **Maximised windows start below the strip.** It hides for full-screen apps, and gives the space back when you quit or turn it off.
-- It turns on by itself when the taskbar is set to auto-hide. Toggle it from the tray any time.
-
-</td>
-</tr>
-<tr>
 <td valign="top">
 
 ### ⚡ Instant answers
