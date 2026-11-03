@@ -48,4 +48,12 @@ public partial class NotificationView : UserControl
     {
         if (_shown is not null) MuteRequested?.Invoke(_shown);
     }
+
+    /// <summary>"Remind me in 1 hour" from the right-click menu.</summary>
+    internal event Action<ShammyNotification>? RemindRequested;
+
+    void OnRemind(object sender, RoutedEventArgs e)
+    {
+        if (_shown is not null) RemindRequested?.Invoke(_shown);
+    }
 }

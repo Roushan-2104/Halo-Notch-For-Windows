@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Shammy.Core.Connect;
+using Shammy.Infrastructure;
 
 namespace Shammy.Modules.Productivity;
 
@@ -56,9 +58,10 @@ internal sealed class ReminderCard : Grid
         });
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(header);
-        text.Children.Add(new TextBlock
+        // While the screen is shared the card only says "Reminder"; it follows a share starting or ending.
+        var title = new TextBlock
         {
-            Text = reminder.Title,
+            Text = PrivacyText.Reminder(reminder.Title, PrivacyState.Presenting),
             FontSize = 13.5,
             FontWeight = FontWeights.SemiBold,
             Foreground = Res("Fg"),
@@ -66,7 +69,11 @@ internal sealed class ReminderCard : Grid
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxHeight = 38,
             Margin = new Thickness(0, 1, 0, 0),
-        });
+        };
+        text.Children.Add(title);
+        Action<bool> privacy = presenting => Dispatcher.BeginInvoke(() => title.Text = PrivacyText.Reminder(reminder.Title, presenting));
+        Loaded += (_, _) => PrivacyState.Changed += privacy;
+        Unloaded += (_, _) => PrivacyState.Changed -= privacy;
         SetColumn(text, 2);
         grid.Children.Add(text);
 

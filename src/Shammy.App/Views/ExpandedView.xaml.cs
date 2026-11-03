@@ -696,7 +696,7 @@ public partial class ExpandedView : UserControl
         }
         Add("Open", () => Open(item.Path));
         Add("Show in folder", () => Process.Start(Interop.Native.ExplorerPath, $"/select,\"{item.Path}\""));
-        foreach (var action in ShelfActions) Add(action.Label, () => action.Run(item));
+        foreach (var action in ShelfActions.Where(a => a.AppliesTo?.Invoke(item) ?? true)) Add(action.Label, () => action.Run(item));
         Add("Remove from shelf", () => _s?.Shelf.Remove(item));
         menu.PlacementTarget = (UIElement)sender;
         // Keep the notch open while the menu is up (the pointer leaves the notch to reach it).
@@ -726,6 +726,30 @@ public partial class ExpandedView : UserControl
     {
         if (e.Handled) return;
         if ((sender as FrameworkElement)?.DataContext is Notifications.ShammyNotification n) NotificationOpened?.Invoke(n);
+    }
+
+    /// <summary>"Remind me in 1 hour" on a notification row's right-click menu.</summary>
+    internal event Action<Notifications.ShammyNotification>? NotificationRemindRequested;
+
+    void OnAlertRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Notifications.ShammyNotification n) return;
+        var menu = new ContextMenu();
+        void Add(string header, Action run)
+        {
+            var mi = new MenuItem { Header = header };
+            mi.Click += (_, _) => run();
+            menu.Items.Add(mi);
+        }
+        Add("Open", () => NotificationOpened?.Invoke(n));
+        Add("Remind me in 1 hour", () => NotificationRemindRequested?.Invoke(n));
+        Add("Dismiss", () => _s?.Notifications.History.Remove(n));
+        menu.PlacementTarget = (UIElement)sender;
+        // Keep the notch open while the menu is up, as the shelf's menu does.
+        ShelfDragging?.Invoke(true);
+        menu.Closed += (_, _) => ShelfDragging?.Invoke(false);
+        menu.IsOpen = true;
+        e.Handled = true;
     }
 
     void OnDismissAlert(object sender, RoutedEventArgs e)

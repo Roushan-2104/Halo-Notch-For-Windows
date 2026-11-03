@@ -9,7 +9,8 @@ public sealed record BatteryPayload(int Percent, bool Charging);
 /// <param name="Battery">The headset's battery level once Windows has it ("Airdopes 311 Pro · 80%"); null until then.</param>
 public sealed record BluetoothPayload(string Name, bool Connected, bool IsAudio, int? Battery = null);
 
-public sealed record DownloadPayload(string Name, string? Path, long Bytes, int Count);
+/// <param name="Total">The expected size when known; the pill then shows a percent instead of bytes.</param>
+public sealed record DownloadPayload(string Name, string? Path, long Bytes, int Count, long? Total = null);
 
 public sealed record ProgressPayload(string Glyph, string Label, double Progress);
 

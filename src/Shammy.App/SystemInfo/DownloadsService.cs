@@ -28,6 +28,12 @@ internal sealed class DownloadsService : IDisposable
     /// <summary>(display name, bytes so far, number of active downloads); raised while any are active.</summary>
     public event Action<string, long, int>? Progress;
 
+    /// <summary>
+    /// The expected total of the downloads in the last <see cref="Progress"/>, when known: a downloader that
+    /// reserves the final file at full size next to its temp file tells us; browsers usually don't (null then).
+    /// </summary>
+    public long? Total { get; private set; }
+
     public event Action<string, string>? Completed;
     public event Action? AllFinished;
 
@@ -122,11 +128,24 @@ internal sealed class DownloadsService : IDisposable
             StopIfIdle();
             return;
         }
-        long bytes = _active.Keys.Sum(p =>
+        long bytes = 0, total = 0;
+        bool known = true;
+        foreach (var p in _active.Keys)
         {
-            try { return new FileInfo(p).Length; }
-            catch (IOException) { return 0L; }
-        });
+            try
+            {
+                long have = new FileInfo(p).Length;
+                bytes += have;
+                var final = new FileInfo(StripTemp(p));
+                if (final.Exists && final.Length > have) total += final.Length;
+                else known = false;
+            }
+            catch (IOException)
+            {
+                known = false;
+            }
+        }
+        Total = known && total > 0 ? total : null;
         Progress?.Invoke(_active.Values.Last(), bytes, _active.Count);
     }
 

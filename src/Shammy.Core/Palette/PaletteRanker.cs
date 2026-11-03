@@ -1,7 +1,7 @@
 namespace Shammy.Core.Palette;
 
 /// <summary>Where a palette row came from; decides its band in the ranking.</summary>
-public enum PaletteKind { Command, Setting, App, File, Music, Media, Web }
+public enum PaletteKind { Command, Setting, App, File, Music, Media, Web, View, Clip, Note, Snippet }
 
 /// <summary>
 /// One palette row as the ranker sees it. <see cref="Key"/> stays the same across keystrokes
@@ -51,7 +51,7 @@ public static class PaletteRanker
     /// <summary>
     /// Shammy's own commands always come first (so "weather" runs Shammy's weather even with a Weather app),
     /// far enough ahead that no learned boost reaches them. Then exact apps, an exact settings word, strong
-    /// (prefix) apps, other settings, other apps, files, media, music.
+    /// (prefix) apps, other settings, other apps, Shammy's views, notes, snippets, clipboard, files, media, music.
     /// </summary>
     public static int Band(PaletteItem item) => item.Kind switch
     {
@@ -62,6 +62,11 @@ public static class PaletteRanker
         PaletteKind.App when item.Match >= ConfidentAppMatch => 850,
         PaletteKind.Setting => 800,
         PaletteKind.App => 700,
+        // Shammy's own views and things it remembers: below apps, above files.
+        PaletteKind.View => 690,
+        PaletteKind.Note => 660,
+        PaletteKind.Snippet => 655,
+        PaletteKind.Clip => 650,
         PaletteKind.File => 600,
         PaletteKind.Media => 520,
         PaletteKind.Music => 500,

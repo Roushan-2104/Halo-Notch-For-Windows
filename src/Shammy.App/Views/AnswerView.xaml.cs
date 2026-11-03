@@ -21,6 +21,7 @@ public partial class AnswerView : UserControl
         Result.FontSize = 34;
         Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
         CopyButton.Content = "";
+        NoteButton.Content = "";
         GlyphOrb.Visibility = Visibility.Collapsed;
         Actions.Visibility = Visibility.Visible;
     }
@@ -53,4 +54,14 @@ public partial class AnswerView : UserControl
     }
 
     void OnSearchWeb(object sender, RoutedEventArgs e) => SearchWebRequested?.Invoke(_query);
+
+    /// <summary>"Save as note": the answer as "12 × 7 = 84"; a listener (Connect) saves it.</summary>
+    internal event Func<string, bool>? SaveNoteRequested;
+
+    void OnSaveNote(object sender, RoutedEventArgs e)
+    {
+        var expression = Expression.Text.TrimEnd('=', ' ');
+        var text = expression.Length > 0 ? $"{expression} = {Result.Text}" : Result.Text;
+        if (SaveNoteRequested?.Invoke(text) == true) NoteButton.Content = "";
+    }
 }

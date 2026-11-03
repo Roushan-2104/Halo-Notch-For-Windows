@@ -40,18 +40,19 @@ internal sealed class Capture
 
 /// <summary>
 /// The card a screenshot opens: a preview that can be dragged out as a file (into a chat, a folder...)
-/// and Copy / Add to shelf / Open / Delete-or-Show-in-folder.
+/// and Copy / Copy text (OCR) / Search with Lens / Send to phone / Add to shelf / Open / Delete-or-Show-in-folder.
 /// </summary>
 internal sealed class ScreenshotCard : Grid
 {
-    public const double CardWidth = 460, CardHeight = 200;
-    const double BoxWidth = 204, BoxHeight = 168;
+    // Taller than the first version: seven actions wrap two to a row where they fit.
+    public const double CardWidth = 460, CardHeight = 232;
+    const double BoxWidth = 204, BoxHeight = 200;
 
     readonly ClipboardModule _module;
     readonly Capture _capture;
     readonly Border _preview;
     readonly TextBlock _details;
-    readonly StackPanel _buttons = new();
+    readonly WrapPanel _buttons = new();
     Point _downAt;
     bool _pressed;
 
@@ -121,6 +122,9 @@ internal sealed class ScreenshotCard : Grid
 
         _buttons.Children.Clear();
         AddButton("", "Copy", "", "Copied", _module.CopyCapture);
+        AddButton("", "Copy text", null, null, _module.CopyCaptureText);
+        AddButton("", "Search with Lens", null, null, _module.SearchCaptureWithLens);
+        AddButton("", "Send to phone", null, null, _module.SendCaptureToPhone);
         AddButton("", "Add to shelf", "", "On the shelf", _module.AddCaptureToShelf);
         AddButton("", "Open", null, null, _module.OpenCapture);
         if (_capture.HasFile && _capture.Owned) AddButton("", "Delete", null, null, _module.DeleteCapture);
@@ -141,7 +145,7 @@ internal sealed class ScreenshotCard : Grid
             Height = 26,
             CornerRadius = new CornerRadius(13),
             Padding = new Thickness(11, 0, 11, 0),
-            Margin = new Thickness(0, 0, 0, 3),
+            Margin = new Thickness(0, 0, 4, 3),
             Background = ClipUi.Brush("Fill1"),
             Cursor = Cursors.Hand,
             Child = row,

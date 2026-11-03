@@ -140,10 +140,11 @@ internal sealed class PaletteModule : IShammyModule
         _pendingSql = null;
         if (text.Trim().Length == 0)
         {
-            _local = new();
-            _ranked = RankedPalette.Empty;
+            // Nothing typed: recent picks and a "Try:" row, none chosen (Enter on an empty box does nothing).
+            _local = Suggestions();
+            _ranked = new RankedPalette(_local, -1);
             _view.ResetPointer();
-            _bar.SetPalette(null, 0);
+            Render();
             // The box just opened (or was cleared): warm the slow sources now, so typing "sound" or
             // "bluetooth" only reads caches.
             _audio.RefreshIfStale();
@@ -176,28 +177,37 @@ internal sealed class PaletteModule : IShammyModule
         var items = new List<PaletteItem>();
         var clean = text.Trim().TrimEnd('.', '!', '?').Trim();
 
-        // 1. The command Enter would run today (first one that recognises the text), with a preview.
+        // 1. The command Enter would run today (first one that recognises the text), with a preview; when another
+        //    module also understands the text, its reading comes second (picking it runs that module's command).
         bool musicCommand = false;
-        var command = _ctx.Commands.FirstOrDefault(c =>
+        var commands = _ctx.Commands.Where(c =>
         {
             try { return c.CanHandle(clean); }
             catch (Exception) { return false; }
-        });
-        if (command is not null)
+        }).Take(2).ToList();
+        var command = commands.FirstOrDefault();
+        for (int n = 0; n < commands.Count; n++)
         {
+            var cmd = commands[n];
             CommandPreview? preview = null;
-            try { preview = (command as ICommandPreview)?.Preview(clean); }
-            catch (Exception ex) { _ctx.Warn($"Preview of {command.GetType().Name} failed", ex); }
-            musicCommand = command.GetType().Name.Contains("Music", StringComparison.Ordinal);
-            items.Add(new PaletteItem("cmd:" + command.GetType().Name, PaletteKind.Command,
-                preview?.Title ?? clean, preview?.Detail ?? "Shammy command", 100)
+            try { preview = (cmd as ICommandPreview)?.Preview(clean); }
+            catch (Exception ex) { _ctx.Warn($"Preview of {cmd.GetType().Name} failed", ex); }
+            musicCommand |= cmd.GetType().Name.Contains("Music", StringComparison.Ordinal);
+            bool first = n == 0;
+            items.Add(new PaletteItem("cmd:" + cmd.GetType().Name, PaletteKind.Command,
+                preview?.Title ?? clean, preview?.Detail ?? "Shammy command", first ? 100 : 90)
             {
                 Hint = "Command",
-                Confident = true,
-                Tag = new PaletteEntry { Glyph = preview?.Glyph ?? "\uE756", Run = _ => _bar.Submit(text) },
+                Confident = first,
+                Tag = new PaletteEntry
+                {
+                    Glyph = preview?.Glyph ?? "\uE756",
+                    // The first is exactly what Enter always did; the second runs its own module directly.
+                    Run = first ? _ => _bar.Submit(text) : ctrl => { _ = RunCommandAsync(cmd, clean); },
+                },
             });
         }
-        else if (Calculator.TryEvaluate(text, out var value, out _))
+        if (command is null && Calculator.TryEvaluate(text, out var value, out _))
         {
             items.Add(new PaletteItem("calc", PaletteKind.Command, "= " + Calculator.Format(value), Calculator.DisplayForm(text), 100)
             {
@@ -217,6 +227,10 @@ internal sealed class PaletteModule : IShammyModule
             try { AddApps(items, text); }
             catch (Exception ex) { _ctx.Warn("App rows failed", ex); }
         }
+
+        // 3b. Shammy's own views, notes and reminders, snippets, copied text (ranked below apps, above files).
+        try { AddRemembered(items, text); }
+        catch (Exception ex) { _ctx.Warn("View, note and clipboard rows failed", ex); }
 
         // 4. Media keys and music.
         var media = _ctx.Services.Media;
@@ -254,27 +268,223 @@ internal sealed class PaletteModule : IShammyModule
         foreach (var m in AppMatcher.Rank(query, apps, 4))
         {
             if (m.Score < AppMatcher.LaunchScore) continue;
-            var app = m.App;
-            items.Add(new PaletteItem("app:" + app.Target, PaletteKind.App, app.Name, "Application", m.Score)
-            {
-                Hint = "App",
-                Confident = m.Score >= PaletteRanker.ConfidentAppMatch,
-                Tag = new PaletteEntry
-                {
-                    Glyph = "\uECAA",
-                    IconPath = app.Target,
-                    Run = _ =>
-                    {
-                        if (_ctx.Open(app.Target)) _bar.Complete(new CommandResult("\uECAA", "Opening", app.Name));
-                        else
-                        {
-                            AppIndex.Current?.Refresh();
-                            _bar.Complete(new CommandResult("\uE783", $"Couldn't open {app.Name}", "It may have been uninstalled", IsError: true));
-                        }
-                    },
-                },
-            });
+            items.Add(AppItem(m.App, m.Score));
         }
+    }
+
+    PaletteItem AppItem(AppEntry app, int score) =>
+        new("app:" + app.Target, PaletteKind.App, app.Name, "Application", score)
+        {
+            Hint = "App",
+            Confident = score >= PaletteRanker.ConfidentAppMatch,
+            Tag = new PaletteEntry
+            {
+                Glyph = "\uECAA",
+                IconPath = app.Target,
+                Run = _ =>
+                {
+                    if (_ctx.Open(app.Target)) _bar.Complete(new CommandResult("\uECAA", "Opening", app.Name));
+                    else
+                    {
+                        AppIndex.Current?.Refresh();
+                        _bar.Complete(new CommandResult("\uE783", $"Couldn't open {app.Name}", "It may have been uninstalled", IsError: true));
+                    }
+                },
+            },
+        };
+
+    // ---- Shammy's views, notes, snippets, clipboard ---------------------------------------------------
+
+    /// <summary>
+    /// Views ("calendar" opens the Calendar card), then what Shammy remembers: open notes and reminders, snippets,
+    /// copied text. Notes and copied text never show while the screen is shared.
+    /// </summary>
+    void AddRemembered(List<PaletteItem> items, string text)
+    {
+        bool presenting = Infrastructure.PrivacyState.Presenting;
+        foreach (var (view, match) in PaletteSources.FindViews(text, id => _ctx.Notch.ExpandedView.CanOpen(id)))
+            items.Add(ViewItem(view, match));
+
+        if (PaletteSources.Allowed(PaletteKind.Note, presenting) && Connect.Links.Notes is { } notes)
+        {
+            var reminders = notes.Reminders.Where(r => !r.Done).ToDictionary(r => "r:" + r.Id);
+            var texts = notes.Reminders.Where(r => !r.Done).OrderBy(r => r.Due).Select(r => new PaletteText("r:" + r.Id, r.Title))
+                .Concat(notes.Notes.Where(n => !n.Done).OrderByDescending(n => n.Created).Select(n => new PaletteText("n:" + n.Id, n.Text)))
+                .ToList();
+            var now = DateTime.Now;
+            foreach (var (t, match) in PaletteSources.FindTexts(text, texts, 2))
+            {
+                var due = reminders.TryGetValue(t.Key, out var r) ? r.Due : (DateTime?)null;
+                items.Add(new PaletteItem("note:" + t.Key, PaletteKind.Note, PaletteSources.Line(t.Text),
+                    due is { } d ? $"Reminder \u00B7 {Shammy.Core.Productivity.TimeFormat.When(d, now)}" : "Note", match)
+                {
+                    Hint = due is null ? "Note" : "Reminder",
+                    Tag = new PaletteEntry { Glyph = due is null ? "\uE70B" : "\uEA8F", Learn = false, Run = _ => OpenCard("notes") },
+                });
+            }
+        }
+
+        var snippets = Launcher.SnippetsModule.Current;
+        if (snippets.Count > 0)
+        {
+            var texts = snippets.OrderBy(s => s.Key, StringComparer.Ordinal).Select(s => new PaletteText(s.Key, s.Value, s.Key));
+            foreach (var (t, match) in PaletteSources.FindTexts(text, texts, 2))
+            {
+                items.Add(new PaletteItem("snip:" + t.Trigger, PaletteKind.Snippet, $"{t.Trigger}  {PaletteSources.Line(t.Text, 50)}",
+                    "Snippet \u00B7 Enter copies it", match)
+                {
+                    Hint = "Snippet",
+                    Tag = new PaletteEntry { Glyph = "\uE8C8", Run = _ => CopySnippet(t.Trigger, t.Text) },
+                });
+            }
+        }
+
+        if (PaletteSources.Allowed(PaletteKind.Clip, presenting) && Connect.Links.Clipboard is { } clip)
+        {
+            var entries = clip.Items.Where(e => e.Kind == Shammy.Core.Clipboard.ClipKind.Text).OrderByDescending(e => e.Time).ToList();
+            var byKey = entries.GroupBy(e => e.Key).ToDictionary(g => g.Key, g => g.First());
+            var now = DateTime.Now;
+            foreach (var (t, match) in PaletteSources.FindTexts(text, entries.Select(e => new PaletteText(e.Key, e.Text)), 2))
+            {
+                if (!byKey.TryGetValue(t.Key, out var entry)) continue;
+                items.Add(new PaletteItem("clip:" + t.Key, PaletteKind.Clip, PaletteSources.Line(t.Text),
+                    $"Clipboard \u00B7 {Shammy.Core.Clipboard.ClipText.Relative(entry.Time, now)}", match)
+                {
+                    Hint = "Copy",
+                    Tag = new PaletteEntry
+                    {
+                        Glyph = "\uE77F",
+                        Learn = false,
+                        Run = _ =>
+                        {
+                            clip.CopyBack(entry);
+                            _bar.Complete(null);
+                        },
+                    },
+                });
+            }
+        }
+    }
+
+    PaletteItem ViewItem(ShammyView view, int match) =>
+        new("view:" + view.Id, PaletteKind.View, view.Title, "Open in the notch", match)
+        {
+            Hint = "Shammy",
+            Confident = match >= 100,
+            Tag = new PaletteEntry { Glyph = view.Glyph, Run = _ => OpenCard(view.Id) },
+        };
+
+    /// <summary>Closes the palette, then opens the card in the notch (once the typing bar has gone).</summary>
+    void OpenCard(string id)
+    {
+        _bar.Complete(null);
+        _ctx.Ui.BeginInvoke(() =>
+        {
+            if (!Connect.Links.OpenCard(_ctx, id)) _ctx.ShowMessage("\uE783", "That view isn't available", error: true);
+        });
+    }
+
+    void CopySnippet(string trigger, string template)
+    {
+        string? ClipboardText()
+        {
+            try { return Clipboard.ContainsText() ? Clipboard.GetText() : null; }
+            catch (System.Runtime.InteropServices.ExternalException) { return null; }
+        }
+        var expanded = SnippetText.Expand(template, DateTime.Now, ClipboardText);
+        try
+        {
+            Clipboard.SetText(expanded);
+            _bar.Complete(new CommandResult("\uE8C8", "Snippet copied", trigger));
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            _bar.Complete(new CommandResult("\uE783", "Clipboard is busy", "Try again in a moment", IsError: true));
+        }
+    }
+
+    /// <summary>A second command's row: runs that module's command and shows its result like Enter would.</summary>
+    async Task RunCommandAsync(ITextCommand cmd, string clean)
+    {
+        CommandResult result;
+        try
+        {
+            result = await cmd.RunAsync(clean);
+        }
+        catch (Exception ex)
+        {
+            _ctx.Warn($"Command {cmd.GetType().Name} failed", ex);
+            result = new CommandResult("\uE783", "That didn't work", ex.Message, IsError: true);
+        }
+        if (result.SearchInstead is { Length: > 0 } search) _bar.SearchWeb(search);
+        else _bar.Complete(result);
+    }
+
+    // ---- Empty palette: recent picks and examples -------------------------------------------------
+
+    int _tryIndex;
+
+    /// <summary>
+    /// Before anything is typed: the three strongest recent picks (apps, files, views, snippets, or the text of a
+    /// command picked before), then a "Try:" row. Copied text and notes are never suggested.
+    /// </summary>
+    List<PaletteItem> Suggestions()
+    {
+        var items = new List<PaletteItem>();
+        var now = DateTime.Now;
+        foreach (var e in _frecency.Top(3, now, k => !k.StartsWith("clip:", StringComparison.Ordinal) && !k.StartsWith("note:", StringComparison.Ordinal)))
+        {
+            try
+            {
+                if (RecentItem(e) is { } item) items.Add(item with { Hint = "Recent" });
+            }
+            catch (Exception ex)
+            {
+                _ctx.Warn("A recent palette row failed", ex);
+            }
+        }
+        items.Add(new PaletteItem("try", PaletteKind.Command, PaletteSources.TryRow, "Enter fills in an example", 0)
+        {
+            Hint = "Try",
+            Tag = new PaletteEntry
+            {
+                Glyph = "\uE82F",
+                Learn = false,
+                Run = _ => _bar.SetText(PaletteSources.Examples[_tryIndex++ % PaletteSources.Examples.Count]),
+            },
+        });
+        return items;
+    }
+
+    PaletteItem? RecentItem(FrecencyStore.Entry e)
+    {
+        var key = e.Key;
+        var query = e.Queries.FirstOrDefault() ?? "";
+        if (key.StartsWith("app:", StringComparison.Ordinal))
+            return AppIndex.Current?.Apps.FirstOrDefault(a => string.Equals("app:" + a.Target, key, StringComparison.Ordinal)) is { } app
+                ? AppItem(app, 100) with { Confident = false } : null;
+        if (key.StartsWith("file:", StringComparison.Ordinal))
+        {
+            var path = key[5..];
+            bool folder = Directory.Exists(path);
+            return folder || File.Exists(path) ? FileItem(new FileHit(path, folder), 100) : null;
+        }
+        if (key.StartsWith("view:", StringComparison.Ordinal))
+            return PaletteSources.Views.FirstOrDefault(v => "view:" + v.Id == key) is { } view && _ctx.Notch.ExpandedView.CanOpen(view.Id)
+                ? ViewItem(view, 100) with { Confident = false } : null;
+        if (key.StartsWith("snip:", StringComparison.Ordinal))
+        {
+            var trigger = key[5..];
+            return Launcher.SnippetsModule.Current.TryGetValue(trigger, out var template)
+                ? new PaletteItem(key, PaletteKind.Snippet, $"{trigger}  {PaletteSources.Line(template, 50)}", "Snippet \u00B7 Enter copies it", 100)
+                {
+                    Tag = new PaletteEntry { Glyph = "\uE8C8", Run = _ => CopySnippet(trigger, template) },
+                }
+                : null;
+        }
+        // Commands, settings, music: the same row the text it was picked for gives now (it previews afresh).
+        if (query.Length == 0) return null;
+        return LocalItems(query).FirstOrDefault(i => i.Key == key);
     }
 
     PaletteItem MediaItem(MediaControl control, int match)
@@ -522,6 +732,11 @@ internal sealed class PaletteModule : IShammyModule
     /// <summary>Re-reads every source for the current text, keeping the selection on the same row.</summary>
     void Refresh()
     {
+        if (_query.Trim().Length == 0)
+        {
+            OnQuery(_query);
+            return;
+        }
         var selectedKey = _ranked.SelectedItem?.Key;
         _local = LocalItems(_query);
         _ranked = Rank(_local, _query);
@@ -715,7 +930,7 @@ internal sealed class PaletteModule : IShammyModule
     /// <summary>"palette-query spotify": what the palette would show (files included), without touching the UI.</summary>
     string PipeQuery(string text)
     {
-        if (text.Trim().Length == 0) return "no rows";
+        if (text.Trim().Length == 0) return "suggestions || " + Describe(new RankedPalette(Suggestions(), -1));
         var sw = Stopwatch.StartNew();
         var local = LocalItems(text);
         var ranked = Rank(local, text);

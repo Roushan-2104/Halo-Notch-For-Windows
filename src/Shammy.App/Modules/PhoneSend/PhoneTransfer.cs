@@ -140,6 +140,8 @@ internal sealed class PhoneTransfer : IDisposable
     {
         var name = Path.GetFileName(path);
         _received.Add(path);
+        // What the phone sent lands on the shelf too, ready to drag into whatever needs it.
+        _ctx.Services.Shelf.Add(new[] { path });
         var text = _received.Count == 1 ? $"Received {name}" : $"Received {_received.Count} files";
         if (!_stopped) _card.ShowReceived(text);
         // Priority 45: above downloads (40), below messages (50).
