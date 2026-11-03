@@ -86,7 +86,7 @@ public class NotchLayoutTests
                 new LegacyView("Snippets", "tab:snippets"), new LegacyView("Notes", "tab:notes"),
             },
             new[] { new ChipCard("mirror", "Mirror", true), new ChipCard("music", "Music", false) });
-        Assert.Equal(new[] { "Clipboard", "Shelf", "Notes", "Alerts", "Mirror", "Weather", "Snippets" }, chips.Select(c => c.Label));
+        Assert.Equal(new[] { "Clipboard", "Shelf", "Notes", "Alerts", "Mirror", "Snippets", "Weather" }, chips.Select(c => c.Label));
     }
 
     [Fact]

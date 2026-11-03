@@ -3,17 +3,18 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using Shammy.Core.Notch;
 using Shammy.Infrastructure;
 using Shammy.Modules;
+using Shammy.Views.Cards;
 
 namespace Shammy.Views;
 
 /// <summary>
-/// The hover peek (440×68, v2 design): what's playing (album art with a soft glow in its colour, title and
-/// artist) and, on the right, the single most important glance as a pill you can click (join the meeting,
-/// open the card). With nothing playing the left side shows the time and date instead.
+/// The hover peek (440×68, Wall.dc.html): the rail's focused tile in miniature — its artwork swatch, a tracked
+/// kicker, the title and one line — and that tile's primary control in the accent. Play/pause and other in-place
+/// actions keep the peek; anything that goes somewhere (Join, details) closes it. Clicking the rest opens the
+/// notch. With no tile to show, it falls back to the time and the most important glance.
 /// </summary>
 internal sealed class PeekView : Grid
 {
@@ -21,9 +22,11 @@ internal sealed class PeekView : Grid
 
     readonly ShammyServices _services;
     readonly GlanceFeed _feed;
-    readonly Border _glow, _art, _pill;
-    readonly TextBlock _title, _subtitle, _pillText;
-    GlanceEntry? _top;
+    readonly Border _swatch;
+    readonly Tracked _kicker;
+    readonly TextBlock _title, _line;
+    readonly ContentControl _primary = new() { Focusable = false, VerticalAlignment = VerticalAlignment.Center };
+    string _primaryText = "-", _cardId = "-";
 
     public PeekView(ShammyServices services, GlanceFeed feed)
     {
@@ -37,90 +40,116 @@ internal sealed class PeekView : Grid
         ColumnDefinitions.Add(new ColumnDefinition());
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        _glow = new Border { Margin = new Thickness(-6), CornerRadius = new CornerRadius(14), Opacity = 0.35, Effect = new BlurEffect { Radius = 14 } };
-        _art = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(10), ClipToBounds = true };
-        var art = new Grid { Width = 40, Height = 40, Margin = new Thickness(16, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        art.Children.Add(_glow);
-        art.Children.Add(_art);
-        Children.Add(art);
-
-        _title = new TextBlock { FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = Res("CardText"), TextTrimming = TextTrimming.CharacterEllipsis };
-        _subtitle = new TextBlock { FontSize = 12, Foreground = Res("CardText2"), TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 1, 0, 0) };
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) };
-        text.Children.Add(_title);
-        text.Children.Add(_subtitle);
-        SetColumn(text, 1);
-        Children.Add(text);
-
-        _pillText = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 170 };
-        _pill = new Border
+        _swatch = new Border
         {
-            Height = 36,
-            CornerRadius = new CornerRadius(18),
-            Padding = new Thickness(14, 0, 14, 0),
-            Margin = new Thickness(0, 0, 14, 0),
+            Width = 44,
+            Height = 44,
+            CornerRadius = new CornerRadius(11),
+            BorderBrush = CardKit.Hairline,
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(14, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = _pillText,
-            Cursor = Cursors.Hand,
         };
-        _pill.MouseEnter += (_, _) => _pill.Opacity = 0.85;
-        _pill.MouseLeave += (_, _) => _pill.Opacity = 1;
-        _pill.MouseLeftButtonUp += (_, e) =>
-        {
-            e.Handled = true;
-            GlanceClicked?.Invoke(_top?.Item);
-        };
-        SetColumn(_pill, 2);
-        Children.Add(_pill);
+        Children.Add(_swatch);
+
+        _kicker = CardKit.Label("", CardKit.Ink2);
+        _kicker.HorizontalAlignment = HorizontalAlignment.Left;
+        _title = CardKit.Text("", 17, FontWeights.Bold);
+        _line = CardKit.Text("", 12, FontWeights.Medium, secondary: true);
+        _title.Margin = new Thickness(0, 2, 0, 0);
+        _line.Margin = new Thickness(0, 2, 0, 0);
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(13, 0, 12, 0) };
+        words.Children.Add(_kicker);
+        words.Children.Add(_title);
+        words.Children.Add(_line);
+        SetColumn(words, 1);
+        Children.Add(words);
+
+        _primary.Margin = new Thickness(0, 0, 14, 0);
+        SetColumn(_primary, 2);
+        Children.Add(_primary);
     }
 
-    /// <summary>The pill was clicked, with its glance (null when it had none to show).</summary>
+    /// <summary>
+    /// The primary control was clicked with an action that goes somewhere: the notch closes the peek and runs it.
+    /// (A click anywhere else on the peek opens the notch; the notch window handles that.)
+    /// </summary>
     public event Action<GlanceItem?>? GlanceClicked;
 
     public string Describe() =>
-        $"title={_title.Text} subtitle={_subtitle.Text} pill={(_pill.Visibility == Visibility.Visible ? _pillText.Text : "-")}";
+        $"card={_cardId} kicker={_kicker.Text} title={_title.Text} subtitle={_line.Text} pill={_primaryText}";
+
+    ExpandedView? Wall => Window.GetWindow(this) is Shell.NotchWindow w ? w.ExpandedView : null;
 
     /// <summary>Fresh content each time the peek opens (and when the song changes while it's open).</summary>
     public void Refresh()
     {
-        var media = _services.Media;
-        if (media.HasSession)
+        WallPeek? peek = null;
+        try
         {
-            CompactView.ApplyArt(_art, media, 12);
-            if (media.Art is null) _art.Background = new SolidColorBrush(RestView.ParseColor(NotchPalette.Music));
-            var glow = media.Art is null ? RestView.ParseColor(NotchPalette.Music) : media.ArtColor;
-            _glow.Background = new SolidColorBrush(glow);
-            _glow.Visibility = Visibility.Visible;
-            _title.Text = media.Title;
-            _subtitle.Text = media.Artist.Length > 0 ? media.Artist : media.IsPlaying ? "Playing" : "Paused";
+            if (Wall?.PeekCard() is { Peek: { } make } card)
+            {
+                peek = make();
+                _cardId = card.Id;
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var accent = (Brush)Application.Current.Resources["AccentBrush"];
-            _art.Background = accent;
-            _art.Child = CompactView.Glyph("", 18, Brushes.Black);
-            _glow.Visibility = Visibility.Collapsed;
-            var now = DateTime.Now;
-            _title.Text = BuiltInGlances.Time(now, Shammy.Core.Productivity.ClockPreference.Is24Hour).Time;
-            _subtitle.Text = now.ToString("dddd, d MMMM", CultureInfo.CurrentCulture);
+            Log.Warn("Building the peek failed", ex);
         }
-
-        // Only a song title can repeat in words; the clock never should (a "Standup 10:30" glance at 10:30 is news).
-        _top = _feed.Top(media.HasSession ? media.Title : "");
-        if (_top is null)
+        if (peek is null)
         {
-            _pill.Visibility = Visibility.Collapsed;
+            ShowFallback();
             return;
         }
-        var color = RestView.ParseColor(_top.Item.AccentHex);
-        _pill.Visibility = Visibility.Visible;
-        _pill.Background = new SolidColorBrush(Mix(color, Colors.Black, 0.8));
-        _pillText.Foreground = new SolidColorBrush(Mix(color, Colors.White, 0.45));
-        _pillText.Text = _top.Item.Text;
+        _swatch.Background = peek.Swatch;
+        _kicker.Text = peek.Kicker;
+        _title.Text = peek.Title;
+        _line.Text = peek.Line;
+        _primary.Content = peek.Primary is { } p ? Primary(p) : null;
+        _primaryText = peek.Primary?.Label ?? "-";
+        CardKit.Name(this, $"Open Shammy. {peek.Kicker}: {peek.Title}, {peek.Line}");
     }
 
-    static Color Mix(Color a, Color b, double t) => Color.FromRgb(
-        (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+    FrameworkElement Primary(WallAction a)
+    {
+        void Run()
+        {
+            if (a.Stays)
+            {
+                try { a.Run(); }
+                catch (Exception ex) { Log.Warn("Peek action failed", ex); }
+                // Media and timers report the change themselves; refresh once now so the glyph flips at once.
+                Dispatcher.BeginInvoke(Refresh, System.Windows.Threading.DispatcherPriority.Background);
+                return;
+            }
+            GlanceClicked?.Invoke(new GlanceItem(a.Label, NotchPalette.Music, OnClick: a.Run));
+        }
+        return a.Playing is { } playing
+            ? CardKit.Primary(a.Label, CardKit.PlayPause(playing, 14), Run, 38)
+            : CardKit.PrimaryPill(a.Label, a.Label, Run, 34, 13);
+    }
 
-    static Brush Res(string key) => (Brush)Application.Current.Resources[key];
+    /// <summary>Nothing on the rail: the time and date, and the most important glance as the primary pill.</summary>
+    void ShowFallback()
+    {
+        _cardId = "-";
+        var now = DateTime.Now;
+        _swatch.Background = Fields.Calendar();
+        _kicker.Text = now.ToString("dddd", CultureInfo.CurrentCulture);
+        _title.Text = BuiltInGlances.Time(now, Shammy.Core.Productivity.ClockPreference.Is24Hour).Time;
+        _line.Text = now.ToString("d MMMM", CultureInfo.CurrentCulture);
+        var top = _feed.Top(_services.Media.HasSession ? _services.Media.Title : "");
+        if (top is null)
+        {
+            _primary.Content = null;
+            _primaryText = "-";
+            return;
+        }
+        var item = top.Item;
+        _primaryText = item.Text;
+        var pill = CardKit.PrimaryPill(item.Text, item.Text, () => GlanceClicked?.Invoke(item), 34, 13);
+        pill.MaxWidth = 190;
+        _primary.Content = pill;
+    }
 }

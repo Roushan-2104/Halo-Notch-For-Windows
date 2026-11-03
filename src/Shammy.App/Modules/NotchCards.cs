@@ -24,7 +24,7 @@ public sealed class NotchCard
     /// <summary>Builds the 924×248 detail view; called each time the card opens, so it shows fresh data.</summary>
     public required Func<FrameworkElement> Detail { get; init; }
 
-    /// <summary>Lower comes first on the home row.</summary>
+    /// <summary>Lower comes first on the rail (Wall.dc.html's order: weather, calendar, music, timer, system).</summary>
     public int Order { get; init; } = 100;
 
     /// <summary>
@@ -41,6 +41,24 @@ public sealed class NotchCard
     /// that don't fit the row are listed under "More". Without a chip, a card off the row is unreachable by mouse.
     /// </summary>
     public bool Chip { get; init; }
+
+    // ---- Focus Wall (Wall.dc.html) -----------------------------------------------------------------
+    // The open notch shows relevant cards as one rail of 168×140 tiles. A Compact that is a
+    // Views.Cards.WallTile gets the focused/dimmed states; anything else is scaled into a plain tile. A Detail
+    // that is a Views.Cards.WallDetail opens with a morph out of its tile and gets the notch's Back on its art
+    // panel; any other detail gets a Back + title header row above it (unless it draws its own, see OwnsHeader).
+
+    /// <summary>
+    /// How live the card is right now: 0 idle; higher wins the focus when the notch opens (a ringing alarm 100,
+    /// a meeting about to start 80, a song playing 50, a running timer 40).
+    /// </summary>
+    public Func<int> Live { get; init; } = () => 0;
+
+    /// <summary>What the hover peek shows while this card's tile is the focused one; null shows nothing special.</summary>
+    internal Func<Shammy.Views.Cards.WallPeek?>? Peek { get; init; }
+
+    /// <summary>The detail draws its own Back and title row (Alarm.dc.html / Settings.dc.html style), so the notch adds none.</summary>
+    public bool OwnsHeader { get; init; }
 }
 
 /// <summary>The design's colours, one accent per kind of activity (see the v2 mockup).</summary>

@@ -52,10 +52,12 @@ internal sealed class WeatherFeature : IDisposable
             Width = 176,
             Compact = _card.Compact,
             Detail = _card.BuildDetail,
-            Order = 40,
+            Order = 8,
             Chip = true,
             IsRelevant = () => _card.IsRelevant,
+            Peek = _card.Peek,
         });
+        _card.Open = () => _ctx.OpenCard("weather");
         _ctx.AddGlance("weather", _card.Glance);
         Views.Cards.CardPipes.Register(_ctx, "weather", _card.DescribeCompact, _card.DescribeDetail);
         _card.ShowStatus("Finding the weather\u2026");
