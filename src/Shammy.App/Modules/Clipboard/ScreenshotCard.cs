@@ -41,6 +41,7 @@ internal sealed class Capture
 /// <summary>
 /// The card a screenshot opens: a preview that can be dragged out as a file (into a chat, a folder...)
 /// and Copy / Copy text (OCR) / Search with Lens / Send to phone / Add to shelf / Open / Delete-or-Show-in-folder.
+/// Focus Wall: the shot is the artwork, Copy is the accent pill, the rest are quiet.
 /// </summary>
 internal sealed class ScreenshotCard : Grid
 {
@@ -72,7 +73,11 @@ internal sealed class ScreenshotCard : Grid
         ColumnDefinitions.Add(new ColumnDefinition());
 
         double scale = Math.Min(BoxWidth / Math.Max(1, capture.Width), BoxHeight / Math.Max(1, capture.Height));
-        _preview = ClipImages.Tile(capture.Preview, Math.Max(24, capture.Width * scale), Math.Max(24, capture.Height * scale), 14);
+        _preview = ClipImages.Tile(capture.Preview, Math.Max(24, capture.Width * scale), Math.Max(24, capture.Height * scale), Views.WallParts.SmallRadius);
+        // The screenshot is the artwork; a hairline keeps a white page from bleeding into the notch.
+        _preview.BorderBrush = Views.WallParts.Res("WallHairline");
+        _preview.BorderThickness = new Thickness(1);
+        System.Windows.Automation.AutomationProperties.SetName(_preview, "Screenshot preview. Drag into a chat or folder, or click to open");
         _preview.HorizontalAlignment = HorizontalAlignment.Center;
         _preview.Cursor = Cursors.Hand;
         _preview.ToolTip = "Drag into a chat or folder · click to open";
@@ -83,28 +88,19 @@ internal sealed class ScreenshotCard : Grid
 
         var details = new StackPanel();
         SetColumn(details, 2);
-        var title = ClipUi.Label("Screenshot", 15, FontWeights.SemiBold, ClipUi.Brush("Fg"));
+        var title = Views.WallParts.Text("Screenshot", 17, FontWeights.Bold);
         title.Margin = new Thickness(0, 0, 26, 0);
-        _details = ClipUi.Label("", 12, FontWeights.Normal, ClipUi.Brush("Fg2"));
-        _details.Margin = new Thickness(0, 1, 0, 9);
+        _details = Views.WallParts.Text("", 12, FontWeights.Normal, "WallText2");
+        _details.Margin = new Thickness(0, 2, 0, 10);
         details.Children.Add(title);
         details.Children.Add(_details);
         details.Children.Add(_buttons);
         Children.Add(details);
 
-        var close = new Button
-        {
-            Style = (Style)Application.Current.Resources["IconButton"],
-            Content = "",
-            FontSize = 10,
-            Width = 24,
-            Height = 24,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, -2, -4, 0),
-            ToolTip = "Close",
-        };
-        close.Click += (_, _) => _module.CloseCard();
+        var close = Views.WallParts.Icon("", "Close", _module.CloseCard, 24, 10);
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.VerticalAlignment = VerticalAlignment.Top;
+        close.Margin = new Thickness(0, -2, -4, 0);
         SetColumn(close, 2);
         Children.Add(close);
 
@@ -121,7 +117,7 @@ internal sealed class ScreenshotCard : Grid
         _details.ToolTip = _capture.Path;
 
         _buttons.Children.Clear();
-        AddButton("", "Copy", "", "Copied", _module.CopyCapture);
+        AddButton("", "Copy", "", "Copied", _module.CopyCapture, primary: true);
         AddButton("", "Copy text", null, null, _module.CopyCaptureText);
         AddButton("", "Search with Lens", null, null, _module.SearchCaptureWithLens);
         AddButton("", "Send to phone", null, null, _module.SendCaptureToPhone);
@@ -131,35 +127,19 @@ internal sealed class ScreenshotCard : Grid
         else if (_capture.HasFile) AddButton("", "Show in folder", null, null, _module.ShowCaptureInFolder);
     }
 
-    /// <summary>A pill row; on success it can switch to a done state (glyph + label) as feedback.</summary>
-    void AddButton(string glyph, string label, string? doneGlyph, string? doneLabel, Func<Capture, bool> run)
+    /// <summary>A pill; on success it can switch to a done state (glyph + label) as feedback. Copy is the one accent pill.</summary>
+    void AddButton(string glyph, string label, string? doneGlyph, string? doneLabel, Func<Capture, bool> run, bool primary = false)
     {
-        var icon = Views.CompactView.Glyph(glyph, 12, ClipUi.Brush("Fg"));
-        var text = ClipUi.Label(label, 12, FontWeights.SemiBold, ClipUi.Brush("Fg"));
-        text.Margin = new Thickness(8, 0, 0, 0);
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(icon);
-        row.Children.Add(text);
-        var pill = new Border
+        TextBlock icon = null!, text = null!;
+        Button pill = null!;
+        pill = Views.WallParts.GlyphButton(glyph, label, () =>
         {
-            Height = 26,
-            CornerRadius = new CornerRadius(13),
-            Padding = new Thickness(11, 0, 11, 0),
-            Margin = new Thickness(0, 0, 4, 3),
-            Background = ClipUi.Brush("Fill1"),
-            Cursor = Cursors.Hand,
-            Child = row,
-        };
-        pill.MouseEnter += (_, _) => pill.Background = ClipUi.Brush("Fill2");
-        pill.MouseLeave += (_, _) => pill.Background = ClipUi.Brush("Fill1");
-        pill.MouseLeftButtonUp += (_, e) =>
-        {
-            e.Handled = true;
             if (!run(_capture) || doneLabel is null) return;
             icon.Text = doneGlyph;
-            icon.Foreground = ClipUi.Brush("Green");
             text.Text = doneLabel;
-        };
+            System.Windows.Automation.AutomationProperties.SetName(pill, doneLabel);
+        }, primary, out icon, out text, height: 26);
+        pill.Margin = new Thickness(0, 0, 4, 4);
         _buttons.Children.Add(pill);
     }
 

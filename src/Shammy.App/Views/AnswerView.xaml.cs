@@ -3,7 +3,10 @@ using System.Windows.Controls;
 
 namespace Shammy.Views;
 
-/// <summary>Instant local answers (arithmetic) that don't need a web search.</summary>
+/// <summary>
+/// Instant local answers (arithmetic) that don't need a web search, and confirmations for commands. Focus Wall: the
+/// answer as a big tight numeral, Copy as the one accent control, Save as note and Search quiet beside it.
+/// </summary>
 public partial class AnswerView : UserControl
 {
     string _query = "";
@@ -19,8 +22,10 @@ public partial class AnswerView : UserControl
         Expression.Text = expression + " =";
         Expression.Visibility = Visibility.Visible;
         Result.Text = result;
-        Result.FontSize = 34;
-        Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
+        // A sum's answer is the poster: ExtraBold and tight.
+        WallParts.Face(Result, FontWeights.ExtraBold);
+        Result.FontSize = FitSize(result, 40, 24);
+        Result.LineHeight = Result.FontSize + 4;
         CopyButton.Content = "";
         NoteButton.Content = "";
         GlyphOrb.Visibility = Visibility.Collapsed;
@@ -33,11 +38,13 @@ public partial class AnswerView : UserControl
     internal void ShowCommand(Modules.CommandResult r)
     {
         Glyph.Text = r.Glyph;
-        Glyph.Foreground = (System.Windows.Media.Brush)Application.Current.Resources[r.IsError ? "Red" : "AccentBrush"];
+        // Colour only for meaning: red when it failed, white otherwise.
+        Glyph.Foreground = (System.Windows.Media.Brush)Application.Current.Resources[r.IsError ? "WallRed" : "WallText"];
         GlyphOrb.Visibility = Visibility.Visible;
         Result.Text = r.Title;
+        WallParts.Face(Result, FontWeights.Bold);
         Result.FontSize = 19;
-        Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
+        Result.LineHeight = 24;
         Expression.Text = r.Detail ?? "";
         Expression.Visibility = string.IsNullOrEmpty(r.Detail) ? Visibility.Collapsed : Visibility.Visible;
         // An answer worth keeping (a converted amount, a time elsewhere) gets Copy and Save as note; the rest need none.
@@ -46,6 +53,18 @@ public partial class AnswerView : UserControl
         CopyButton.Content = "";
         SearchWebButton.Visibility = Visibility.Collapsed;
         Actions.Visibility = r.CopyText is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Width the answer has beside the buttons (the card is a fixed 440 wide).</summary>
+    const double ResultRoom = 270;
+
+    /// <summary>Long answers step down from the poster size instead of being cut off with an ellipsis.</summary>
+    double FitSize(string text, double size, double min)
+    {
+        var face = new System.Windows.Media.Typeface(Result.FontFamily, FontStyles.Normal, Result.FontWeight, FontStretches.Normal);
+        double width = new System.Windows.Media.FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            face, size, Result.Foreground, System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip).Width;
+        return width <= ResultRoom ? size : Math.Max(min, Math.Floor(size * ResultRoom / width));
     }
 
     /// <summary>For the test pipe: the shown answer and whether it offers Copy.</summary>

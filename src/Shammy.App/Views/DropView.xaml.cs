@@ -1,32 +1,39 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using Shammy.Core.DropActions;
-using Shammy.Modules;
 using Shammy.Modules.DropActions;
-using Shammy.Modules.Kit;
+using Shammy.Motion;
 using Shammy.Shell;
 
 namespace Shammy.Views;
 
 /// <summary>
-/// What the notch shows while files are dragged over it (v2 "Drop a file"): a chip for what's being dragged,
-/// and four targets: Shelf, Send to phone, Compress (.zip) and Convert (PNG ↔ JPG). The target under the
-/// pointer lights up; <see cref="TakeTarget"/> tells the window where the files landed.
+/// What the notch shows while files are dragged over it: a chip for what's being dragged, and four Focus Wall tiles:
+/// Shelf, Send to phone, Compress (.zip) and Convert (PNG ↔ JPG). The tile under the pointer is the focused one
+/// (accent outline, soft glow, a springy lift) while the others dim; <see cref="TakeTarget"/> tells the window
+/// where the files landed.
 /// </summary>
 public partial class DropView : UserControl
 {
-    const string Accent = NotchPalette.Purple;
+    /// <summary>How far the focused tile grows, and how far the others fade (the Wall's ~55%).</summary>
+    const double FocusScale = 1.04, DimOpacity = 0.58;
 
-    sealed record Target(DropAction Action, Grid Root, System.Windows.Shapes.Rectangle Frame, Border Tile, TextBlock Icon, TextBlock Subtitle, string Normal);
+    sealed record Target(DropAction Action, string Title, Grid Root, Border Tile, TrackedText Subtitle, string Normal,
+        ScaleTransform Scale, SpringValue Grow, SpringValue Fade);
 
     readonly List<Target> _targets = new();
-    readonly TextBlock _chipText = CardKit.Label("", 13, FontWeights.SemiBold);
-    readonly TextBlock _chipSize = CardKit.Label("", 12, FontWeights.Medium, CardKit.Text2);
-    readonly TextBlock _chipIcon = CardKit.Glyph("", 15, CardKit.Brush(NotchPalette.Calendar));
+    readonly TextBlock _chipText = WallParts.Text("", 13, FontWeights.SemiBold);
+    readonly TextBlock _chipSize = WallParts.Text("", 12, FontWeights.Normal, "WallText2");
+    readonly TextBlock _chipIcon = WallParts.Glyph("", 15);
+    /// <summary>The Wall's focus glow (accent, soft, no offset); shared and frozen since one tile wears it at a time.</summary>
+    static readonly DropShadowEffect Glow = MakeGlow();
     IDataObject? _data;
     string[] _files = Array.Empty<string>();
     DropAction? _hovered;
+    IDisposable? _frames;
 
     public DropView()
     {
@@ -36,6 +43,10 @@ public partial class DropView : UserControl
         Build();
         PreviewDragEnter += OnDragOver;
         PreviewDragOver += OnDragOver;
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible) Settle();
+        };
     }
 
     /// <summary>Files dropped on Send to phone, Compress or Convert (Shelf drops keep the window's own path).</summary>
@@ -69,24 +80,25 @@ public partial class DropView : UserControl
         chipRow.Children.Add(_chipText);
         _chipSize.Margin = new Thickness(6, 0, 0, 0);
         chipRow.Children.Add(_chipSize);
+        // The thing in your hand: a tile-coloured chip, tilted a touch as if held.
         var chip = new Border
         {
             Height = 36,
-            CornerRadius = new CornerRadius(12),
-            Background = CardKit.Raised,
-            BorderBrush = CardKit.Brush("#2E2E33"),
+            CornerRadius = new CornerRadius(WallParts.SmallRadius),
+            Background = WallParts.Res("WallTile"),
+            BorderBrush = WallParts.Res("WallHairline"),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 0, 14, 0),
+            Padding = new Thickness(11, 0, 14, 0),
             MaxWidth = 380,
             Child = chipRow,
             RenderTransform = new RotateTransform(-2),
             RenderTransformOrigin = new Point(0.5, 0.5),
         };
         header.Children.Add(chip);
-        var dropTo = CardKit.Caption("Drop to");
-        dropTo.Margin = new Thickness(14, 0, 0, 0);
+        var dropTo = WallParts.Label("Drop to");
+        dropTo.Margin = new Thickness(16, 0, 0, 0);
         header.Children.Add(dropTo);
-        var cancel = CardKit.Label("Release outside the notch to cancel", 11, FontWeights.Normal, CardKit.Text2);
+        var cancel = WallParts.Text("Release outside the notch to cancel", 11.5, FontWeights.Normal, "WallText2");
         DockPanel.SetDock(cancel, Dock.Right);
         header.Children.Add(cancel);
         DockPanel.SetDock(header, Dock.Top);
@@ -95,7 +107,7 @@ public partial class DropView : UserControl
         var grid = new Grid();
         for (int i = 0; i < 4; i++)
         {
-            if (i > 0) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
+            if (i > 0) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         }
         AddTarget(grid, 0, DropAction.Shelf, "", "Shelf", "Keep for later");
@@ -108,46 +120,110 @@ public partial class DropView : UserControl
     void AddTarget(Grid grid, int column, DropAction action, string glyph, string title, string subtitle)
     {
         var root = new Grid { Background = Brushes.Transparent };
-        var frame = new System.Windows.Shapes.Rectangle
+        var icon = WallParts.Glyph(glyph, 22);
+        icon.HorizontalAlignment = HorizontalAlignment.Left;
+        icon.VerticalAlignment = VerticalAlignment.Top;
+        var name = WallParts.Text(title, 17, FontWeights.Bold);
+        var sub = WallParts.Label(subtitle);
+        sub.HorizontalAlignment = HorizontalAlignment.Left;
+        sub.Margin = new Thickness(0, 5, 0, 0);
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
+        words.Children.Add(name);
+        words.Children.Add(sub);
+        var content = new Grid { Margin = new Thickness(14, 13, 14, 13) };
+        content.Children.Add(icon);
+        content.Children.Add(words);
+
+        var scale = new ScaleTransform(1, 1);
+        var tile = new Border
         {
-            RadiusX = 18,
-            RadiusY = 18,
-            StrokeThickness = 2,
+            CornerRadius = new CornerRadius(WallParts.Radius),
+            Background = WallParts.Res("WallTile"),
+            BorderThickness = new Thickness(1.5),
+            Child = content,
+            RenderTransform = scale,
+            RenderTransformOrigin = new Point(0.5, 0.5),
         };
-        root.Children.Add(frame);
-        var icon = CardKit.Glyph(glyph, 20);
-        var tile = new Border { Width = 44, Height = 44, CornerRadius = new CornerRadius(14), Child = icon, HorizontalAlignment = HorizontalAlignment.Left };
-        var sub = CardKit.Label(subtitle, 11, FontWeights.Normal, CardKit.Text2);
-        var content = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 12, 0) };
-        content.Children.Add(tile);
-        var name = CardKit.Label(title, 15, FontWeights.Bold);
-        name.Margin = new Thickness(0, 10, 0, 3);
-        content.Children.Add(name);
-        content.Children.Add(sub);
-        root.Children.Add(content);
+        root.Children.Add(tile);
         Grid.SetColumn(root, column);
         grid.Children.Add(root);
-        var t = new Target(action, root, frame, tile, icon, sub, subtitle);
+        var t = new Target(action, title, root, tile, sub, subtitle, scale, new SpringValue(1, 0.001), new SpringValue(1, 0.002));
         _targets.Add(t);
         Paint(t, false);
-        CardKit.AutomationName(root, $"Drop on {title}, {subtitle}");
+        AutomationProperties.SetName(root, $"Drop on {title}, {subtitle}");
     }
 
-    static void Paint(Target t, bool hot)
+    /// <summary>The focused tile wears the accent outline and glow; the others keep a hairline.</summary>
+    void Paint(Target t, bool hot)
     {
-        t.Frame.Stroke = hot ? CardKit.Brush(Accent) : CardKit.Brush("#3A3A40");
-        t.Frame.StrokeDashArray = hot ? null : new DoubleCollection { 4, 3 };
-        t.Frame.Fill = hot ? CardKit.Tint(Accent, 0.14) : CardKit.Brush("#0C0C0E");
-        t.Tile.Background = hot ? CardKit.Brush(Accent) : CardKit.Raised;
-        t.Icon.Foreground = hot ? CardKit.Brush("#000000") : CardKit.Text;
-        t.Subtitle.Foreground = hot ? CardKit.Brush("#E2D4FF") : CardKit.Text2;
+        t.Tile.BorderBrush = WallParts.Res(hot ? "WallAccent" : "WallHairline");
+        t.Tile.Effect = hot ? Glow : null;
+        Panel.SetZIndex(t.Root, hot ? 1 : 0);
+        AutomationProperties.SetItemStatus(t.Root, hot ? "Selected" : "");
+    }
+
+    static DropShadowEffect MakeGlow()
+    {
+        var glow = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x3D), BlurRadius = 24, ShadowDepth = 0, Opacity = 0.32 };
+        glow.Freeze();
+        return glow;
     }
 
     void SetHovered(DropAction? action)
     {
         if (action == _hovered) return;
         _hovered = action;
-        foreach (var t in _targets) Paint(t, t.Action == action);
+        bool motion = SystemParameters.ClientAreaAnimation && IsVisible;
+        foreach (var t in _targets)
+        {
+            bool hot = t.Action == action;
+            Paint(t, hot);
+            double grow = hot ? FocusScale : 1;
+            double fade = action is null || hot ? 1 : DimOpacity;
+            if (motion)
+            {
+                // A quick spring with a little overshoot on the focused tile; the dim is a plain fast fade.
+                t.Grow.AnimateTo(grow, 0.32, 0.62);
+                t.Fade.AnimateTo(fade, 0.16, 1);
+            }
+            else
+            {
+                t.Grow.Snap(grow);
+                t.Fade.Snap(fade);
+            }
+        }
+        if (motion) _frames ??= Animator.Subscribe(_ => Apply());
+        else Apply();
+    }
+
+    void Apply()
+    {
+        bool settled = true;
+        foreach (var t in _targets)
+        {
+            t.Scale.ScaleX = t.Scale.ScaleY = t.Grow.Value;
+            t.Root.Opacity = t.Fade.Value;
+            settled &= t.Grow.IsSettled && t.Fade.IsSettled;
+        }
+        if (settled) StopFrames();
+    }
+
+    /// <summary>Hidden mid-spring: jump to the end so nothing keeps the frame clock running.</summary>
+    void Settle()
+    {
+        foreach (var t in _targets)
+        {
+            t.Grow.Snap(t.Grow.Target);
+            t.Fade.Snap(t.Fade.Target);
+        }
+        Apply();
+        StopFrames();
+    }
+
+    void StopFrames()
+    {
+        _frames?.Dispose();
+        _frames = null;
     }
 
     void OnDragOver(object sender, DragEventArgs e)
@@ -189,6 +265,7 @@ public partial class DropView : UserControl
                     : anyImage ? "Images only" : "Images only for now";
             if (t.Action == DropAction.Phone && (_files.Length > 1 || _files.Any(Directory.Exists))) text = "As a .zip · QR";
             t.Subtitle.Text = text;
+            AutomationProperties.SetName(t.Root, $"Drop on {t.Title}, {text}");
         }
     }
 }
