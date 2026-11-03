@@ -1,16 +1,18 @@
 <UserControl x:Class="Shammy.Views.ResultView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Shammy.Views"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              Width="560" Height="680">
     <Grid Margin="14,8,14,14">
         <Grid.RowDefinitions>
             <RowDefinition Height="40" />
-            <RowDefinition Height="36" />
+            <RowDefinition Height="34" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- Toolbar: what was asked (bold, tight), then quiet round actions. -->
         <Grid Margin="4,0,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -18,66 +20,71 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Border x:Name="Thumb" Width="30" Height="30" CornerRadius="8" Margin="0,0,10,0" Visibility="Collapsed"
-                    BorderBrush="{StaticResource Stroke1}" BorderThickness="1" />
-            <TextBlock x:Name="QueryIcon" Style="{StaticResource Icon}" Text="&#xE721;" Foreground="{StaticResource Fg2}" Margin="2,0,10,0" />
-            <TextBlock x:Name="QueryText" Grid.Column="1" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis" />
+                    BorderBrush="{DynamicResource WallHairline}" BorderThickness="1" />
+            <TextBlock x:Name="QueryIcon" Style="{StaticResource Icon}" Text="&#xE721;" Foreground="{DynamicResource WallText2}" Margin="2,0,10,0" />
+            <TextBlock x:Name="QueryText" Grid.Column="1" FontFamily="{DynamicResource WallFont}" FontWeight="Bold" FontSize="15"
+                       Foreground="{DynamicResource WallText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <!-- Shown whenever a screen image has left the PC for Lens. -->
-                <Border x:Name="UploadBadge" CornerRadius="10" Padding="8,3" Margin="0,0,6,0" VerticalAlignment="Center"
-                        Background="{StaticResource Fill1}" Visibility="Collapsed"
+                <Border x:Name="UploadBadge" CornerRadius="999" Padding="9,4" Margin="0,0,6,0" VerticalAlignment="Center"
+                        BorderBrush="{DynamicResource WallHairline}" BorderThickness="1" Visibility="Collapsed"
                         ToolTip="The circled image was uploaded to Google Lens">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource Icon}" Text="&#xE898;" FontSize="11" Foreground="{StaticResource Fg2}" Margin="0,0,5,0" />
-                        <TextBlock Text="Sent to Google" FontSize="11" Foreground="{StaticResource Fg2}" VerticalAlignment="Center" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE898;" FontSize="10" Foreground="{DynamicResource WallText2}" Margin="0,0,6,0" />
+                        <views:TrackedText Text="Sent to Google" FontSize="10" Tracking="0.1" />
                     </StackPanel>
                 </Border>
-                <Button x:Name="FullPageButton" Style="{StaticResource IconButton}" Content="&#xE722;" ToolTip="Screenshot the whole page" Click="OnFullPageScreenshot" />
-                <Button Style="{StaticResource IconButton}" Content="&#xE72C;" ToolTip="Reload" Click="OnReload" />
-                <Button Style="{StaticResource IconButton}" Content="&#xE8A7;" ToolTip="Open in browser" Click="OnOpenInBrowser" />
-                <Button Style="{StaticResource IconButton}" Content="&#xE711;" ToolTip="Close (Esc)" Click="OnClose" />
+                <Button x:Name="FullPageButton" Style="{StaticResource WallIconButton}" Content="&#xE722;" ToolTip="Screenshot the whole page"
+                        AutomationProperties.Name="Screenshot the whole page" Click="OnFullPageScreenshot" />
+                <Button Style="{StaticResource WallIconButton}" Content="&#xE72C;" ToolTip="Reload" AutomationProperties.Name="Reload" Click="OnReload" />
+                <Button Style="{StaticResource WallIconButton}" Content="&#xE8A7;" ToolTip="Open in browser" AutomationProperties.Name="Open in browser" Click="OnOpenInBrowser" />
+                <Button Style="{StaticResource WallIconButton}" Content="&#xE711;" ToolTip="Close (Esc)" AutomationProperties.Name="Close" Click="OnClose" />
             </StackPanel>
         </Grid>
 
+        <!-- Mode and filter chips: tracked uppercase text; the active one is white and underlined, never a filled pill. -->
         <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <ToggleButton x:Name="ModeAi" Style="{StaticResource Chip}" Content="AI Mode" Click="OnModeClick" />
-                <ToggleButton x:Name="ModeWeb" Style="{StaticResource Chip}" Content="Web" Click="OnModeClick" />
-                <ToggleButton x:Name="ModeLens" Style="{StaticResource Chip}" Content="Lens" Click="OnModeClick" />
-                <Rectangle Width="1" Height="16" Fill="{StaticResource Fill3}" Margin="2,0,8,0" />
-                <ToggleButton x:Name="FilterReddit" Style="{StaticResource Chip}" Content="Reddit" Click="OnFilterClick" />
-                <ToggleButton x:Name="FilterRecent" Style="{StaticResource Chip}" Content="Past week" Click="OnFilterClick" />
-                <ToggleButton x:Name="FilterNoJunk" Style="{StaticResource Chip}" Content="No junk" Click="OnFilterClick" />
-                <ToggleButton x:Name="FilterDocs" Style="{StaticResource Chip}" Content="Docs" Click="OnFilterClick" />
+                <ToggleButton x:Name="ModeAi" Style="{StaticResource WallChip}" Content="AI Mode" Click="OnModeClick" />
+                <ToggleButton x:Name="ModeWeb" Style="{StaticResource WallChip}" Content="Web" Click="OnModeClick" />
+                <ToggleButton x:Name="ModeLens" Style="{StaticResource WallChip}" Content="Lens" Click="OnModeClick" />
+                <Rectangle Width="1" Height="14" Fill="{DynamicResource WallHairline}" Margin="6,0,6,0" />
+                <ToggleButton x:Name="FilterReddit" Style="{StaticResource WallChip}" Content="Reddit" Click="OnFilterClick" />
+                <ToggleButton x:Name="FilterRecent" Style="{StaticResource WallChip}" Content="Past week" Click="OnFilterClick" />
+                <ToggleButton x:Name="FilterNoJunk" Style="{StaticResource WallChip}" Content="No junk" Click="OnFilterClick" />
+                <ToggleButton x:Name="FilterDocs" Style="{StaticResource WallChip}" Content="Docs" Click="OnFilterClick" />
                 <StackPanel x:Name="ExtraChips" Orientation="Horizontal" />
             </StackPanel>
         </ScrollViewer>
 
         <!-- Its own row, never on top of the page: it must not cover Google's buttons. -->
         <Border x:Name="Notice" Grid.Row="2" Margin="0,6,0,0" CornerRadius="12" Padding="12,8,6,8"
-                Background="{StaticResource Fill1}" Visibility="Collapsed">
+                Background="{DynamicResource WallTile}" BorderBrush="{DynamicResource WallHairline}" BorderThickness="1" Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" Foreground="{DynamicResource AccentBrush}" Margin="0,0,10,0" />
-                <TextBlock Grid.Column="1" FontSize="12" Foreground="{StaticResource Fg}" TextWrapping="Wrap" VerticalAlignment="Center"
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" Foreground="{DynamicResource WallText}" Margin="0,0,10,0" />
+                <TextBlock Grid.Column="1" FontFamily="{DynamicResource WallFont}" FontSize="12" Foreground="{DynamicResource WallText}"
+                           TextWrapping="Wrap" VerticalAlignment="Center"
                            Text="Google wants to check you're not a robot. Complete it below once; Shammy remembers it after that." />
-                <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10" Width="26" Height="26"
-                        ToolTip="Dismiss" Click="OnDismissNotice" />
+                <Button Grid.Column="2" Style="{StaticResource WallIconButton}" Content="&#xE711;" FontSize="10" Width="26" Height="26"
+                        ToolTip="Dismiss" AutomationProperties.Name="Dismiss" Click="OnDismissNotice" />
             </Grid>
         </Border>
 
         <Grid x:Name="WebFrame" Grid.Row="3" Margin="0,6,0,0" Background="#FF101012" SizeChanged="OnFrameSizeChanged">
             <wv2:WebView2CompositionControl x:Name="Web" DefaultBackgroundColor="#101012" />
+            <!-- Loading is a white meter, not an accent. -->
             <Border x:Name="LoadingBar" Height="2.5" VerticalAlignment="Top" HorizontalAlignment="Left" Width="0"
-                    Background="{DynamicResource AccentBrush}" CornerRadius="1.25" IsHitTestVisible="False" />
+                    Background="{DynamicResource WallText}" CornerRadius="1.25" IsHitTestVisible="False" />
             <StackPanel x:Name="ErrorPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-                <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="26" Foreground="{StaticResource Fg3}" />
-                <TextBlock x:Name="ErrorText" FontSize="13" Foreground="{StaticResource Fg2}" Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="320" />
-                <ToggleButton x:Name="InstallWebView2" Style="{StaticResource Chip}" Content="Get WebView2" Margin="0,12,0,0"
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="26" Foreground="{DynamicResource WallText2}" />
+                <TextBlock x:Name="ErrorText" FontFamily="{DynamicResource WallFont}" FontSize="13" Foreground="{DynamicResource WallText2}"
+                           Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="320" />
+                <Button x:Name="InstallWebView2" Style="{StaticResource WallPrimaryButton}" Content="Get WebView2" Margin="0,14,0,0"
                         HorizontalAlignment="Center" Visibility="Collapsed" Click="OnInstallWebView2" />
             </StackPanel>
         </Grid>

@@ -620,7 +620,7 @@ internal sealed class PaletteModule : IShammyModule
             var s = new MiniSlider { VerticalAlignment = VerticalAlignment.Center };
             var mute = new Button
             {
-                Style = (Style)Application.Current.Resources["IconButton"],
+                Style = (Style)Application.Current.Resources["WallIconButton"],
                 Width = 24,
                 Height = 24,
                 FontSize = 12,
@@ -856,6 +856,10 @@ internal sealed class PaletteModule : IShammyModule
                 return true;
             case Key.Left or Key.Right when _ranked.SelectedItem?.Tag is PaletteEntry { Adjust: { } adjust }:
                 adjust(e.Key == Key.Right ? 1 : -1);
+                return true;
+            // Nothing typed and the recent picks are a rail of tiles: Left and Right walk along it.
+            case Key.Left or Key.Right when _view.RailCount > 0 && _ranked.Selected < _view.RailCount && _query.Trim().Length == 0:
+                SetSelected(e.Key == Key.Right ? Math.Min(_ranked.Selected + 1, _view.RailCount - 1) : Math.Max(_ranked.Selected - 1, 0));
                 return true;
             default:
                 return false;

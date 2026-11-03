@@ -1,0 +1,164 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:views="clr-namespace:Shammy.Views">
+    <!-- Focus Wall controls for the surfaces outside the open notch (typing bar, results, answers, pop-up cards).
+         Tokens live in Theme.xaml (WallGround, WallTile, WallText...); they are looked up dynamically because this
+         dictionary is merged beside it. Accent only on the one primary control; everything else is quiet. -->
+    <SolidColorBrush x:Key="WallRaised" Color="#FF1E1E23" />
+    <SolidColorBrush x:Key="WallRaisedHover" Color="#FF26262C" />
+    <SolidColorBrush x:Key="WallAccentHover" Color="#FFFFA466" />
+    <SolidColorBrush x:Key="WallOnAccent" Color="#FF0B0B0D" />
+    <SolidColorBrush x:Key="WallTrack" Color="#FF2A2A31" />
+    <!-- Meaning only: an error, a failed step, recording. -->
+    <SolidColorBrush x:Key="WallRed" Color="#FFFF453A" />
+
+    <!-- A round glyph button on the ground: quiet until hovered. Size it with Width/Height. -->
+    <Style x:Key="WallIconButton" TargetType="Button">
+        <Setter Property="FontFamily" Value="{DynamicResource IconFont}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource WallText2}" />
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="Transparent" CornerRadius="999">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource WallRaised}" />
+                            <Setter Property="Foreground" Value="{DynamicResource WallText}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource WallRaisedHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A secondary action: a raised pill with a hairline ("Snooze", "Copy text"). Content may be text or a panel. -->
+    <Style x:Key="WallQuietButton" TargetType="Button">
+        <Setter Property="FontFamily" Value="{DynamicResource WallFontSemiBold}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource WallText}" />
+        <Setter Property="Background" Value="{DynamicResource WallRaised}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WallHairline}" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="13,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="999" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource WallRaisedHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The single primary control of a surface: the accent fill with near-black text. -->
+    <Style x:Key="WallPrimaryButton" TargetType="Button" BasedOn="{StaticResource WallQuietButton}">
+        <Setter Property="FontFamily" Value="{DynamicResource WallFont}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource WallOnAccent}" />
+        <Setter Property="Background" Value="{DynamicResource WallAccent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WallAccent}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="999" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource WallAccentHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Tracked uppercase text chip: quiet grey; hover brightens; on = white with a 1px underline, never a filled pill. -->
+    <Style x:Key="WallChip" TargetType="ToggleButton">
+        <Setter Property="Foreground" Value="{DynamicResource WallText2}" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid Background="Transparent">
+                        <views:TrackedText x:Name="Label" Margin="{TemplateBinding Padding}" FontSize="11" FontWeight="SemiBold"
+                                           FontFamily="{DynamicResource WallFontSemiBold}" Tracking="0.1"
+                                           Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                           Foreground="{TemplateBinding Foreground}" />
+                        <Border x:Name="Underline" Height="1" VerticalAlignment="Bottom" Margin="7,0,7,6"
+                                Background="{DynamicResource WallText}" Visibility="Collapsed" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource WallText}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource WallText}" />
+                            <Setter TargetName="Underline" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The typing box: no chrome of its own (the bar is the field); caret and selection carry the focus accent. -->
+    <Style x:Key="WallTextBox" TargetType="TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource WallText}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource WallAccent}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource WallAccent}" />
+        <Setter Property="FontFamily" Value="{DynamicResource WallFontMedium}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" Focusable="False"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

@@ -356,11 +356,11 @@ public partial class ResultView : UserControl
             {
                 ExtraChips.Children.Add(new System.Windows.Shapes.Rectangle
                 {
-                    Width = 1, Height = 16, Fill = (Brush)FindResource("Fill3"), Margin = new Thickness(2, 0, 8, 0),
+                    Width = 1, Height = 14, Fill = (Brush)FindResource("WallHairline"), Margin = new Thickness(6, 0, 6, 0),
                 });
                 first = false;
             }
-            var chip = new ToggleButton { Content = label, Style = (Style)FindResource("Chip") };
+            var chip = new ToggleButton { Content = label, Style = (Style)FindResource("WallChip") };
             chip.Click += (_, _) =>
             {
                 chip.IsChecked = false;
@@ -466,7 +466,6 @@ public partial class ResultView : UserControl
 
     void OnInstallWebView2(object sender, RoutedEventArgs e)
     {
-        InstallWebView2.IsChecked = false;
         WebView2Check.OpenDownload();
     }
 
