@@ -1,9 +1,9 @@
 namespace Shammy.Infrastructure;
 
 /// <summary>
-/// Whether someone else may be watching the screen: an app has the microphone or camera open (a call)
-/// or is capturing the screen. Notifications (pop-ups and the Notifications tab) show only the app name
-/// while this is on.
+/// Whether someone else may be watching the screen: an app is capturing it (screen sharing, recording).
+/// A plain call with the mic or camera doesn't count. Notifications (pop-ups and the Notifications tab)
+/// show only the app name while this is on.
 /// </summary>
 internal static class PrivacyState
 {

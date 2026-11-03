@@ -21,7 +21,7 @@ internal sealed class MeetingModule : IShammyModule
 
     // "meeting-fake" test state: shows the activity without a real app and without touching real mute.
     string? _fakeApp;
-    bool _fakeCamera, _fakeMuted;
+    bool _fakeCamera, _fakeMuted, _fakeScreen;
 
     public string Name => "meeting";
 
@@ -55,7 +55,8 @@ internal sealed class MeetingModule : IShammyModule
     {
         if (_ctx is null || _mic is null) return;
         bool fake = _fakeApp is not null;
-        Infrastructure.PrivacyState.Set(fake || _snapshot.Microphone.Count > 0 || _snapshot.Camera.Count > 0 || _snapshot.Screen.Count > 0);
+        // Only a shared screen can show a message to others; on a plain call (mic or camera) nobody sees it.
+        Infrastructure.PrivacyState.Set((fake && _fakeScreen) || _snapshot.Screen.Count > 0);
         var name = _fakeApp ?? Describe(_snapshot.Microphone);
         if (name is null)
         {
@@ -115,10 +116,11 @@ internal sealed class MeetingModule : IShammyModule
     {
         var words = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
         _fakeCamera = words.RemoveAll(w => w.Equals("+cam", StringComparison.OrdinalIgnoreCase)) > 0;
+        _fakeScreen = words.RemoveAll(w => w.Equals("+screen", StringComparison.OrdinalIgnoreCase)) > 0;
         _fakeApp = words.Count > 0 ? string.Join(' ', words) : "Zoom";
         _fakeMuted = false;
         Refresh();
-        return $"ok: {_fakeApp} camera={_fakeCamera}";
+        return $"ok: {_fakeApp} camera={_fakeCamera} screen={_fakeScreen}";
     }
 
     string State()

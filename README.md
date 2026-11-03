@@ -236,7 +236,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
   - "weather in <city>" sends only that city name to Open-Meteo's free geocoder and forecast (no account, no key);
   - the notch shows a "Sent to Google" badge whenever an image is uploaded to Lens.
 - **The results browser:** it can only open web pages, so pages can't launch apps or files.
-- **Notifications:** their text is hidden, in pop-ups and in the Notifications tab, while an app uses your microphone or camera, or captures the screen. The tab shows it again when that ends.
+- **Notifications:** their text is hidden, in pop-ups and in the Notifications tab, only while you share or record your screen (a normal call doesn't hide anything). The tab shows it again when sharing ends.
 - **Your data:**
   - clipboard history, notes, snippets and the song titles voice remembers are encrypted with Windows DPAPI under your account. Song memory can be cleared or turned off from the tray;
   - unpinned clipboard items are forgotten after 24 hours.

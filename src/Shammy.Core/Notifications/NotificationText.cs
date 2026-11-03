@@ -10,7 +10,7 @@ public static class NotificationText
     public const string PopupHidden = "Hidden while you're in a call or sharing your screen";
 
     /// <summary>A Notifications-tab row's second line while private.</summary>
-    public const string ListHidden = "Message hidden during call or screen share";
+    public const string ListHidden = "Message hidden while sharing your screen";
 
     /// <summary>
     /// A Notifications-tab row: the bold first line and the "App · body" line under it. Multi-line bodies
