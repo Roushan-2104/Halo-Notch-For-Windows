@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -89,6 +90,12 @@ public partial class ExpandedView : UserControl
             GoHome(animate: true);
             e.Handled = true;
         };
+        // The hover-opened notch never takes focus, so a click into a text box (Notes' add box, the clipboard
+        // search) has to ask for it, or the typing goes to the app underneath.
+        PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (TextInputAt(e.OriginalSource as DependencyObject) is { } input) TextInputWanted?.Invoke(input);
+        };
         RebuildChips();
         RebuildRow(force: true);
     }
@@ -104,6 +111,55 @@ public partial class ExpandedView : UserControl
 
     /// <summary>The view's height changed (home row ⇄ an opened view); the notch reshapes to match.</summary>
     internal event Action? HeightChanged;
+
+    /// <summary>The user clicked into a text box, or opened a view with one: the notch should take keyboard focus.</summary>
+    internal event Action<Control>? TextInputWanted;
+
+    /// <summary>A view opened or went home: whatever had keyboard focus may be gone.</summary>
+    internal event Action? ViewChanged;
+
+    /// <summary>The text box (or password box) <paramref name="d"/> is in, if any.</summary>
+    Control? TextInputAt(DependencyObject? d)
+    {
+        for (; d is not null && d != this; d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d is TextBoxBase or PasswordBox) return IsTypable((Control)d) ? (Control)d : null;
+        return null;
+    }
+
+    static bool IsTypable(Control c) => c.IsVisible && c.IsEnabled && c.Focusable && c is not TextBoxBase { IsReadOnly: true };
+
+    /// <summary>The first text box in the open view, in tree order.</summary>
+    Control? FirstTextInput(DependencyObject root)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TextBoxBase or PasswordBox && IsTypable((Control)child)) return (Control)child;
+            if (FirstTextInput(child) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>Test hook: ask for the keyboard for the open view's first text box, as a click into it would.</summary>
+    internal bool RequestFirstTextInput()
+    {
+        if (_openId is null || FirstTextInput(DetailFrame) is not { } input) return false;
+        TextInputWanted?.Invoke(input);
+        return true;
+    }
+
+    /// <summary>
+    /// Opened by a click on its chip or card: the user is at the notch, so a view with a text box gets the
+    /// keyboard straight away (a hover or a command never does; clicking into the box does).
+    /// </summary>
+    void OpenByClick(string id)
+    {
+        if (!OpenView(id)) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_openId is not null && IsVisible && FirstTextInput(DetailFrame) is { } input) TextInputWanted?.Invoke(input);
+        }, DispatcherPriority.Loaded);
+    }
 
     internal void Attach(ShammyServices services)
     {
@@ -203,6 +259,7 @@ public partial class ExpandedView : UserControl
         ((RectangleGeometry)DetailFrame.Clip).Rect = new Rect(0, 0, 924, DetailFrame.Height);
         SetBodyHeight(DetailHeight + (card ? CardHeader : 0));
         if (IsVisible) AnimateIn(DetailFrame);
+        ViewChanged?.Invoke();
         return true;
     }
 
@@ -218,6 +275,7 @@ public partial class ExpandedView : UserControl
         SyncChips();
         SetBodyHeight(HomeHeight);
         if (animate && wasOpen) AnimateIn(HomeRow);
+        if (wasOpen) ViewChanged?.Invoke();
     }
 
     enum ViewKind { Card, Tab, Shelf, Alerts }
@@ -323,7 +381,7 @@ public partial class ExpandedView : UserControl
                 Content = spec.ViewId == ShelfId ? ShelfChipContent(spec.Label) : spec.Label,
             };
             string id = spec.ViewId;
-            chip.Click += (_, _) => OpenView(id);
+            chip.Click += (_, _) => OpenByClick(id);
             TabHover.Track(chip);
             ChipStrip.Children.Add(chip);
             _chipButtons[id] = chip;
@@ -502,7 +560,7 @@ public partial class ExpandedView : UserControl
             _pressedFrame = null;
             if (!click || card == _nowPlaying) return;
             e.Handled = true;
-            OpenView(card.Id);
+            OpenByClick(card.Id);
         };
         _frames[card] = frame;
         return frame;

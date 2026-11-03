@@ -61,6 +61,11 @@ public partial class NotchWindow : Window
     readonly DispatcherTimer _holdTimeout;
     int _holdOpen;
 
+    // Typing into a text box in the open notch (see BeginDetailTyping): the window was made interactive for it,
+    // and gives the foreground back to the window that had it afterwards.
+    bool _detailTyping;
+    IntPtr _typingReturnTo;
+
     // v2 resting notch: eyes + rotating glance when idle, the peek on a resting pointer (see HoverIntent).
     readonly Layer _rest, _peek;
     readonly RestView _restView;
@@ -121,6 +126,9 @@ public partial class NotchWindow : Window
         {
             if (_mode == NotchMode.Expanded) Transition(NotchMode.Expanded);
         };
+        Expanded.TextInputWanted += BeginDetailTyping;
+        // Leaving the view (Back, Esc, another chip) drops the text box; once focus has settled, see if typing is over.
+        Expanded.ViewChanged += () => Dispatcher.BeginInvoke(CheckDetailTyping, DispatcherPriority.Background);
         Expanded.ShelfDragging += dragging =>
         {
             _holdOpen += dragging ? 1 : -1;
@@ -166,6 +174,8 @@ public partial class NotchWindow : Window
         };
         Deactivated += (_, _) =>
         {
+            // The user clicked another window while typing in the notch: they're done, and that window keeps focus.
+            if (_detailTyping) EndDetailTyping(giveBack: false);
             if (_cardOpen && _cardInteractive && _searchMode is null) CloseCard();
             else if (_interactive) InteractiveDeactivated?.Invoke();
         };
@@ -371,6 +381,8 @@ public partial class NotchWindow : Window
 
     public void SetSearchMode(NotchMode? mode)
     {
+        // The search bar takes over the keyboard (and manages SetInteractive itself).
+        if (mode is not null && _detailTyping) EndDetailTyping(giveBack: false);
         _searchMode = mode;
         _restView.Mood.SetSearch(mode);
         if (mode is not null)
@@ -631,6 +643,8 @@ public partial class NotchWindow : Window
         else if (_activity is not null && _activity.Kind != ActivityKind.NowPlaying) mode = NotchMode.Compact;
         else mode = NotchMode.Idle;
 
+        // Typing in the open notch ends when the notch stops being open (closed, a card or a notification took over).
+        if (mode != NotchMode.Expanded && _detailTyping) EndDetailTyping(giveBack: true);
         if (mode == NotchMode.Compact) PrepareCompact();
         if (mode == NotchMode.Notification && _activity?.Payload is NotificationPayload p) NotificationCard.Show(p.Notification, p.More);
         // Breaking through: the fullscreen app may have pushed itself above us; re-assert topmost (without activating).
@@ -970,6 +984,69 @@ public partial class NotchWindow : Window
         _peeking = false;
         Recompute();
         UpdateBubble();
+    }
+
+    // ---- Typing in the open notch ----------------------------------------------------------------
+
+    /// <summary>
+    /// A text box in the open notch wants the keyboard (it was clicked, or its view was opened by a click). The
+    /// notch never activates on hover, so take focus now, keep the notch open while typing (the pointer may wander
+    /// off), and remember the window that had focus to hand it back afterwards. Esc goes back (ExpandedView).
+    /// </summary>
+    void BeginDetailTyping(Control input)
+    {
+        if (_searchMode is not null || _mode != NotchMode.Expanded) return;
+        if (!_detailTyping)
+        {
+            _detailTyping = true;
+            _holdOpen++;
+            var current = Native.GetForegroundWindow();
+            _typingReturnTo = current == _hwnd ? IntPtr.Zero : current;
+            if (_interactive) Activate();
+            else SetInteractive(true);
+        }
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!_detailTyping || !input.IsVisible) return;
+            input.Focus();
+            Keyboard.Focus(input);
+        }, DispatcherPriority.Input);
+    }
+
+    /// <summary>After the view changed: typing is over unless the keyboard is still in a text box in the notch.</summary>
+    void CheckDetailTyping()
+    {
+        if (!_detailTyping) return;
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase or PasswordBox
+            && Keyboard.FocusedElement is UIElement { IsVisible: true } focused && Expanded.IsAncestorOf(focused)) return;
+        EndDetailTyping(giveBack: true);
+    }
+
+    /// <summary>Back to never taking focus; with <paramref name="giveBack"/> the app that had focus gets it back.</summary>
+    void EndDetailTyping(bool giveBack)
+    {
+        if (!_detailTyping) return;
+        _detailTyping = false;
+        _holdOpen--;
+        var back = _typingReturnTo;
+        _typingReturnTo = IntPtr.Zero;
+        if (_searchMode is null)
+        {
+            SetInteractive(false);
+            if (giveBack && back != IntPtr.Zero && Native.GetForegroundWindow() == _hwnd) Native.ForceForeground(back);
+        }
+        if (!Root.IsMouseOver && _mode == NotchMode.Expanded) _hoverOut.Start();
+    }
+
+    internal string DescribeTyping() =>
+        $"typing={_detailTyping} interactive={_interactive} focused={(Keyboard.FocusedElement as FrameworkElement)?.GetType().Name ?? "-"} " +
+        $"active={(Native.GetForegroundWindow() == _hwnd ? "notch" : "other")} hold={_holdOpen}";
+
+    /// <summary>Test hook: as if the user clicked into the open view's first text box.</summary>
+    internal string FocusFirstInputForTest()
+    {
+        if (_mode != NotchMode.Expanded) return "error: the notch isn't open";
+        return Expanded.RequestFirstTextInput() ? "ok" : "error: no text box in the open view";
     }
 
     // ---- v2 test hooks (pipe commands) -----------------------------------------------------------
