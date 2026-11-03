@@ -47,6 +47,8 @@ internal sealed class AmbientModule : IShammyModule
 
         ctx.AddCommand(new AmbientCommand(_weather, _ticker, ctx));
         ctx.AddTrayToggle("Ticker", () => _data.TickerEnabled, on => _ticker.SetEnabled(on));
+        // The same setting as "pet on/off" (AppSettings.PetEnabled).
+        ctx.AddTrayToggle("Shammy the pet", () => ctx.Settings.PetEnabled, on => ctx.Notch.SetPetEnabled(on));
 
         ctx.AddPipeCommand("ambient-weather", _ => _weather.RefreshNowBlocking());
         ctx.AddPipeCommand("ambient-weather-city", arg => _weather.CityBlocking(arg));

@@ -66,7 +66,7 @@ internal sealed class GlanceFeed
             }
         }
 
-        var (time, date) = BuiltInGlances.Time(DateTime.Now, BuiltInGlances.Uses24Hour(CultureInfo.CurrentCulture));
+        var (time, date) = BuiltInGlances.Time(DateTime.Now, Shammy.Core.Productivity.ClockPreference.Is24Hour);
         entries.Add(new GlanceEntry("time", new GlanceItem(time, NotchPalette.Text, TimePriority), GlanceKind.Time, date));
 
         return GlanceOrder.ByPriority(GlanceOrder.Unique(entries, e => e.Id), e => e.Item.Priority);

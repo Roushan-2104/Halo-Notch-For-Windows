@@ -30,6 +30,13 @@ public class ClockCultureTests
         Assert.Equal("14:00", CalendarText.ClockAmPm(start, h24: true));
         Assert.Equal("14:00 – 15:30", CalendarText.Range(start, start.AddMinutes(90), h24: true));
         Assert.Equal("Standup 14:00", CalendarText.Glance("Standup", start, h24: true));
+        Assert.Equal("Meeting 14:00", Shammy.Core.Connect.PrivacyText.CalendarGlance("Standup", start, presenting: true, h24: true));
+        // ClockFormat and ClockPreference read a culture the same way ("H:mm" is 24-hour, "h:mm tt" isn't).
+        foreach (var name in new[] { "de-DE", "en-GB", "en-US", "en-IN", "ja-JP" })
+        {
+            var c = CultureInfo.GetCultureInfo(name);
+            Assert.Equal(ClockPreference.CultureUses24Hour(c), ClockFormat.Uses24Hour(c));
+        }
         // The 12-hour forms are unchanged.
         Assert.Equal("2:00 PM", CalendarText.ClockAmPm(start));
         Assert.Equal("2 – 3 PM", CalendarText.Range(start, start.AddHours(1)));

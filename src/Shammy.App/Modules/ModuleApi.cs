@@ -91,7 +91,11 @@ internal interface ISelectionHandler
 /// <summary>An extra chip on the results card. <see cref="Selection"/> is null for typed/spoken searches.</summary>
 internal sealed record ResultChip(string Label, Func<SelectionInfo?, bool> IsVisible, Action<SelectionInfo?, ResultView> OnClick);
 
-internal sealed record ShelfAction(string Label, Action<ShelfItem> Run);
+internal sealed record ShelfAction(string Label, Action<ShelfItem> Run)
+{
+    /// <summary>Whether the action is offered for this item (Convert only for images); null means always.</summary>
+    public Func<ShelfItem, bool>? AppliesTo { get; init; }
+}
 
 /// <param name="IsVisible">Asked each time the tray menu opens; null = always shown.</param>
 internal sealed record ModuleTrayItem(string Text, Action? OnClick = null, Func<bool>? IsChecked = null, Action<bool>? SetChecked = null,
@@ -119,6 +123,12 @@ internal sealed class ModuleRegistry
 
     /// <summary>Raised when a module's vocabulary changed (e.g. the app list finished indexing).</summary>
     public event Action? VocabularyChanged;
+
+    /// <summary>The circle-to-search image path (Google Lens on a PNG); set by the host once search exists.</summary>
+    public Func<byte[], Task>? SearchImage { get; set; }
+
+    /// <summary>Every module's name, started or disabled (for the settings' module switches).</summary>
+    public List<string> ModuleNames { get; } = new();
 
     internal void OnVocabularyChanged() => VocabularyChanged?.Invoke();
 }
@@ -187,6 +197,9 @@ internal sealed class ModuleContext
     /// <summary>Every module's commands, in the order the search flow tries them (the palette previews them).</summary>
     internal IReadOnlyList<ITextCommand> Commands => _registry.Commands;
 
+    /// <summary>Every module's name, including disabled ones.</summary>
+    internal IReadOnlyList<string> ModuleNames => _registry.ModuleNames;
+
     /// <summary>Offer words for voice recognition to expect (e.g. installed app names).</summary>
     public void AddVocabulary(Func<IEnumerable<string>> words) => _registry.Vocabulary.Add(words);
 
@@ -244,6 +257,9 @@ internal sealed class ModuleContext
         Notch.ShowCard(content, width, height, interactive, breaksFullscreen);
 
     public void CloseCard() => Notch.CloseCard();
+
+    /// <summary>Searches an image with Google Lens in the results card, exactly like circling it on screen.</summary>
+    public Task SearchImageAsync(byte[] png) => _registry.SearchImage?.Invoke(png) ?? Task.CompletedTask;
 
     /// <summary>Keep the notch's edge lit in a colour while a state lasts; null removes it.</summary>
     public void SetGlow(Color? color) => Notch.SetGlow(color);

@@ -42,10 +42,17 @@ internal sealed class ClipboardCard
         {
             if (_compact.IsVisible) RefreshCompact();
         };
+        // A screen share starting or ending hides or reveals the items in place.
+        Infrastructure.PrivacyState.Changed += _ => _compact.Dispatcher.BeginInvoke(RefreshCompact);
         RefreshCompact();
     }
 
+    static bool Private => Infrastructure.PrivacyState.Presenting;
+
     public FrameworkElement Compact => _compact;
+
+    /// <summary>"Save as note" on a text item in the detail; returns whether it was saved.</summary>
+    public Func<ClipEntry, bool>? SaveAsNote { get; init; }
 
     // ---- Compact ---------------------------------------------------------------------------------
 
@@ -84,6 +91,21 @@ internal sealed class ClipboardCard
             _compactRows.Children.Add(empty);
             _compactMore.Text = "Nothing yet";
             CardKit.AutomationName(_compact, "Clipboard, empty. Open clipboard");
+            return;
+        }
+        if (Private)
+        {
+            // Counts only while the screen is shared.
+            var count = CardKit.Label(Shammy.Core.Connect.PrivacyText.ClipboardSummary(items.Count), 13, FontWeights.SemiBold);
+            count.Margin = new Thickness(0, 6, 0, 0);
+            _compactRows.Children.Add(count);
+            var hidden = CardKit.Label(Shammy.Core.Connect.PrivacyText.Hidden, 11, FontWeights.Medium, CardKit.Text2);
+            hidden.TextWrapping = TextWrapping.Wrap;
+            hidden.TextTrimming = TextTrimming.None;
+            hidden.Margin = new Thickness(0, 4, 0, 0);
+            _compactRows.Children.Add(hidden);
+            _compactMore.Text = Shammy.Core.Connect.PrivacyText.ClipboardSummary(items.Count);
+            CardKit.AutomationName(_compact, $"Clipboard, {items.Count} items, hidden while sharing. Open clipboard");
             return;
         }
         foreach (var e in items.Take(3))
@@ -257,10 +279,16 @@ internal sealed class ClipboardCard
             };
 
             Action changed = () => Dispatcher.BeginInvoke(Refresh, DispatcherPriority.Background);
-            Loaded += (_, _) => _card._history.Changed += changed.Invoke;
+            Action<bool> privacy = _ => changed();
+            Loaded += (_, _) =>
+            {
+                _card._history.Changed += changed.Invoke;
+                Infrastructure.PrivacyState.Changed += privacy;
+            };
             Unloaded += (_, _) =>
             {
                 _card._history.Changed -= changed.Invoke;
+                Infrastructure.PrivacyState.Changed -= privacy;
                 _undoExpiry.Stop();
             };
             Refresh();
@@ -309,6 +337,12 @@ internal sealed class ClipboardCard
             var query = _search.Text.Trim();
             var shown = all.Where(e => !_pinnedOnly || e.Pinned).Where(e => Matches(e, query)).ToList();
             _row.Children.Clear();
+            if (Private)
+            {
+                _empty.Text = Shammy.Core.Connect.PrivacyText.Hidden;
+                _empty.Visibility = Visibility.Visible;
+                return;
+            }
             foreach (var e in shown) _row.Children.Add(_card.PreviewCard(e, now));
             _empty.Text = all.Count == 0 ? "Copy something and it shows up here" : shown.Count == 0 ? "Nothing matches" : "";
             _empty.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -341,6 +375,17 @@ internal sealed class ClipboardCard
         copyLabel = (copy.Child as StackPanel)?.Children.OfType<TextBlock>().LastOrDefault();
         DockPanel.SetDock(copy, Dock.Right);
         footer.Children.Add(copy);
+        if (e.Kind == ClipKind.Text && SaveAsNote is { } save)
+        {
+            Border? note = null;
+            note = CardKit.RoundButton("", () =>
+            {
+                if (save(e) && note?.Child is TextBlock glyph) glyph.Text = "";
+            }, 26, "Save as note", 11);
+            note.Margin = new Thickness(0, 0, 6, 0);
+            DockPanel.SetDock(note, Dock.Right);
+            footer.Children.Add(note);
+        }
         if (shape == ClipShape.Link)
         {
             var open = CardKit.RoundButton("", () => _open(e.Text.Trim()), 26, "Open link", 11);

@@ -11,8 +11,8 @@ public static class ClockFormat
 {
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    /// <summary>Whether the culture writes times on a 24-hour clock (its short time pattern uses "H").</summary>
-    public static bool Uses24Hour(CultureInfo culture) => culture.DateTimeFormat.ShortTimePattern.Contains('H');
+    /// <summary>Whether the culture writes times on a 24-hour clock. The app asks ClockPreference.Is24Hour, which puts the user's setting first.</summary>
+    public static bool Uses24Hour(CultureInfo culture) => Productivity.ClockPreference.CultureUses24Hour(culture);
 
     /// <summary>"14:05" or "2:05 PM".</summary>
     public static string Time(DateTime t, bool twentyFourHour) => t.ToString(twentyFourHour ? "HH:mm" : "h:mm tt", Inv);

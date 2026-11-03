@@ -155,8 +155,14 @@ public static class Currency
         return s.Length > 0 && TryParseMoney(s, requireAmount: true, out money) && money.Amount > 0;
     }
 
-    /// <summary>Who a circled price converts to: rupees by default, dollars when it already is rupees.</summary>
-    public static string DefaultTarget(string fromCode) => fromCode == "INR" ? "USD" : "INR";
+    /// <summary>The user's own currency (settings: HomeCurrency, INR unless changed); circled prices convert to it.</summary>
+    public static string HomeCurrency { get; set; } = "INR";
+
+    /// <summary>Who a circled price converts to: the home currency, or dollars when it already is that (euros for dollars).</summary>
+    public static string DefaultTarget(string fromCode) => DefaultTarget(fromCode, HomeCurrency);
+
+    public static string DefaultTarget(string fromCode, string home) =>
+        !string.Equals(fromCode, home, StringComparison.OrdinalIgnoreCase) ? home : home == "USD" ? "EUR" : "USD";
 
     public static bool TryConvert(double amount, string from, string to, IReadOnlyDictionary<string, double> rates, out double result)
     {

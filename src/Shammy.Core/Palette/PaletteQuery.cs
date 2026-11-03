@@ -73,6 +73,10 @@ public static class PaletteQuery
     static readonly Regex SongWord = new(@"\s+(?:ke|ka|ki)\s+(?:ga+n(?:y?e|ey|a)|songs?)$|\s+(?:wala\s+|vala\s+)?(?:gaana|gana|gaane|gane|song|songs)$", Opts);
 
     /// <summary>What a timer/reminder/note command will do, in a few words; null when there's nothing useful to say.</summary>
+    static string AlarmTarget(ProductivityCommand c) =>
+        c.Target is { } t ? $" · {(t.Exact ? ClockPreference.Format(t.Hour, t.Minute) : $"{t.Hour}:{t.Minute:00}")}"
+        : c.Text.Length > 0 ? $" · {c.Text}" : "";
+
     public static string? DescribeProductivity(ProductivityCommand c, DateTime now) => c.Action switch
     {
         ProductivityAction.StartTimer => c.Text.Length > 0
@@ -93,6 +97,13 @@ public static class PaletteQuery
         ProductivityAction.ReminderNeedsTime => "Reminder · add a time",
         ProductivityAction.Note => $"Save note · {c.Text}",
         ProductivityAction.ShowNotes => "Show notes",
+        ProductivityAction.SetAlarm when c.Alarm is { } alarm => AlarmText.Describe(alarm, now),
+        ProductivityAction.ShowAlarms => "Show alarms",
+        ProductivityAction.DeleteAlarm => c.All ? "Delete all alarms" : $"Delete alarm{AlarmTarget(c)}",
+        ProductivityAction.DisableAlarms => c.All ? "Turn off all alarms" : $"Turn off alarm{AlarmTarget(c)}",
+        ProductivityAction.EnableAlarms => c.All ? "Turn on all alarms" : $"Turn on alarm{AlarmTarget(c)}",
+        ProductivityAction.StopAlarm => "Stop the alarm",
+        ProductivityAction.SnoozeAlarm => c.Duration > TimeSpan.Zero ? $"Snooze alarm · {TimeFormat.Describe(c.Duration)}" : "Snooze alarm",
         _ => null,
     };
 }

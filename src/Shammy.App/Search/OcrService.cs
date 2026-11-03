@@ -65,6 +65,31 @@ internal static class OcrService
         }
     }
 
+    /// <summary>The text in an image (a screenshot), line by line; empty when there's none or OCR is unavailable.</summary>
+    public static async Task<string> ReadTextAsync(System.Windows.Media.Imaging.BitmapSource image)
+    {
+        if (!IsAvailable) return "";
+        try
+        {
+            System.Windows.Media.Imaging.BitmapSource bgra = image.Format == System.Windows.Media.PixelFormats.Pbgra32
+                ? image
+                : new System.Windows.Media.Imaging.FormatConvertedBitmap(image, System.Windows.Media.PixelFormats.Pbgra32, null, 0);
+            int width = bgra.PixelWidth, height = bgra.PixelHeight;
+            var pixels = new byte[width * height * 4];
+            bgra.CopyPixels(pixels, width * 4, 0);
+            var bitmap = SoftwareBitmap.CreateCopyFromBuffer(pixels.AsBuffer(), BitmapPixelFormat.Bgra8, width, height, BitmapAlphaMode.Premultiplied);
+            uint max = OcrEngine.MaxImageDimension;
+            if (width > max || height > max) bitmap = await Downscale(bitmap, (double)max / Math.Max(width, height));
+            var result = await _engine!.RecognizeAsync(bitmap);
+            return string.Join("\n", result.Lines.Select(l => l.Text.Trim()).Where(l => l.Length > 0));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("OCR of an image failed", ex);
+            return "";
+        }
+    }
+
     static async Task<SoftwareBitmap> Downscale(SoftwareBitmap source, double scale)
     {
         using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();

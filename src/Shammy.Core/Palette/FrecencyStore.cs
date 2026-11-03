@@ -72,6 +72,20 @@ public sealed class FrecencyStore
         return Math.Min(PaletteRanker.MaxBoost, habit + bonus);
     }
 
+    /// <summary>
+    /// The strongest picks right now (decayed score, then most recent), for the empty palette's suggestions.
+    /// <paramref name="include"/> filters keys out (rows that can't be rebuilt, or private ones).
+    /// </summary>
+    public IReadOnlyList<Entry> Top(int count, DateTime now, Func<string, bool>? include = null) =>
+        _entries.Values
+            .Where(e => include?.Invoke(e.Key) ?? true)
+            .Where(e => Decayed(e, now) > 0.05)
+            .OrderByDescending(e => Decayed(e, now))
+            .ThenByDescending(e => e.LastUsed)
+            .ThenBy(e => e.Key, StringComparer.Ordinal)
+            .Take(Math.Max(0, count))
+            .ToList();
+
     static double Decayed(Entry e, DateTime now)
     {
         var age = now - e.LastUsed;

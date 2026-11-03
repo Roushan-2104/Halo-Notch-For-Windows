@@ -36,7 +36,7 @@ internal sealed class ShammyHost : IDisposable
     KeyboardIndicators? _keyboardPills;
     WhisperService _whisper = null!;
     UpdateService _updates = null!;
-    int _testActionClicks, _testBubbleClicks;
+    int _testActionClicks, _testBubbleClicks, _held;
     DateTime _lastPing;
     DispatcherTimer? _updateReminder;
     SearchCoordinator _search = null!;
@@ -51,6 +51,8 @@ internal sealed class ShammyHost : IDisposable
     public void Start()
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        SettingsApplier.Apply(_settings);
+        _settings.Changed += _ => SettingsApplier.Apply(_settings);
         _media = Own(new MediaService(_ui));
         _visualizer = Own(new AudioVisualizer());
         _battery = new BatteryService(_ui);
@@ -123,11 +125,12 @@ internal sealed class ShammyHost : IDisposable
         {
             _downloads = Own(new DownloadsService(_ui));
             _downloads.Progress += (name, bytes, count) => Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading,
-                new DownloadPayload(count > 1 ? $"{count} downloads" : name, null, bytes, count)));
+                new DownloadPayload(count > 1 ? $"{count} downloads" : name, null, bytes, count, _downloads.Total)));
+            // Clicking the "done" pill opens a small card: Open, Show in folder, Add to shelf, Send to phone.
             _downloads.Completed += (name, path) => Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone,
                 new DownloadPayload(name, path, 0, 1), In(4))
             {
-                Click = () => System.Diagnostics.Process.Start(Native.ExplorerPath, $"/select,\"{path}\""),
+                Click = () => ShowDownloadCard(path),
             });
             _downloads.AllFinished += () => _activities.Remove("download");
             _downloads.Start();
@@ -162,6 +165,26 @@ internal sealed class ShammyHost : IDisposable
                 Post(new Activity("muted", ActivityKind.Message, PriorityMessage, new MessagePayload("", $"Muted {n.AppName}"), In(2.5)));
             };
             _notch.ExpandedView.NotificationOpened += OpenNotificationApp;
+            // Quiet mode ended (call, meeting or focus over): say how many waited, and open them on click.
+            QuietState.Changed += quiet =>
+            {
+                if (!quiet) _ui.BeginInvoke(ReleaseHeld);
+            };
+            _modules.PipeCommands["quiet-test"] = arg =>
+            {
+                QuietState.Set(Shammy.Core.Connect.QuietReason.Test, arg.Trim() != "off");
+                return $"quiet={QuietState.IsQuiet} ({QuietState.Describe()}) held={_held}";
+            };
+            _modules.PipeCommands["quiet-state"] = _ => $"quiet={QuietState.IsQuiet} ({QuietState.Describe()}) held={_held}";
+            // Right-click a pop-up or a Notifications row: "Remind me in 1 hour".
+            _notch.NotificationView.RemindRequested += n => RemindAboutNotification(n);
+            _notch.ExpandedView.NotificationRemindRequested += n => RemindAboutNotification(n);
+            // "notify-remind": the same for the newest notification in the list.
+            _modules.PipeCommands["notify-remind"] = _ =>
+            {
+                if (_notifications.History.Count == 0) return "error: no notifications (notify-test App|Title|Body first)";
+                return RemindAboutNotification(_notifications.History[0]);
+            };
             if (_settings.ShowNotifications) _ = StartNotificationsAsync();
         });
 
@@ -226,6 +249,7 @@ internal sealed class ShammyHost : IDisposable
         _keys.VolumeKey += dir => _volume?.Step(dir);
         Safe("keyboard pills", () => _keyboardPills = new KeyboardIndicators(_keys, _ui, Post));
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
+        _modules.SearchImage = png => _search.SearchImageAsync(png);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
         _notch.ExpandedView.SearchRequested += _search.OpenTyping;
         // The v2 open notch, for scripted checks: "v2-state", "v2-open <id|chip label>", "v2-back".
@@ -317,15 +341,19 @@ internal sealed class ShammyHost : IDisposable
         var types = typeof(ShammyHost).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(Modules.IShammyModule).IsAssignableFrom(t))
             .OrderBy(t => t.Name);
-        // Diagnostics: SHAMMY_DISABLE_MODULES=music,clipboard starts Shammy without those modules.
+        // Settings (DisabledModules) turn modules off; SHAMMY_DISABLE_MODULES=music,clipboard still does for diagnostics.
+        // The settings module never goes: it's how they're turned back on.
         var disabled = (Environment.GetEnvironmentVariable("SHAMMY_DISABLE_MODULES") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Concat(_settings.DisabledModules)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        disabled.Remove(Modules.Settings.SettingsModule.ModuleName);
         foreach (var type in types)
         {
             Safe($"module {type.Name}", () =>
             {
                 var module = (Modules.IShammyModule)Activator.CreateInstance(type)!;
+                _modules.ModuleNames.Add(module.Name);
                 if (disabled.Contains(module.Name))
                 {
                     module.Dispose();
@@ -356,8 +384,16 @@ internal sealed class ShammyHost : IDisposable
     void OnNotification(ShammyNotification n)
     {
         if (!_settings.ShowNotifications || _settings.MutedNotificationApps.Contains(n.AppId)) return;
-        // During a call or screen capture others may see the notch: show who it's from, not what it says.
-        if (PrivacyState.Presenting)
+        // Quiet mode (a call, a meeting, focus): no ping and no pop-up; it waits in the Notifications view
+        // (the service already added it there) and a "3 held" pill points to it when quiet ends.
+        if (QuietState.IsQuiet)
+        {
+            _held++;
+            return;
+        }
+        // During a call or screen capture others may see the notch: show who it's from, not what it says
+        // (always, with the AlwaysHideNotificationText setting).
+        if (PrivacyState.Presenting || _settings.AlwaysHideNotificationText)
         {
             var (title, body) = Shammy.Core.Notifications.NotificationText.ForPopup(n.AppName, n.Title, n.Body, presenting: true);
             n = new ShammyNotification
@@ -375,9 +411,43 @@ internal sealed class ShammyHost : IDisposable
             _lastPing = DateTime.UtcNow;
             NotchSound.Play(Shammy.Core.Audio.PingKind.Notification);
         }
-        Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(6))
+        Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(_settings.NotificationPopupSeconds))
         {
             Click = () => OpenNotificationApp(n),
+        });
+    }
+
+    /// <summary>A reminder in an hour with the app and what it said (read from the list, since a private pop-up hid the text).</summary>
+    string RemindAboutNotification(ShammyNotification n)
+    {
+        var original = _notifications.History.FirstOrDefault(h => h.Id == n.Id) ?? n;
+        if (Modules.Connect.Links.Notes is not { } notes) return "error: reminders unavailable";
+        var text = Shammy.Core.Connect.ConnectText.NotificationReminder(original.AppName, original.Title, original.Body);
+        var result = notes.AddReminder(DateTime.Now.AddHours(1), text);
+        _activities.Remove("notification");
+        Post(new Activity("notification-remind", ActivityKind.Message, PriorityMessage,
+            new MessagePayload("", result.IsError ? result.Title : "Reminder in 1 hour", result.IsError), In(2.5)));
+        return result.IsError ? "error: " + result.Title : "ok: " + (PrivacyState.Presenting ? "(hidden)" : text);
+    }
+
+    void ShowDownloadCard(string path)
+    {
+        Modules.Connect.DownloadCard? card = null;
+        card = new Modules.Connect.DownloadCard(path, _shelf, () =>
+        {
+            // Only close it if it's still the card showing.
+            if (card?.Parent is not null) _notch.CloseCard();
+        });
+        _notch.ShowCard(card, Modules.Connect.DownloadCard.CardWidth, Modules.Connect.DownloadCard.CardHeight, interactive: true);
+    }
+
+    void ReleaseHeld()
+    {
+        if (QuietState.IsQuiet || Shammy.Core.Connect.QuietRules.HeldText(_held) is not { } text) return;
+        _held = 0;
+        Post(new Activity("notifications-held", ActivityKind.Message, PriorityMessage, new MessagePayload("", text), In(8))
+        {
+            Click = () => _notch.OpenView("alerts"),
         });
     }
 
@@ -446,7 +516,12 @@ internal sealed class ShammyHost : IDisposable
     void PostHud(HudKind kind, double level, bool muted) =>
         Post(new Activity("hud", ActivityKind.Hud, PriorityHud, new HudPayload(kind, level, muted), In(1.6)));
 
-    void Post(Activity a) => _activities.Post(a);
+    void Post(Activity a)
+    {
+        // Settings: SystemAlertsEnabled off hides the battery and Bluetooth pills (the System card still shows both).
+        if (!_settings.SystemAlertsEnabled && a.Id is "battery" or "bluetooth") return;
+        _activities.Post(a);
+    }
 
     static DateTime In(double seconds) => DateTime.UtcNow.AddSeconds(seconds);
 
@@ -603,10 +678,31 @@ internal sealed class ShammyHost : IDisposable
                 Post(new Activity("bluetooth", ActivityKind.Bluetooth, PriorityBluetooth, new BluetoothPayload(btParts[0].Trim(), true, true,
                     btParts.Length > 1 && int.TryParse(btParts[1], out var btLevel) ? btLevel : null), In(3.5)));
                 return "ok";
-            case "downloading": Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading, new DownloadPayload(arg, null, 12_400_000, 1))); return "ok";
+            case "downloading":
+            {
+                // "downloading name" (12.4 MB so far) or "downloading name|bytes|total" (shows a percent).
+                var d = arg.Split('|');
+                long bytes = d.Length > 1 && long.TryParse(d[1], out var soFar) ? soFar : 12_400_000;
+                long? total = d.Length > 2 && long.TryParse(d[2], out var size) ? size : null;
+                Post(new Activity("download", ActivityKind.Downloading, PriorityDownloading, new DownloadPayload(d[0].Trim(), null, bytes, 1, total)));
+                return "ok";
+            }
             case "downloaded":
+            {
+                // "downloaded <path>": with a real file, clicking the pill opens the download card.
                 _activities.Remove("download");
-                Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone, new DownloadPayload(arg, null, 0, 1), In(4)));
+                var path = arg.Trim().Trim('"');
+                bool file = File.Exists(path);
+                Post(new Activity("download-done", ActivityKind.DownloadComplete, PriorityDownloadDone,
+                    new DownloadPayload(file ? Path.GetFileName(path) : path, file ? path : null, 0, 1), In(4))
+                {
+                    Click = file ? () => ShowDownloadCard(path) : null,
+                });
+                return "ok";
+            }
+            case "download-card":
+                if (!File.Exists(arg.Trim().Trim('"'))) return "error: usage download-card <existing file>";
+                ShowDownloadCard(arg.Trim().Trim('"'));
                 return "ok";
             case "message": Post(new Activity("message", ActivityKind.Message, PriorityMessage, new MessagePayload("", arg), In(3))); return "ok";
             case "clear":
@@ -653,9 +749,9 @@ internal sealed class ShammyHost : IDisposable
 
     /// <summary>Feeds "x,y,ms" samples (separated by ';' or spaces) to a fresh <see cref="Core.Notch.HoverIntent"/>
     /// and lists its decisions, e.g. "peek@266 open@970". Append "nopeek" for a clickable pill.</summary>
-    static string DryRunHover(string arg)
+    string DryRunHover(string arg)
     {
-        var intent = new Core.Notch.HoverIntent { AllowPeek = !arg.Contains("nopeek") };
+        var intent = new Core.Notch.HoverIntent { AllowPeek = !arg.Contains("nopeek"), SpeedSetting = _settings.HoverSpeed };
         var decisions = new List<string>();
         foreach (var token in arg.Split(new[] { ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
         {

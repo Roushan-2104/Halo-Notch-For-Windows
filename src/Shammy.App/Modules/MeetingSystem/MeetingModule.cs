@@ -1,4 +1,5 @@
 using Shammy.Core.Activities;
+using Shammy.Core.Connect;
 using Shammy.Core.MeetingSystem;
 
 namespace Shammy.Modules.MeetingSystem;
@@ -57,6 +58,9 @@ internal sealed class MeetingModule : IShammyModule
         bool fake = _fakeApp is not null;
         // Only a shared screen can show a message to others; on a plain call (mic or camera) nobody sees it.
         Infrastructure.PrivacyState.Set((fake && _fakeScreen) || _snapshot.Screen.Count > 0);
+        // A call app on the mic (not a recorder or a game) makes the notch quiet: notifications wait.
+        Infrastructure.QuietState.Set(Shammy.Core.Connect.QuietReason.Call,
+            QuietRules.AnyCallApp(fake ? new[] { _fakeApp! } : _snapshot.Microphone.Select(a => a.Name)));
         var name = _fakeApp ?? Describe(_snapshot.Microphone);
         if (name is null)
         {

@@ -22,6 +22,7 @@ public partial class AnswerView : UserControl
         Result.FontSize = 34;
         Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
         CopyButton.Content = "";
+        NoteButton.Content = "";
         GlyphOrb.Visibility = Visibility.Collapsed;
         _copyText = null;
         SearchWebButton.Visibility = Visibility.Visible;
@@ -39,8 +40,9 @@ public partial class AnswerView : UserControl
         Result.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["Fg"];
         Expression.Text = r.Detail ?? "";
         Expression.Visibility = string.IsNullOrEmpty(r.Detail) ? Visibility.Collapsed : Visibility.Visible;
-        // An answer worth pasting (a converted amount, a time elsewhere) gets the Copy button; the rest need none.
+        // An answer worth keeping (a converted amount, a time elsewhere) gets Copy and Save as note; the rest need none.
         _copyText = r.CopyText;
+        NoteButton.Content = "";
         CopyButton.Content = "";
         SearchWebButton.Visibility = Visibility.Collapsed;
         Actions.Visibility = r.CopyText is null ? Visibility.Collapsed : Visibility.Visible;
@@ -63,4 +65,14 @@ public partial class AnswerView : UserControl
     }
 
     void OnSearchWeb(object sender, RoutedEventArgs e) => SearchWebRequested?.Invoke(_query);
+
+    /// <summary>"Save as note": the answer as "12 × 7 = 84"; a listener (Connect) saves it.</summary>
+    internal event Func<string, bool>? SaveNoteRequested;
+
+    void OnSaveNote(object sender, RoutedEventArgs e)
+    {
+        var expression = Expression.Text.TrimEnd('=', ' ');
+        var text = expression.Length > 0 ? $"{expression} = {Result.Text}" : Result.Text;
+        if (SaveNoteRequested?.Invoke(text) == true) NoteButton.Content = "";
+    }
 }

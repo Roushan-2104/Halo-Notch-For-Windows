@@ -8,7 +8,7 @@ namespace Shammy.Modules.PhoneSend;
 /// AirDrop-style transfers over the local Wi-Fi: a QR code on the notch opens a page on the phone to
 /// download the file, or upload files back into Downloads. No app, no cloud, no account.
 /// </summary>
-internal sealed class PhoneSendModule : IShammyModule
+internal sealed class PhoneSendModule : IShammyModule, Connect.IPhoneLink
 {
     const string PhoneGlyph = "";
 
@@ -20,10 +20,9 @@ internal sealed class PhoneSendModule : IShammyModule
     public void Start(ModuleContext ctx)
     {
         _ctx = ctx;
-        ctx.AddShelfAction(new ShelfAction("Send to phone", item =>
-        {
-            if (Send(item.Path) is { } error) ctx.ShowMessage(PhoneGlyph, error, error: true);
-        }));
+        // A folder on the shelf goes as a zip, like a folder dropped on "Send to phone".
+        ctx.AddShelfAction(new ShelfAction("Send to phone", item => _ = SendDroppedAsync(new[] { item.Path })));
+        Connect.Links.Phone = this;
         ctx.AddCommand(new SendCommand(this));
         // "Send to phone" on the drop zone: one file goes as is; several (or a folder) go as one zip.
         ctx.Notch.DropZone.ActionDropped += (action, files) =>
@@ -135,8 +134,11 @@ internal sealed class PhoneSendModule : IShammyModule
             : new CommandResult(PhoneGlyph, "Scan to send to your phone", item.Name);
     }
 
+    Task Connect.IPhoneLink.SendAsync(IReadOnlyList<string> paths) => SendDroppedAsync(paths.ToArray());
+
     public void Dispose()
     {
+        if (Connect.Links.Phone == this) Connect.Links.Phone = null;
         _transfer?.Dispose();
         _transfer = null;
     }

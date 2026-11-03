@@ -26,14 +26,15 @@ internal sealed class ClipStore
 /// Namespace is ClipboardHistory, not Clipboard, so that "Clipboard.SetText" in sibling modules keeps
 /// resolving to System.Windows.Clipboard instead of this namespace.
 /// </remarks>
-internal sealed class ClipboardModule : IShammyModule
+internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
 {
     const int PreviewPriority = 35, ScreenshotPriority = 55;
     const string PreviewId = "clipboard.preview", ScreenshotId = "clipboard.screenshot";
     const int MaxSavedText = 20_000;
     const int MaxHistoryText = 1_000_000;
-    // Unpinned history is forgotten after a day so old passwords and tokens don't pile up.
-    static readonly TimeSpan KeepFor = TimeSpan.FromHours(24);
+    // Unpinned history is forgotten after a day (settings: ClipboardRetentionHours) so old passwords and tokens
+    // don't pile up.
+    TimeSpan KeepFor => TimeSpan.FromHours(_ctx.Settings.ClipboardRetentionHours);
 
     readonly ClipHistory _history = new();
     readonly CopyCoalescer _coalescer = new(TimeSpan.FromMilliseconds(300));
@@ -62,7 +63,7 @@ internal sealed class ClipboardModule : IShammyModule
         _expiry = new DispatcherTimer(TimeSpan.FromMinutes(10), DispatcherPriority.Background,
             (_, _) => _history.Expire(DateTime.Now - KeepFor), ctx.Ui);
 
-        _card2 = new ClipboardCard(_history, CopyBack, OpenLink, ClearWithUndo);
+        _card2 = new ClipboardCard(_history, CopyBack, OpenLink, ClearWithUndo) { SaveAsNote = SaveAsNote };
         // A chip-only card (v2): reached from the chips row, never pushed onto the home row by itself.
         ctx.AddCard(new NotchCard
         {
@@ -76,9 +77,23 @@ internal sealed class ClipboardModule : IShammyModule
             Detail = _card2.BuildDetail,
         });
         ctx.AddCommand(new ClipboardCommand(this));
+        Connect.Links.Clipboard = this;
         ctx.AddPipeCommand("clipboard-copy", PipeCopy);
         ctx.AddPipeCommand("clipboard-screenshot", PipeScreenshot);
         ctx.AddPipeCommand("clipboard-state", _ => State());
+        // "screenshot-action lens|text|phone|open-card": the screenshot card's actions on the last capture.
+        ctx.AddPipeCommand("screenshot-action", arg =>
+        {
+            if (_capture is not { } c) return "error: no screenshot yet (clipboard-screenshot <png> first)";
+            switch (arg.Trim().ToLowerInvariant())
+            {
+                case "lens": return SearchCaptureWithLens(c) ? "ok" : "error: couldn't read the image";
+                case "text": CopyCaptureText(c); return "started (see the notch message)";
+                case "phone": return SendCaptureToPhone(c) ? "ok (see phone-state)" : "error: not sent";
+                case "open-card": OpenCard(c); return "ok";
+                default: return "error: usage screenshot-action lens|text|phone|open-card";
+            }
+        });
         // "clipboard-undo": what the "Clipboard cleared · Undo" pill does (after "search clear clipboard").
         ctx.AddPipeCommand("clipboard-undo", _ =>
         {
@@ -156,7 +171,7 @@ internal sealed class ClipboardModule : IShammyModule
             {
                 var entry = ClipEntry.FromFiles(files, now);
                 entry.Source = source;
-                _history.Add(entry);
+                Remember(entry);
             }
             // Text before image: Office and browsers put a picture of the selection next to the text.
             else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
@@ -168,7 +183,7 @@ internal sealed class ClipboardModule : IShammyModule
                 {
                     var entry = ClipEntry.FromText(text, now);
                     entry.Source = source;
-                    _history.Add(entry);
+                    Remember(entry);
                 }
                 ShowPreview(ClipText.Preview(text.Length > 4096 ? text[..4096] : text), null);
             }
@@ -226,7 +241,7 @@ internal sealed class ClipboardModule : IShammyModule
             var (hash, clip) = await Task.Run(() => ClipImages.Process(shared));
             var entry = ClipEntry.FromImage(hash, image.PixelWidth, image.PixelHeight, now, clip);
             entry.Source = ClipCardText.SourceName(ownerProcess);
-            _history.Add(entry);
+            Remember(entry);
             if (_capture is { } c && ReferenceEquals(c.Full, image)) c.Png ??= clip.Png;
         }
         catch (Exception ex)
@@ -235,8 +250,16 @@ internal sealed class ClipboardModule : IShammyModule
         }
     }
 
+    /// <summary>Adds a copy to the history, unless history is turned off in settings.</summary>
+    void Remember(ClipEntry entry)
+    {
+        if (_ctx.Settings.ClipboardHistoryEnabled) _history.Add(entry);
+    }
+
     void ShowPreview(string text, ImageSource? thumb)
     {
+        // Settings: CopyPreviewEnabled.
+        if (!_ctx.Settings.CopyPreviewEnabled) return;
         var now = DateTime.Now;
         bool fresh = _coalescer.ShouldAnnounce(now) || _preview is null || _ctx.Get(PreviewId) is null;
         if (fresh) _preview = new CopyPreview(text, thumb);
@@ -452,6 +475,90 @@ internal sealed class ClipboardModule : IShammyModule
         return true;
     }
 
+    /// <summary>"Save as note" on a copied text in the clipboard detail.</summary>
+    bool SaveAsNote(ClipEntry entry)
+    {
+        if (entry.Kind != ClipKind.Text || Shammy.Core.Connect.ConnectText.NoteFrom(entry.Text) is not { } text) return false;
+        if (Connect.Links.Notes is not { } notes) return false;
+        var result = notes.SaveNote(text);
+        _ctx.ShowMessage(result.Glyph, result.IsError ? result.Title : "Saved as note", result.IsError, seconds: 2);
+        return !result.IsError;
+    }
+
+    /// <summary>The capture as PNG bytes at full resolution (the clipboard snip, or the file re-read).</summary>
+    byte[]? CapturePng(Capture c)
+    {
+        try
+        {
+            if (c.Png is not null) return c.Png;
+            if (c.Full is not null) return c.Png = ClipImages.EncodePng(c.Full);
+            if (c.HasFile && c.Path is { } file)
+            {
+                var bytes = File.ReadAllBytes(file);
+                return Path.GetExtension(file).Equals(".png", StringComparison.OrdinalIgnoreCase) ? bytes : ClipImages.EncodePng(ClipImages.Decode(bytes));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or FormatException)
+        {
+            _ctx.Warn("Reading the screenshot failed", ex);
+        }
+        return null;
+    }
+
+    /// <summary>Google Lens on the screenshot, the same results card as circling it on screen.</summary>
+    internal bool SearchCaptureWithLens(Capture c)
+    {
+        if (CapturePng(c) is not { } png) return false;
+        CloseCard();
+        _ = _ctx.SearchImageAsync(png);
+        return true;
+    }
+
+    /// <summary>Reads the screenshot's text with Windows OCR (offline) and copies it.</summary>
+    internal bool CopyCaptureText(Capture c)
+    {
+        _ = CopyCaptureTextAsync(c);
+        return false;
+    }
+
+    async Task CopyCaptureTextAsync(Capture c)
+    {
+        BitmapSource? image = c.Full;
+        if (image is null && CapturePng(c) is { } png)
+        {
+            try { image = ClipImages.Decode(png); }
+            catch (Exception ex) when (ex is NotSupportedException or FormatException or IOException) { _ctx.Warn("Decoding the screenshot failed", ex); }
+        }
+        if (image is null) return;
+        if (!Search.OcrService.IsAvailable)
+        {
+            CloseCard();
+            _ctx.ShowMessage("", "No OCR language installed", error: true);
+            return;
+        }
+        var text = await Search.OcrService.ReadTextAsync(image);
+        CloseCard();
+        if (text.Length == 0)
+        {
+            _ctx.ShowMessage("", "No text in that screenshot", error: true);
+            return;
+        }
+        var data = new DataObject();
+        data.SetText(text);
+        if (!SetClipboard(data, echo: false)) return;
+        int words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        _ctx.ShowMessage("", words == 1 ? "Copied 1 word" : $"Copied text · {words} words", seconds: 2.5);
+    }
+
+    /// <summary>The QR card for the phone (a clipboard-only snip is saved as a file first).</summary>
+    internal bool SendCaptureToPhone(Capture c)
+    {
+        if (Connect.Links.Phone is not { } phone || EnsureFile(c) is not { } path) return false;
+        CloseCard();
+        _ = phone.SendAsync(new[] { path });
+        return true;
+    }
+
     /// <summary>Only for files Shammy wrote itself; the user's Screenshots folder is never touched.</summary>
     internal bool DeleteCapture(Capture c)
     {
@@ -606,8 +713,12 @@ internal sealed class ClipboardModule : IShammyModule
         timer.Start();
     }
 
+    IReadOnlyList<ClipEntry> Connect.IClipboardLink.Items => _history.Items;
+    void Connect.IClipboardLink.CopyBack(ClipEntry entry) => CopyBack(entry);
+
     public void Dispose()
     {
+        if (Connect.Links.Clipboard == this) Connect.Links.Clipboard = null;
         _listener?.Dispose();
         _screens?.Dispose();
         _readDelay?.Stop();

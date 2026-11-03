@@ -14,6 +14,24 @@ internal sealed class MicRecorder
     WaveInEvent? _wave;
     float _level;
 
+    /// <summary>The microphone's name from settings (MicrophoneDeviceId); null records from the Windows default.</summary>
+    public static string? PreferredDevice { get; set; }
+
+    /// <summary>Input devices as Windows lists them (names truncated to 31 characters by WinMM).</summary>
+    public static IReadOnlyList<string> DeviceNames()
+    {
+        var names = new List<string>();
+        try
+        {
+            for (int i = 0; i < WaveInEvent.DeviceCount; i++) names.Add(WaveInEvent.GetCapabilities(i).ProductName);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Listing microphones failed", ex);
+        }
+        return names;
+    }
+
     public float Level => Volatile.Read(ref _level);
     public bool IsRecording => _wave is not null;
 
@@ -30,6 +48,9 @@ internal sealed class MicRecorder
                 return false;
             }
             var wave = new WaveInEvent { WaveFormat = new WaveFormat(SampleRate, 16, 1), BufferMilliseconds = 40, NumberOfBuffers = 4 };
+            // The chosen microphone (settings), or the Windows default when it's unset or unplugged.
+            int device = Shammy.Core.Settings.DeviceMatch.Find(DeviceNames(), PreferredDevice);
+            if (device >= 0) wave.DeviceNumber = device;
             wave.DataAvailable += OnData;
             wave.StartRecording();
             _wave = wave;

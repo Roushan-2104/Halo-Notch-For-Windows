@@ -4,6 +4,7 @@
              Width="460" Height="92" Background="Transparent" Cursor="Hand">
     <UserControl.ContextMenu>
         <ContextMenu>
+            <MenuItem Header="Remind me in 1 hour" Click="OnRemind" />
             <MenuItem x:Name="MuteItem" Header="Don't show from this app" Click="OnMute" />
             <MenuItem Header="Dismiss" Click="OnDismiss" />
         </ContextMenu>

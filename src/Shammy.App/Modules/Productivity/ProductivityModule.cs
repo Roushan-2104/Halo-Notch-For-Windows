@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Shammy.Core.Activities;
+using Shammy.Core.Connect;
 using Shammy.Core.Productivity;
 using Shammy.Infrastructure;
 
@@ -13,7 +14,7 @@ namespace Shammy.Modules.Productivity;
 /// spoken commands ("timer 25m", "remind me at 6pm to take medicine", "note: buy milk").
 /// Running clocks live in the compact ears; reminders and notes persist and show on the Notes card.
 /// </summary>
-internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview, ITimerCardHost
+internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommandPreview, ITimerCardHost, Connect.INotesLink
 {
     // Above downloads (40), below messages (50): a running timer yields to anything more urgent.
     const int ClockPriority = 45;
@@ -24,8 +25,9 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         FocusGlyph = "\uE708", BellGlyph = "\uEA8F", NoteGlyph = "\uE70B", PauseGlyph = "\uE769", PlayGlyph = "\uE768";
 
     static readonly TimeSpan AlertTime = TimeSpan.FromSeconds(8);
-    static readonly TimeSpan CardTime = TimeSpan.FromSeconds(30);
-    static readonly TimeSpan SnoozeTime = TimeSpan.FromMinutes(10);
+    // Settings: ReminderCardSeconds and SnoozeMinutes.
+    TimeSpan CardTime => TimeSpan.FromSeconds(_ctx.Settings.ReminderCardSeconds);
+    TimeSpan SnoozeTime => TimeSpan.FromMinutes(_ctx.Settings.SnoozeMinutes);
 
     readonly List<RunningClock> _clocks = new();
     readonly Queue<ReminderItem> _cardQueue = new();
@@ -35,7 +37,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     readonly DispatcherTimer _tick = new(DispatcherPriority.Normal);
     readonly DispatcherTimer _reminders = new(DispatcherPriority.Normal);
     readonly DispatcherTimer _glowOff = new(DispatcherPriority.Normal) { Interval = AlertTime };
-    readonly DispatcherTimer _cardClose = new(DispatcherPriority.Normal) { Interval = CardTime };
+    readonly DispatcherTimer _cardClose = new(DispatcherPriority.Normal);
 
     ModuleContext _ctx = null!;
     ProductivityStore _store = new();
@@ -43,6 +45,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     TimerCard _timerCard = null!;
     bool _timerCardRelevant;
     ReminderCard? _card;
+    Alarms.AlarmController _alarms = null!;
     bool _glowing;
     int _nextId;
 
@@ -55,6 +58,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // A hand-edited file can say "Reminders": null.
         _store.Reminders ??= new();
         _store.Notes ??= new();
+        _store.Alarms ??= new();
         // Fired reminders stay listed for a week, then quietly go.
         _store.Reminders.RemoveAll(r => r.FiredAt is { } fired && fired < DateTime.Now.AddDays(-7)
                                         || r.DoneAt is { } done && done < DateTime.Now.AddDays(-7));
@@ -64,7 +68,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _glowOff.Tick += (_, _) => ClearGlow();
         _cardClose.Tick += (_, _) => CloseCard();
 
-        _notes = new NotesCard(() => _store, ToggleDone, Delete, text => AddNote(text));
+        _notes = new NotesCard(() => _store, ToggleDone, Delete, text => AddNote(text))
+        {
+            // Today's calendar sits with the day's notes and reminders.
+            Events = () => Calendar.CalendarModule.Agenda,
+            Join = JoinMeeting,
+        };
         ctx.AddCard(new NotchCard
         {
             Id = "notes",
@@ -110,10 +119,31 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // Reminders that fell due while Shammy wasn't running fire shortly after start.
         _reminders.Interval = TimeSpan.FromSeconds(3);
         _reminders.Start();
+        Connect.Links.Notes = this;
+
+        // Real alarms (separate from reminders since v2): ringing, snooze, missed-after-sleep, the Alarms card.
+        _alarms = new Alarms.AlarmController(ctx, () => _store, Save);
+        _alarms.Start();
     }
+
+    /// <summary>Only links the calendar parser recognised as Meet/Zoom/Teams are ever opened.</summary>
+    void JoinMeeting(Shammy.Core.Calendar.CalendarOccurrence o)
+    {
+        if (o.Link is not { } link || Shammy.Core.Calendar.MeetingLinks.Classify(link) is null) return;
+        if (!_ctx.Open(link)) _ctx.ShowMessage("", "Couldn't open the meeting link", error: true);
+    }
+
+    // ---- For other modules (Connect.INotesLink): save as note, remind me later, today's reminders ------
+
+    IReadOnlyList<ReminderItem> Connect.INotesLink.Reminders => _store.Reminders;
+    IReadOnlyList<NoteItem> Connect.INotesLink.Notes => _store.Notes;
+    CommandResult Connect.INotesLink.SaveNote(string text) => AddNote(text);
+    CommandResult Connect.INotesLink.AddReminder(DateTime due, string text) => AddReminder(due, text);
 
     public void Dispose()
     {
+        if (Connect.Links.Notes == this) Connect.Links.Notes = null;
+        _alarms?.Dispose();
         _tick.Stop();
         _reminders.Stop();
         _cardClose.Stop();
@@ -141,6 +171,8 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             ProductivityAction.Note or ProductivityAction.ShowNotes => NoteGlyph,
             ProductivityAction.StartFocus or ProductivityAction.StopFocus => FocusGlyph,
             ProductivityAction.StartPomodoro or ProductivityAction.StopPomodoro or ProductivityAction.SkipPomodoro => PomodoroGlyph,
+            ProductivityAction.SetAlarm or ProductivityAction.ShowAlarms or ProductivityAction.DeleteAlarm or ProductivityAction.DisableAlarms
+                or ProductivityAction.EnableAlarms or ProductivityAction.StopAlarm or ProductivityAction.SnoozeAlarm => Alarms.AlarmController.Glyph,
             ProductivityAction.StartStopwatch or ProductivityAction.StopStopwatch or ProductivityAction.PauseStopwatch
                 or ProductivityAction.ResumeStopwatch => StopwatchGlyph,
             _ => TimerGlyph,
@@ -167,8 +199,12 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             ProductivityAction.StartFocus => StartFocus(c.Duration),
             ProductivityAction.StopFocus => StopFocus(),
             ProductivityAction.Remind => AddReminder(c.Due, c.Text),
+            ProductivityAction.ReminderNeedsTime when c.Text == "Alarm" => new CommandResult(BellGlyph, "What time should it ring?",
+                "Try \u201Calarm at 7 am every weekday\u201D", IsError: true),
             ProductivityAction.ReminderNeedsTime => new CommandResult(BellGlyph, "When should I remind you?",
                 "Try \u201Cremind me in 20 minutes to \u2026\u201D", IsError: true),
+            ProductivityAction.SetAlarm or ProductivityAction.ShowAlarms or ProductivityAction.DeleteAlarm or ProductivityAction.DisableAlarms
+                or ProductivityAction.EnableAlarms or ProductivityAction.StopAlarm or ProductivityAction.SnoozeAlarm => _alarms.Run(c, typed),
             ProductivityAction.Note => AddNote(c.Text),
             ProductivityAction.ShowNotes => ShowNotes(typed),
             _ => new CommandResult(TimerGlyph, "Not supported yet", IsError: true),
@@ -247,6 +283,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         if (Find(ClockKind.Pomodoro) is { } existing)
             return new CommandResult(PomodoroGlyph, $"Pomodoro \u00B7 {existing.Label}", $"{existing.Display(DateTime.UtcNow)} left");
         AddClock(ClockKind.Pomodoro, Pomodoro.Label(0), PomodoroGlyph, Pomodoro.FocusLength);
+        PomodoroFocusSession(PomodoroPhase.Focus, Pomodoro.FocusLength);
         return new CommandResult(PomodoroGlyph, "Pomodoro started",
             $"{TimeFormat.Describe(Pomodoro.FocusLength)} focus, then a {TimeFormat.Describe(Pomodoro.ShortBreakLength)} break");
     }
@@ -336,7 +373,32 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         _clocks.Remove(clock);
         _ctx.Remove(clock.ActivityId);
         if (clock.Kind == ClockKind.Focus) _focus.End();
+        // A pomodoro's Windows focus session ends with it, unless a separate focus session still runs.
+        if (clock.Kind == ClockKind.Pomodoro && Find(ClockKind.Focus) is null) _focus.End();
         ScheduleTick();
+    }
+
+    /// <summary>
+    /// Pomodoro focus phases start a Windows focus session (Do Not Disturb) like "focus" does; breaks end it.
+    /// A separate "focus" session that's running owns the Windows session and is left alone.
+    /// </summary>
+    void PomodoroFocusSession(PomodoroPhase phase, TimeSpan length)
+    {
+        if (Find(ClockKind.Focus) is not null) return;
+        if (phase == PomodoroPhase.Focus)
+        {
+            _focus.TryStart(DateTimeOffset.Now + length);
+            _ctx.Info($"Pomodoro focus; Windows focus session: {_focus.Status}");
+        }
+        else _focus.End();
+    }
+
+    /// <summary>A focus clock or a pomodoro's focus phase keeps the notch quiet (see QuietRules.FocusQuiet).</summary>
+    void UpdateQuiet()
+    {
+        var pomodoro = Find(ClockKind.Pomodoro);
+        PomodoroPhase? phase = pomodoro is null ? null : Pomodoro.PhaseAt(pomodoro.PomodoroStep);
+        QuietState.Set(QuietReason.Focus, QuietRules.FocusQuiet(Find(ClockKind.Focus) is not null, phase));
     }
 
     void SetPaused(RunningClock clock, bool pause)
@@ -416,8 +478,9 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
     void ScheduleTick()
     {
         _tick.Stop();
-        // Every clock change and every tick passes through here, so the timer card follows along.
+        // Every clock change and every tick passes through here, so the timer card and quiet mode follow along.
         UpdateCard();
+        UpdateQuiet();
         var now = DateTime.UtcNow;
         var running = _clocks.Where(c => !c.Paused).ToList();
         if (running.Count == 0) return;
@@ -461,6 +524,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         // The label width changed, so the ears need building again.
         clock.Content = new ClockContent(clock);
         PostClock(clock);
+        PomodoroFocusSession(phase, clock.Total);
         ScheduleTick();
     }
 
@@ -541,7 +605,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
         {
             var reminder = _cardQueue.Dequeue();
             if (!_store.Reminders.Contains(reminder)) continue; // deleted while it waited
-            var card = new ReminderCard(reminder, () => Done(reminder), () => Snooze(reminder));
+            var card = new ReminderCard(reminder, () => Done(reminder), () => Snooze(reminder), _ctx.Settings.SnoozeMinutes);
             _card = card;
             bool seen = false;
             // The notch closes interactive cards itself on an outside click; notice that and move on.
@@ -558,6 +622,7 @@ internal sealed class ProductivityModule : IShammyModule, ITextCommand, ICommand
             Glow();
             Chime();
             _cardClose.Stop();
+            _cardClose.Interval = CardTime;
             _cardClose.Start();
             return;
         }

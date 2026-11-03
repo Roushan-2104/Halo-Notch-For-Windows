@@ -18,9 +18,11 @@
             <TextBlock x:Name="Result" FontFamily="{StaticResource ShammyDisplayFont}" FontSize="34" FontWeight="SemiBold"
                        TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
         </StackPanel>
-        <StackPanel x:Name="Actions" Grid.Column="2" VerticalAlignment="Center">
+        <StackPanel x:Name="Actions" Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal">
             <Button x:Name="CopyButton" Style="{StaticResource IconButton}" Content="&#xE8C8;" ToolTip="Copy" Click="OnCopy" />
-            <Button x:Name="SearchWebButton" Style="{StaticResource IconButton}" Content="&#xE721;" ToolTip="Search the web instead" Click="OnSearchWeb" Margin="0,4,0,0" />
+            <Button x:Name="NoteButton" Style="{StaticResource IconButton}" Content="&#xE70B;" ToolTip="Save as note" Click="OnSaveNote" Margin="4,0,0,0" />
+            <Button x:Name="SearchWebButton" Style="{StaticResource IconButton}" Content="&#xE721;" ToolTip="Search the web instead" Click="OnSearchWeb" Margin="4,0,0,0" />
+
         </StackPanel>
     </Grid>
 </UserControl>

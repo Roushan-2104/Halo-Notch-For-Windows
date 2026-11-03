@@ -24,6 +24,13 @@ internal sealed class DropActionsModule : IShammyModule
             if (action == DropAction.Compress) _ = CompressAsync(files);
             else if (action == DropAction.Convert) _ = ConvertAsync(files);
         };
+        // The same two actions on a shelf item's right-click menu.
+        ctx.AddShelfAction(new ShelfAction("Compress", item => _ = CompressAsync(new[] { item.Path })));
+        ctx.AddShelfAction(new ShelfAction("Convert", item => _ = ConvertAsync(new[] { item.Path }))
+        {
+            AppliesTo = item => DropPlan.ConvertExtension(item.Path) is not null,
+        });
+        ctx.AddPipeCommand("shelf-action", ShelfActionTest);
         ctx.AddPipeCommand("drop-test", DropTest);
         ctx.AddPipeCommand("drop-state", _ => $"last={_last} hovered={ctx.Notch.DropZone.Hovered?.ToString() ?? "-"}");
     }
@@ -130,6 +137,25 @@ internal sealed class DropActionsModule : IShammyModule
         {
             return "error: " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// "shelf-action Compress 2": runs a shelf item's right-click action by label on the n-th shelf item (1-based),
+    /// and lists which actions that item offers.
+    /// </summary>
+    string ShelfActionTest(string arg)
+    {
+        var parts = arg.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var items = _ctx.Services.Shelf.Items;
+        if (parts.Length < 2 || !int.TryParse(parts[^1], out var n) || n < 1 || n > items.Count)
+            return $"error: usage shelf-action <label> <1..{items.Count}>";
+        var label = string.Join(' ', parts[..^1]);
+        var item = items[n - 1];
+        var offered = _ctx.Notch.ExpandedView.ShelfActions.Where(a => a.AppliesTo?.Invoke(item) ?? true).ToList();
+        var action = offered.FirstOrDefault(a => string.Equals(a.Label, label, StringComparison.OrdinalIgnoreCase));
+        if (action is null) return $"not offered for {item.Name}; offered: {string.Join(", ", offered.Select(a => a.Label))}";
+        action.Run(item);
+        return $"ran {action.Label} on {item.Name} (offered: {string.Join(", ", offered.Select(a => a.Label))})";
     }
 
     static void CopyFolder(string from, string to)

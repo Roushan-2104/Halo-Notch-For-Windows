@@ -2,11 +2,14 @@ using System.Text.Json.Serialization;
 
 namespace Shammy.Modules.Productivity;
 
-/// <summary>What survives a restart: reminders (upcoming and fired) and quick notes.</summary>
+/// <summary>What survives a restart: reminders (upcoming and fired), quick notes and alarms.</summary>
 internal sealed class ProductivityStore
 {
     public List<ReminderItem> Reminders { get; set; } = new();
     public List<NoteItem> Notes { get; set; } = new();
+
+    /// <summary>Real alarms with their ringing state (see <see cref="Shammy.Core.Productivity.AlarmSchedule"/>).</summary>
+    public List<Shammy.Core.Productivity.Alarm> Alarms { get; set; } = new();
 }
 
 internal sealed class ReminderItem

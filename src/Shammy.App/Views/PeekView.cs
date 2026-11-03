@@ -101,7 +101,7 @@ internal sealed class PeekView : Grid
             _art.Child = CompactView.Glyph("", 18, Brushes.Black);
             _glow.Visibility = Visibility.Collapsed;
             var now = DateTime.Now;
-            _title.Text = BuiltInGlances.Time(now, BuiltInGlances.Uses24Hour(CultureInfo.CurrentCulture)).Time;
+            _title.Text = BuiltInGlances.Time(now, Shammy.Core.Productivity.ClockPreference.Is24Hour).Time;
             _subtitle.Text = now.ToString("dddd, d MMMM", CultureInfo.CurrentCulture);
         }
 
