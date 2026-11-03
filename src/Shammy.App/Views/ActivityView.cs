@@ -170,6 +170,7 @@ internal sealed class ActivityView : Grid
                 BarCount = 3,
                 Height = 12,
                 Source = _services.Visualizer.Level,
+                Feed = _services.Visualizer,
                 Color = _barsColor = Lighter(live.Art ?? Colors.White),
                 // A few steps a second: the notch's layered window makes every repaint costly.
                 MaxFps = 10,

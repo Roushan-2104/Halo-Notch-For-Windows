@@ -218,6 +218,7 @@ internal sealed class RestView : Grid
                     BarCount = music ? 3 : 4,
                     Height = music ? 12 : 14,
                     Source = music ? _services.Visualizer.Level : ListenLevel,
+                    Feed = music ? _services.Visualizer : null,
                     Color = music ? ParseColor(e.Item.AccentHex) : ParseColor(NotchPalette.Text),
                     Margin = new Thickness(0, 0, 7, 0),
                     VerticalAlignment = VerticalAlignment.Center,

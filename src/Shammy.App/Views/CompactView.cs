@@ -117,7 +117,7 @@ internal sealed class CompactView : Grid
     double BuildNowPlaying(ShammyServices s)
     {
         _art = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(6) };
-        _bars = new VisualizerBars { BarCount = 4, Height = 14, Source = s.Visualizer.Level };
+        _bars = new VisualizerBars { BarCount = 4, Height = 14, Source = s.Visualizer.Level, Feed = s.Visualizer };
         _left.Content = _art;
         _right.Content = _bars;
         RefreshMedia(s.Media);

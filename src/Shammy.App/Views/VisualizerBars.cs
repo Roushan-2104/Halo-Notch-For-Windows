@@ -50,6 +50,9 @@ internal sealed class VisualizerBars : FrameworkElement
     /// </summary>
     public int MaxFps { get; set; }
 
+    /// <summary>The visualizer feeding <see cref="Source"/>: told when these bars actually need levels.</summary>
+    public Playback.AudioVisualizer? Feed { get; set; }
+
     /// <summary>Holds the bars still where they are (no settling, no repaints) until unfrozen.</summary>
     public bool Frozen
     {
@@ -90,6 +93,8 @@ internal sealed class VisualizerBars : FrameworkElement
 
     void UpdateSubscription()
     {
+        // Frozen between bursts still counts: restarting the loopback capture every few seconds costs more.
+        Feed?.Want(this, IsVisible && _active);
         bool run = IsVisible && !_frozen && (_active || !_springs.All(s => s.IsSettled && Math.Abs(s.Value - IdleLevel) < 0.01));
         if (run && MaxFps > 0)
         {
@@ -115,6 +120,7 @@ internal sealed class VisualizerBars : FrameworkElement
 
     void Release()
     {
+        if (!IsVisible) Feed?.Want(this, false);
         _frames?.Dispose();
         _frames = null;
         _slow?.Stop();

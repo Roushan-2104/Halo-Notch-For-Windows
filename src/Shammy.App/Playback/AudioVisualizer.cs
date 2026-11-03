@@ -15,17 +15,53 @@ internal sealed class AudioVisualizer : IDisposable
     const int FftExponent = 10;
     const int FftSize = 1 << FftExponent;
 
+    static readonly float[] Hann = Enumerable.Range(0, FftSize).Select(i => (float)FastFourierTransform.HannWindow(i, FftSize)).ToArray();
+
     readonly float[] _levels = new float[Bands];
     readonly float[] _ring = new float[FftSize];
     readonly Complex[] _fft = new Complex[FftSize];
     int _ringPos, _sinceLast;
     WasapiLoopbackCapture? _capture;
 
+    readonly HashSet<object> _wanted = new();
+    bool _allowed;
+
     public bool IsRunning => _capture is not null;
+
+    /// <summary>
+    /// A visual that shows the levels is on screen (eq bars). Loopback capture and the FFT run only while
+    /// something is playing (<see cref="Start"/>) AND something on screen wants them; otherwise the levels
+    /// read 0 and nothing is captured.
+    /// </summary>
+    public void Want(object who, bool on)
+    {
+        if (on ? !_wanted.Add(who) : !_wanted.Remove(who)) return;
+        Apply();
+    }
+
+    /// <summary>Something is playing: capture may run (while a visual wants it).</summary>
+    public void Start()
+    {
+        _allowed = true;
+        Apply();
+    }
+
+    /// <summary>Nothing is playing: stop capturing.</summary>
+    public void Stop()
+    {
+        _allowed = false;
+        Apply();
+    }
+
+    void Apply()
+    {
+        if (_allowed && _wanted.Count > 0) StartCapture();
+        else StopCapture();
+    }
 
     public float Level(int band) => Volatile.Read(ref _levels[Math.Clamp(band, 0, Bands - 1)]);
 
-    public void Start()
+    void StartCapture()
     {
         if (_capture is not null) return;
         try
@@ -42,7 +78,7 @@ internal sealed class AudioVisualizer : IDisposable
                 // bars freezing at their last heights with Start() refusing because it "is running".
                 System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
                 {
-                    if (ReferenceEquals(_capture, capture)) Stop();
+                    if (ReferenceEquals(_capture, capture)) StopCapture();
                 });
             };
             _capture.StartRecording();
@@ -54,7 +90,7 @@ internal sealed class AudioVisualizer : IDisposable
         }
     }
 
-    public void Stop()
+    void StopCapture()
     {
         var c = _capture;
         _capture = null;
@@ -76,8 +112,8 @@ internal sealed class AudioVisualizer : IDisposable
     public void Restart()
     {
         if (_capture is null) return;
-        Stop();
-        Start();
+        StopCapture();
+        StartCapture();
     }
 
     void OnData(object? sender, WaveInEventArgs e)
@@ -103,7 +139,8 @@ internal sealed class AudioVisualizer : IDisposable
             }
             _ring[_ringPos] = sum / channels;
             _ringPos = (_ringPos + 1) & (FftSize - 1);
-            if (++_sinceLast >= FftSize / 2)
+            // About 20 analyses a second is plenty for bars that repaint at 10 fps (was ~94 at 48 kHz).
+            if (++_sinceLast >= Math.Max(FftSize / 2, fmt.SampleRate / 20))
             {
                 _sinceLast = 0;
                 Analyze(fmt.SampleRate);
@@ -115,7 +152,7 @@ internal sealed class AudioVisualizer : IDisposable
     {
         for (int i = 0; i < FftSize; i++)
         {
-            float window = (float)FastFourierTransform.HannWindow(i, FftSize);
+            float window = Hann[i];
             _fft[i].X = _ring[(_ringPos + i) & (FftSize - 1)] * window;
             _fft[i].Y = 0;
         }
@@ -142,5 +179,9 @@ internal sealed class AudioVisualizer : IDisposable
         }
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        _allowed = false;
+        StopCapture();
+    }
 }

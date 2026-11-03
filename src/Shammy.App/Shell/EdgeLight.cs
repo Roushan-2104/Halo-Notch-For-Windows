@@ -80,6 +80,8 @@ internal sealed class EdgeLight : FrameworkElement
         get => _shown;
         set
         {
+            // Set on every state change; only a real change repaints the (window-sized) edge.
+            if (_shown == value) return;
             _shown = value;
             InvalidateVisual();
         }

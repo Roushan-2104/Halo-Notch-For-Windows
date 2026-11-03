@@ -376,7 +376,8 @@ public partial class ExpandedView
         public Grid Root { get; }
         public WallTile? Tile { get; }
 
-        readonly Border _shadow, _glow, _ring;
+        readonly FrameworkElement _shadow, _glow;
+        readonly Border _ring;
         readonly ScaleTransform _scale = new(1, 1);
         readonly TranslateTransform _shift = new();
         readonly SpringValue _s = new(1, 0.001), _x = new(0, 0.05), _dim = new(1, 0.004), _lift = new(0, 0.004);
@@ -393,23 +394,11 @@ public partial class ExpandedView
                 RenderTransformOrigin = new Point(0.5, 0.5),
                 RenderTransform = new TransformGroup { Children = { _scale, _shift } },
             };
-            _shadow = new Border
-            {
-                CornerRadius = new CornerRadius(WallTile.Radius),
-                Background = CardKit.Ground,
-                Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 36, ShadowDepth = 18, Direction = 270, Opacity = 0.55, RenderingBias = RenderingBias.Performance },
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed,
-            };
-            _glow = new Border
-            {
-                Margin = new Thickness(-2),
-                CornerRadius = new CornerRadius(WallTile.Radius + 2),
-                Background = CardKit.Accent,
-                Effect = new BlurEffect { Radius = 24, RenderingBias = RenderingBias.Performance },
-                IsHitTestVisible = false,
-                Visibility = Visibility.Collapsed,
-            };
+            // The drop shadow and the accent glow are drawn once into bitmaps and shared: as live effects they
+            // were re-blurred on every repaint inside the focused tile (a clock, a progress bar), which is costly
+            // on the notch's layered, software-rendered window.
+            _shadow = Halo(ShadowImage.Value, ShadowPad);
+            _glow = Halo(GlowImage.Value, GlowPad);
             _ring = new Border
             {
                 Margin = new Thickness(-1.5),
@@ -502,6 +491,47 @@ public partial class ExpandedView
             _glow.Opacity = 0.28 * lift;
             _ring.Opacity = lift;
         }
+
+        const double ShadowPad = 64, GlowPad = 32;
+
+        static readonly Lazy<ImageSource> ShadowImage = new(() => Prerender(CardKit.Ground, 0,
+            new DropShadowEffect { Color = Colors.Black, BlurRadius = 36, ShadowDepth = 18, Direction = 270, Opacity = 0.55 }, ShadowPad));
+
+        static readonly Lazy<ImageSource> GlowImage = new(() => Prerender(CardKit.Accent, 2, new BlurEffect { Radius = 24 }, GlowPad));
+
+        /// <summary>A tile-sized rounded shape with its effect, rendered once at 2x into a frozen bitmap.</summary>
+        static ImageSource Prerender(Brush fill, double grow, Effect effect, double pad)
+        {
+            double w = WallTile.W + 2 * grow, h = WallTile.H + 2 * grow;
+            var shape = new Border
+            {
+                Width = w,
+                Height = h,
+                CornerRadius = new CornerRadius(WallTile.Radius + grow),
+                Background = fill,
+                Effect = effect,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var host = new Grid { Width = WallTile.W + 2 * pad, Height = WallTile.H + 2 * pad, Children = { shape } };
+            host.Measure(new Size(host.Width, host.Height));
+            host.Arrange(new Rect(0, 0, host.Width, host.Height));
+            var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(host.Width * 2), (int)(host.Height * 2), 192, 192, PixelFormats.Pbgra32);
+            bitmap.Render(host);
+            bitmap.Freeze();
+            return bitmap;
+        }
+
+        static FrameworkElement Halo(ImageSource image, double pad) => new System.Windows.Controls.Image
+        {
+            Source = image,
+            Stretch = Stretch.Fill,
+            Width = WallTile.W + 2 * pad,
+            Height = WallTile.H + 2 * pad,
+            Margin = new Thickness(-pad),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
 
         /// <summary>Gives the card's compact back (the card was replaced).</summary>
         public void Release() => CardKit.Detach(Card.Compact);

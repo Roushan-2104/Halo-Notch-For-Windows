@@ -799,13 +799,20 @@ public partial class NotchWindow : Window
         foreach (var layer in _layers) SetLayerActive(layer, layer == target, grow);
 
         EnsureWindowHeight(Math.Max(_h.Value, spec.H));
-        Animator.Kick();
+        if (changed) Animator.Kick();
     }
 
     void SetLayerActive(Layer layer, bool active, bool grow)
     {
         if (active)
         {
+            // Already in and settled (a re-post of the same activity, a media position update): nothing to animate.
+            // Re-arming the springs here kept the render loop and the window repainting on every such update.
+            if (layer.Active && layer.Opacity.Target == 1 && layer.Size.Target == 1 && layer.Opacity.IsSettled && layer.Size.IsSettled)
+            {
+                Canvas.SetLeft(layer.El, Cx - layer.El.Width / 2);
+                return;
+            }
             if (!layer.Active)
             {
                 if (layer.Opacity.Value < 0.05) layer.Size.Snap(grow ? 0.9 : 1.05);
