@@ -23,6 +23,9 @@ public partial class ExpandedView : UserControl
     /// <summary>The open notch's size: 1012 wide; the home row makes it 248 tall, an opened view 320.</summary>
     public const double OpenWidth = 1012, HomeHeight = 248, DetailHeight = 320;
 
+    /// <summary>The Back + title band above a card's detail content.</summary>
+    const double CardHeader = 52, CardPad = 16;
+
     const string ShelfId = "shelf", AlertsId = "alerts", TabPrefix = "tab:";
 
     ShammyServices? _s;
@@ -190,7 +193,15 @@ public partial class ExpandedView : UserControl
         DetailFrame.Visibility = Visibility.Visible;
         SyncChips();
         Refresh();
-        SetBodyHeight(DetailHeight);
+        // A card's detail is drawn as 924×248 content, so it gets its own band under the Back/title header;
+        // the built-in Shelf and Alerts views (and legacy panels) already leave room for the header.
+        bool card = view.Kind == ViewKind.Card;
+        DetailContent.Margin = card ? new Thickness(CardPad, CardHeader, CardPad, CardPad) : new Thickness(0);
+        DetailContent.Width = card ? 924 - 2 * CardPad : 924;
+        DetailContent.Height = card ? 248 - CardPad : 248;
+        DetailFrame.Height = 248 + (card ? CardHeader : 0);
+        ((RectangleGeometry)DetailFrame.Clip).Rect = new Rect(0, 0, 924, DetailFrame.Height);
+        SetBodyHeight(DetailHeight + (card ? CardHeader : 0));
         if (IsVisible) AnimateIn(DetailFrame);
         return true;
     }
