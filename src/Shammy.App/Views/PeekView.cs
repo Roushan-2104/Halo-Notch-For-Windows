@@ -105,7 +105,8 @@ internal sealed class PeekView : Grid
             _subtitle.Text = now.ToString("dddd, d MMMM", CultureInfo.CurrentCulture);
         }
 
-        _top = _feed.Top();
+        // Only a song title can repeat in words; the clock never should (a "Standup 10:30" glance at 10:30 is news).
+        _top = _feed.Top(media.HasSession ? media.Title : "");
         if (_top is null)
         {
             _pill.Visibility = Visibility.Collapsed;

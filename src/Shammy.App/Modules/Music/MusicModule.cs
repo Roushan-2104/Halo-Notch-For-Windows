@@ -91,7 +91,7 @@ internal sealed class MusicModule : IShammyModule
             Chip = true,
             IsRelevant = () => _card.IsRelevant,
         });
-        ctx.AddGlance("music", _card.Glance);
+        // No glance of its own: the resting notch's built-in song glance (with the music bars) already shows it.
         Views.Cards.CardPipes.Register(ctx, "music", _card.DescribeCompact, _card.DescribeDetail);
         ctx.AddTrayToggle("Flash album colour on new songs", () => _settings.AlbumGlow, on =>
         {

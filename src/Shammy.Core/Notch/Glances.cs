@@ -14,15 +14,45 @@ public static class GlanceOrder
             .ThenBy(p => p.index)
             .Select(p => p.item)
             .ToList();
+
+    /// <summary>
+    /// One item per id, the first one given (Shammy's own items come before the modules', so a module can't
+    /// show the song a second time under the built-in's id). Ids compare case-insensitively, as providers do.
+    /// </summary>
+    public static List<T> Unique<T>(IEnumerable<T?> items, Func<T, string> id) where T : class
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return items.OfType<T>().Where(i => seen.Add(id(i))).ToList();
+    }
+
+    /// <summary>
+    /// The hover peek's single slot: the first plain item (in priority order) that doesn't repeat what the
+    /// peek's left side already shows — the song or the clock, by id, or the same words under another id.
+    /// </summary>
+    public static T? PeekSlot<T>(IEnumerable<T> ordered, Func<T, (string Id, string Text, bool Plain)> describe,
+        IReadOnlyCollection<string> leftIds, string leftText) where T : class
+    {
+        foreach (var item in ordered)
+        {
+            var (id, text, plain) = describe(item);
+            if (!plain || leftIds.Contains(id, StringComparer.OrdinalIgnoreCase)) continue;
+            if (leftText.Length > 0 && text.Contains(leftText, StringComparison.OrdinalIgnoreCase)) continue;
+            return item;
+        }
+        return null;
+    }
 }
 
 /// <summary>
 /// Steps through the glance items one at a time. Items are asked for fresh each step and may come and go,
 /// so it remembers the id it last showed and moves to whatever follows it now; if that one disappeared it
-/// starts again from the top (the most important item).
+/// starts again from the top (the most important item). It also remembers where that id was, so a list that
+/// still repeats an id can't trap it in a loop between the first copy and the item after it.
 /// </summary>
 public sealed class GlanceRotator
 {
+    int _index = -1;
+
     public string? CurrentId { get; private set; }
 
     /// <returns>The index in <paramref name="ids"/> to show next, or -1 when there is nothing.</returns>
@@ -31,22 +61,30 @@ public sealed class GlanceRotator
         if (ids.Count == 0)
         {
             CurrentId = null;
+            _index = -1;
             return -1;
         }
-        int at = CurrentId is null ? -1 : IndexOf(ids, CurrentId);
+        int at = Locate(ids);
         int next = at < 0 ? 0 : (at + 1) % ids.Count;
         CurrentId = ids[next];
+        _index = next;
         return next;
     }
 
     /// <summary>Where the current item is now (to refresh its text without moving on), or -1.</summary>
-    public int Locate(IReadOnlyList<string> ids) => CurrentId is null ? -1 : IndexOf(ids, CurrentId);
-
-    static int IndexOf(IReadOnlyList<string> ids, string id)
+    public int Locate(IReadOnlyList<string> ids)
     {
+        if (CurrentId is null) return -1;
+        // The copy at or after where it was last time, else the first one.
+        int first = -1;
         for (int i = 0; i < ids.Count; i++)
-            if (string.Equals(ids[i], id, StringComparison.OrdinalIgnoreCase)) return i;
-        return -1;
+        {
+            if (!string.Equals(ids[i], CurrentId, StringComparison.OrdinalIgnoreCase)) continue;
+            if (i >= _index) return _index = i;
+            if (first < 0) first = i;
+        }
+        if (first >= 0) _index = first;
+        return first;
     }
 }
 

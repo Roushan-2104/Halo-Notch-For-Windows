@@ -14,7 +14,8 @@ internal sealed record GlanceEntry(string Id, GlanceItem Item, GlanceKind Kind =
 
 /// <summary>
 /// Everything worth a glance right now: the modules' providers (asked fresh every time) plus the built-ins
-/// (time and date, the paused song, the battery when low or charging), most important first.
+/// (time and date, the song playing or paused, the battery when low or charging), most important first, one
+/// item per id. The song is only ever the built-in one (drawn with the music bars), never a module's.
 /// </summary>
 internal sealed class GlanceFeed
 {
@@ -68,12 +69,17 @@ internal sealed class GlanceFeed
         var (time, date) = BuiltInGlances.Time(DateTime.Now, BuiltInGlances.Uses24Hour(CultureInfo.CurrentCulture));
         entries.Add(new GlanceEntry("time", new GlanceItem(time, NotchPalette.Text, TimePriority), GlanceKind.Time, date));
 
-        return GlanceOrder.ByPriority(entries, e => e.Item.Priority);
+        return GlanceOrder.ByPriority(GlanceOrder.Unique(entries, e => e.Id), e => e.Item.Priority);
     }
 
-    /// <summary>The peek's single slot: the most important item that isn't the song or the clock (both already
-    /// on the peek's left side).</summary>
-    public GlanceEntry? Top() => Current().FirstOrDefault(e => e.Kind == GlanceKind.Plain);
+    static readonly string[] PeekLeftIds = { "music", "time" };
+
+    /// <summary>
+    /// The peek's single slot: the most important item that doesn't repeat the peek's left side (the song, or
+    /// the clock when nothing plays), so the same thing never shows on both sides.
+    /// </summary>
+    public GlanceEntry? Top(string leftText) =>
+        GlanceOrder.PeekSlot(Current(), e => (e.Id, e.Item.Text, e.Kind == GlanceKind.Plain), PeekLeftIds, leftText);
 
     public string Describe() => string.Join(" | ", Current().Select(e =>
         $"{e.Id}:{e.Item.Text}{(e.Secondary is null ? "" : " " + e.Secondary)} (p{e.Item.Priority})"));

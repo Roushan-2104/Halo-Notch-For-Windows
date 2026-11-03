@@ -116,10 +116,6 @@ internal sealed class MusicCard
 
     public bool IsRelevant => Media.HasSession;
 
-    /// <summary>Glance while playing: "Kesariya · Arijit Singh" (fitted).</summary>
-    public GlanceItem? Glance() =>
-        Media.HasSession && Media.IsPlaying ? new GlanceItem(MediaTime.Glance(Media.Title, Media.Artist), NotchPalette.Music, 30) : null;
-
     Color GlowColor => Media.Art is not null ? Media.ArtColor : _accentColor;
 
     void Refresh()
