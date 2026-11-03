@@ -47,7 +47,8 @@ internal sealed class NotificationService : IDisposable
     readonly DispatcherTimer _poll;
     UserNotificationListener? _listener;
     FileSystemWatcher? _store;
-    DispatcherTimer? _storeDebounce;
+    DispatcherTimer? _storeDebounce, _storeCheck;
+    (long, DateTime, long, DateTime) _storeStamp;
     bool _polling;
 
     public NotificationService(Dispatcher ui)
@@ -145,6 +146,18 @@ internal sealed class NotificationService : IDisposable
                 _storeDebounce.Stop();
                 _storeDebounce.Start();
             });
+            // SQLite appends to the -wal file through an open handle, and Windows often holds back change
+            // notifications for that until the handle is flushed or closed: toasts then showed up to 30 s late
+            // (on the slow poll). Checking the files' size and time once a second costs two stats.
+            _storeStamp = StoreStamp(dir);
+            _storeCheck = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) =>
+            {
+                var stamp = StoreStamp(dir);
+                if (stamp == _storeStamp) return;
+                _storeStamp = stamp;
+                _storeDebounce.Stop();
+                _storeDebounce.Start();
+            }, _ui);
             return true;
         }
         catch (Exception ex)
@@ -152,6 +165,14 @@ internal sealed class NotificationService : IDisposable
             Log.Warn("Can't watch the notification store", ex);
             return false;
         }
+    }
+
+    static (long, DateTime, long, DateTime) StoreStamp(string dir)
+    {
+        var db = new FileInfo(Path.Combine(dir, "wpndatabase.db"));
+        var wal = new FileInfo(Path.Combine(dir, "wpndatabase.db-wal"));
+        return (db.Exists ? db.Length : -1, db.Exists ? db.LastWriteTimeUtc : default,
+                wal.Exists ? wal.Length : -1, wal.Exists ? wal.LastWriteTimeUtc : default);
     }
 
     async Task PollAsync()
@@ -266,6 +287,7 @@ internal sealed class NotificationService : IDisposable
     {
         _poll.Stop();
         _storeDebounce?.Stop();
+        _storeCheck?.Stop();
         _store?.Dispose();
     }
 }
