@@ -38,7 +38,7 @@ It runs on your PC with **no paid AI**:
 | | Key | What happens |
 |:-:|---|---|
 | 🗣️ | **Hold** <kbd>Right Alt</kbd> | **Talk.** Ask a question or say a command: *"play kesariya"*, *"5 ft in cm"*, *"timer 10 minutes"*. The screen stays live. |
-| ⌨️ | **Tap** <kbd>Right Alt</kbd> | **Type.** A search box drops out of the notch. Sums like `18% of 2400` are answered instantly. |
+| ⌨️ | **Tap** <kbd>Right Alt</kbd> | **Type.** The command palette drops out of the notch: apps, files, settings, music and commands rank live as you type. |
 | ⭕ | <kbd>Copilot</kbd>, or hold <kbd>Right Ctrl</kbd> | **Circle.** The screen freezes. Circle, scribble or tap anything, speak if you like, then let go. |
 
 Everything else is a **hover** away.
@@ -72,6 +72,32 @@ Tap <kbd>Right Alt</kbd> to type, or hold it to speak. Questions open Google **A
 
 </td>
 <td><img src="docs/images/results.png" alt="Google AI Mode answer in the notch"></td>
+</tr>
+<tr>
+<td valign="top" colspan="2">
+
+### 🧭 One palette for everything
+Tap <kbd>Right Alt</kbd> and start typing. Results rank live, keyboard first (<kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd>), and learn from what you pick:
+- **Commands first:** `timer 25m`, `2+2`, `remind me at 6pm`, `weather`, each with a preview of what will happen;
+- **Apps:** `spot` opens Spotify; one misheard word is forgiven ("visual studio board");
+- **Files** straight from the Windows Search index. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> shows the file in its folder. Hidden and developer folders stay out of the way;
+- **Settings, right there:** `brightness` gives a slider, `sound` gives volume, mute and your output devices, `bluetooth` gives an on/off switch, and words like `wifi` or `night light` open the right Settings page;
+- **Music:** `play …` or `… bajao` plays on YouTube Music; pause, next and previous control what's playing;
+- **Google** is always the last row.
+
+</td>
+</tr>
+<tr>
+<td valign="top" colspan="2">
+
+### 🪽 App wings
+Hide the Windows taskbar and Shammy takes over: your apps sit beside the notch in a thin black strip at the top of every screen.
+- **Pinned apps on the left, open apps on the right.** Your taskbar pins are imported once, then drag to reorder and right-click to pin or unpin.
+- **It behaves like the taskbar:** click to bring an app forward, click again to minimise. An app with several windows shows a list. Right-click to close. Hold a dragged file over an app to bring it forward.
+- **Maximised windows start below the strip.** It hides for full-screen apps, and gives the space back when you quit or turn it off.
+- It turns on by itself when the taskbar is set to auto-hide. Toggle it from the tray any time.
+
+</td>
 </tr>
 <tr>
 <td valign="top">
@@ -199,10 +225,10 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 
 | Say or type | What happens |
 |---|---|
-| `play kaahe mose` · `play tum hi ho on spotify` · `pause` · `next` | Plays in YouTube Music (or Spotify) · media controls |
+| `play kaahe mose` · `kesariya bajao` · `play tum hi ho on spotify` · `pause` · `next` | Plays in YouTube Music (or Spotify) · media controls. Hindi song names are checked against your listening history and a built-in list |
 | `lyrics` | Synced lyrics for the current song |
 | `timer 25m tea` · `stopwatch` · `pomodoro` · `focus 45m` | A live countdown in the notch |
-| `remind me at 6pm to call mom` · `note: buy milk` · `notes` | A reminder card when it's due · the Notes tab |
+| `remind me at 6pm to call mom` · `set an alarm for 7 am` · `kal subah 7 baje ka alarm laga do` · `note: buy milk` | A reminder card when it's due · the Notes tab |
 | `5 ft in cm` · `100 usd to inr` · `5pm ist in pst` · `time in tokyo` | Instant answers |
 | `translate good morning to hindi` | Google Translate |
 | `open spotify` · `open github.com` · `open downloads` | App, site or folder launcher |
@@ -222,7 +248,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - **The results browser:** it can only open web pages, so pages can't launch apps or files.
 - **Notifications:** their text is hidden while an app uses your microphone or camera, or captures the screen.
 - **Your data:**
-  - clipboard history, notes and snippets are encrypted with Windows DPAPI under your account;
+  - clipboard history, notes, snippets and the song titles voice remembers are encrypted with Windows DPAPI under your account. Song memory can be cleared or turned off from the tray;
   - unpinned clipboard items are forgotten after 24 hours.
 - **Logs:** they never contain what you said, searched or copied, and are kept for 3 days.
 - **Phone transfers:**
