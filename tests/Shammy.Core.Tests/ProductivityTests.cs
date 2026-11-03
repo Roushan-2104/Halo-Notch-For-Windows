@@ -516,6 +516,8 @@ public class TimeFormatTests
         Assert.Equal("Tomorrow 9:00 AM", TimeFormat.When(new DateTime(2026, 11, 3, 9, 0, 0), now));
         Assert.Equal("Fri 5:30 PM", TimeFormat.When(new DateTime(2026, 11, 6, 17, 30, 0), now));
         Assert.Equal("20 Nov 12:00 AM", TimeFormat.When(new DateTime(2026, 11, 20, 0, 0, 0), now));
+        Assert.Equal("8 Mar 2:30 AM", TimeFormat.When(new DateTime(2027, 3, 8, 2, 30, 0), now));
+        Assert.Equal("2 Nov 2027 9:00 AM", TimeFormat.When(new DateTime(2027, 11, 2, 9, 0, 0), now));
     }
 }
 

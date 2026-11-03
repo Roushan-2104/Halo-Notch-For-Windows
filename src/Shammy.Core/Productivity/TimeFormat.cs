@@ -43,6 +43,8 @@ public static class TimeFormat
             1 => $"Tomorrow {time}",
             -1 => $"Yesterday {time}",
             > 1 and < 7 => $"{at.ToString("ddd", Invariant)} {time}",
+            // Most of a year away ("on 2 nov" said on 3 Nov): "2 Nov" alone would read as yesterday.
+            > 300 or < -300 => $"{at.ToString("d MMM yyyy", Invariant)} {time}",
             _ => $"{at.ToString("d MMM", Invariant)} {time}",
         };
     }
