@@ -51,6 +51,8 @@ internal sealed class ShammyHost : IDisposable
     public void Start()
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        SettingsApplier.Apply(_settings);
+        _settings.Changed += _ => SettingsApplier.Apply(_settings);
         _media = Own(new MediaService(_ui));
         _visualizer = Own(new AudioVisualizer());
         _battery = new BatteryService(_ui);
@@ -332,15 +334,19 @@ internal sealed class ShammyHost : IDisposable
         var types = typeof(ShammyHost).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(Modules.IShammyModule).IsAssignableFrom(t))
             .OrderBy(t => t.Name);
-        // Diagnostics: SHAMMY_DISABLE_MODULES=music,clipboard starts Shammy without those modules.
+        // Settings (DisabledModules) turn modules off; SHAMMY_DISABLE_MODULES=music,clipboard still does for diagnostics.
+        // The settings module never goes: it's how they're turned back on.
         var disabled = (Environment.GetEnvironmentVariable("SHAMMY_DISABLE_MODULES") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Concat(_settings.DisabledModules)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        disabled.Remove(Modules.Settings.SettingsModule.ModuleName);
         foreach (var type in types)
         {
             Safe($"module {type.Name}", () =>
             {
                 var module = (Modules.IShammyModule)Activator.CreateInstance(type)!;
+                _modules.ModuleNames.Add(module.Name);
                 if (disabled.Contains(module.Name))
                 {
                     module.Dispose();
@@ -378,8 +384,9 @@ internal sealed class ShammyHost : IDisposable
             _held++;
             return;
         }
-        // During a call or screen capture others may see the notch: show who it's from, not what it says.
-        if (PrivacyState.Presenting)
+        // During a call or screen capture others may see the notch: show who it's from, not what it says
+        // (always, with the AlwaysHideNotificationText setting).
+        if (PrivacyState.Presenting || _settings.AlwaysHideNotificationText)
         {
             var (title, body) = Shammy.Core.Notifications.NotificationText.ForPopup(n.AppName, n.Title, n.Body, presenting: true);
             n = new ShammyNotification
@@ -397,7 +404,7 @@ internal sealed class ShammyHost : IDisposable
             _lastPing = DateTime.UtcNow;
             NotchSound.Play(Shammy.Core.Audio.PingKind.Notification);
         }
-        Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(6))
+        Post(new Activity("notification", ActivityKind.Notification, PriorityNotification, new NotificationPayload(n, more), In(_settings.NotificationPopupSeconds))
         {
             Click = () => OpenNotificationApp(n),
         });
@@ -502,7 +509,12 @@ internal sealed class ShammyHost : IDisposable
     void PostHud(HudKind kind, double level, bool muted) =>
         Post(new Activity("hud", ActivityKind.Hud, PriorityHud, new HudPayload(kind, level, muted), In(1.6)));
 
-    void Post(Activity a) => _activities.Post(a);
+    void Post(Activity a)
+    {
+        // Settings: SystemAlertsEnabled off hides the battery and Bluetooth pills (the System card still shows both).
+        if (!_settings.SystemAlertsEnabled && a.Id is "battery" or "bluetooth") return;
+        _activities.Post(a);
+    }
 
     static DateTime In(double seconds) => DateTime.UtcNow.AddSeconds(seconds);
 
@@ -730,9 +742,9 @@ internal sealed class ShammyHost : IDisposable
 
     /// <summary>Feeds "x,y,ms" samples (separated by ';' or spaces) to a fresh <see cref="Core.Notch.HoverIntent"/>
     /// and lists its decisions, e.g. "peek@266 open@970". Append "nopeek" for a clickable pill.</summary>
-    static string DryRunHover(string arg)
+    string DryRunHover(string arg)
     {
-        var intent = new Core.Notch.HoverIntent { AllowPeek = !arg.Contains("nopeek") };
+        var intent = new Core.Notch.HoverIntent { AllowPeek = !arg.Contains("nopeek"), SpeedSetting = _settings.HoverSpeed };
         var decisions = new List<string>();
         foreach (var token in arg.Split(new[] { ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
         {

@@ -206,7 +206,16 @@ public static class RainAlert
 
 public static class WeatherText
 {
-    public static string Temp(double celsius) => $"{(int)Math.Round(celsius, MidpointRounding.AwayFromZero)}\u00B0";
+    /// <summary>Celsius or Fahrenheit (settings: TemperatureUnit); forecasts arrive in Celsius either way.</summary>
+    public static Shammy.Core.Settings.TemperatureUnit Unit { get; set; }
+
+    public static string Temp(double celsius) => Temp(celsius, Unit);
+
+    public static string Temp(double celsius, Shammy.Core.Settings.TemperatureUnit unit)
+    {
+        double v = unit == Shammy.Core.Settings.TemperatureUnit.Fahrenheit ? celsius * 9 / 5 + 32 : celsius;
+        return $"{(int)Math.Round(v, MidpointRounding.AwayFromZero)}\u00B0";
+    }
 
     public static string HourLabel(DateTime t)
     {

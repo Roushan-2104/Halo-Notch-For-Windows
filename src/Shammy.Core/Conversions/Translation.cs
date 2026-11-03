@@ -110,8 +110,14 @@ public static class Translation
         return common >= Math.Max(1, words.Count * 0.25);
     }
 
-    /// <summary>Text that already reads as English goes to Hindi; anything else to English.</summary>
-    public static string DefaultTarget(string text) => LooksEnglish(text) ? "hi" : "en";
+    /// <summary>The language English text is translated into (settings: TranslateTarget, Hindi unless changed).</summary>
+    public static string HomeLanguage { get; set; } = "hi";
+
+    /// <summary>Text that already reads as English goes to the home language (Hindi); anything else to English.</summary>
+    public static string DefaultTarget(string text) => DefaultTarget(text, HomeLanguage);
+
+    public static string DefaultTarget(string text, string home) =>
+        home.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? "en" : LooksEnglish(text) ? home : "en";
 
     public static Uri BuildUrl(string text, string languageCode)
     {

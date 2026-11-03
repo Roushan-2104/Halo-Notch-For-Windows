@@ -32,8 +32,9 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
     const string PreviewId = "clipboard.preview", ScreenshotId = "clipboard.screenshot";
     const int MaxSavedText = 20_000;
     const int MaxHistoryText = 1_000_000;
-    // Unpinned history is forgotten after a day so old passwords and tokens don't pile up.
-    static readonly TimeSpan KeepFor = TimeSpan.FromHours(24);
+    // Unpinned history is forgotten after a day (settings: ClipboardRetentionHours) so old passwords and tokens
+    // don't pile up.
+    TimeSpan KeepFor => TimeSpan.FromHours(_ctx.Settings.ClipboardRetentionHours);
 
     readonly ClipHistory _history = new();
     readonly CopyCoalescer _coalescer = new(TimeSpan.FromMilliseconds(300));
@@ -166,7 +167,7 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
             {
                 var entry = ClipEntry.FromFiles(files, now);
                 entry.Source = source;
-                _history.Add(entry);
+                Remember(entry);
             }
             // Text before image: Office and browsers put a picture of the selection next to the text.
             else if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
@@ -178,7 +179,7 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
                 {
                     var entry = ClipEntry.FromText(text, now);
                     entry.Source = source;
-                    _history.Add(entry);
+                    Remember(entry);
                 }
                 ShowPreview(ClipText.Preview(text.Length > 4096 ? text[..4096] : text), null);
             }
@@ -236,7 +237,7 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
             var (hash, clip) = await Task.Run(() => ClipImages.Process(shared));
             var entry = ClipEntry.FromImage(hash, image.PixelWidth, image.PixelHeight, now, clip);
             entry.Source = ClipCardText.SourceName(ownerProcess);
-            _history.Add(entry);
+            Remember(entry);
             if (_capture is { } c && ReferenceEquals(c.Full, image)) c.Png ??= clip.Png;
         }
         catch (Exception ex)
@@ -245,8 +246,16 @@ internal sealed class ClipboardModule : IShammyModule, Connect.IClipboardLink
         }
     }
 
+    /// <summary>Adds a copy to the history, unless history is turned off in settings.</summary>
+    void Remember(ClipEntry entry)
+    {
+        if (_ctx.Settings.ClipboardHistoryEnabled) _history.Add(entry);
+    }
+
     void ShowPreview(string text, ImageSource? thumb)
     {
+        // Settings: CopyPreviewEnabled.
+        if (!_ctx.Settings.CopyPreviewEnabled) return;
         var now = DateTime.Now;
         bool fresh = _coalescer.ShouldAnnounce(now) || _preview is null || _ctx.Get(PreviewId) is null;
         if (fresh) _preview = new CopyPreview(text, thumb);

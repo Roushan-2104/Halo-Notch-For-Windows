@@ -349,12 +349,12 @@ public class HinglishCommandTests
     [InlineData("alarm in 20 minutes", 2026, 3, 10, 15, 20)]
     [InlineData("kal subah 7 baje ka alarm laga do", 2026, 3, 11, 7, 0)]
     [InlineData("Kal Subah Saat Bajay Ka Alam Lagado.", 2026, 3, 11, 7, 0)]
-    public void Alarms_are_reminders_titled_alarm(string text, int y, int mo, int d, int h, int mi)
+    public void Alarms_are_one_off_alarms(string text, int y, int mo, int d, int h, int mi)
     {
         var command = ProductivityParser.Parse(text, Now);
         Assert.NotNull(command);
-        Assert.Equal(ProductivityAction.Remind, command!.Action);
-        Assert.Equal("Alarm", command.Text);
+        Assert.Equal(ProductivityAction.SetAlarm, command!.Action);
+        Assert.Equal(AlarmDays.None, command.Alarm!.Days);
         Assert.Equal(new DateTime(y, mo, d, h, mi, 0), command.Due);
         Assert.Contains("Alarm", Shammy.Core.Palette.PaletteQuery.DescribeProductivity(command, Now));
     }
@@ -424,8 +424,7 @@ public class ApexSpellingTests
     {
         var c = ProductivityParser.Parse(text, Now);
         Assert.NotNull(c);
-        Assert.Equal(ProductivityAction.Remind, c!.Action);
-        Assert.Equal("Alarm", c.Text);
+        Assert.Equal(ProductivityAction.SetAlarm, c!.Action);
         Assert.Equal(new DateTime(y, mo, d, h, mi, 0), c.Due);
     }
 

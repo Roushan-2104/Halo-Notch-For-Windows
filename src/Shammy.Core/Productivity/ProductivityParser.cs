@@ -14,6 +14,19 @@ public enum ProductivityAction
     ReminderNeedsTime,
     Note,
     ShowNotes,
+
+    /// <summary>A real alarm (see <see cref="ProductivityCommand.Alarm"/>), not a reminder.</summary>
+    SetAlarm,
+    ShowAlarms,
+    DeleteAlarm,
+    DisableAlarms,
+    EnableAlarms,
+
+    /// <summary>"stop the alarm": the one ringing.</summary>
+    StopAlarm,
+
+    /// <summary>"snooze" / "snooze for 5 minutes" (<see cref="ProductivityCommand.Duration"/> zero = the default).</summary>
+    SnoozeAlarm,
 }
 
 /// <summary>A recognised command. <see cref="Text"/> is the timer label, reminder or note, as typed.</summary>
@@ -23,8 +36,14 @@ public sealed record ProductivityCommand(ProductivityAction Action)
     public string Text { get; init; } = "";
     public DateTime Due { get; init; }
 
-    /// <summary>"cancel all timers" / "cancel timers".</summary>
+    /// <summary>"cancel all timers" / "cancel timers" / "turn off all alarms".</summary>
     public bool All { get; init; }
+
+    /// <summary>The alarm to set (<see cref="ProductivityAction.SetAlarm"/>).</summary>
+    public AlarmSpec? Alarm { get; init; }
+
+    /// <summary>Which alarm to delete or turn off by time ("the 7 am alarm"); by label it's <see cref="Text"/>.</summary>
+    public AlarmTarget? Target { get; init; }
 }
 
 /// <summary>
@@ -83,10 +102,6 @@ public static class ProductivityParser
         "for", "called", "named", "labelled", "labeled", "label", "titled", "to", "the", "my",
     };
 
-    // Alarms are reminders titled "Alarm": "set an alarm for 7 am", "alarm at 7 tomorrow", "wake me up at 6".
-    static readonly Regex AlarmCommand = new(@"^(?:(?:set|create|make|add|start)\s+(?:me\s+)?)?(?:an?\s+|the\s+|my\s+)?alarm(?:\s+(?:for|on)\b)?\s*(?<when>.*)$", Opts);
-    static readonly Regex WakeMe = new(@"^wake\s+me(?:\s+up)?\s+(?<when>.+)$", Opts);
-
     static readonly HashSet<string> ReminderLead =new(StringComparer.OrdinalIgnoreCase) { "to", "that", "about", "of" };
 
     const int MaxCommand = 300, MaxNote = 4000;
@@ -116,7 +131,7 @@ public static class ProductivityParser
         return ParseNote(s)
             ?? ParseShowNotes(s)
             ?? ParseReminder(s, now)
-            ?? ParseAlarm(s, now)
+            ?? AlarmParser.Parse(s, now)
             ?? ParseTimerControl(s)
             ?? ParseStopwatch(s)
             ?? ParsePomodoro(s)
@@ -188,27 +203,6 @@ public static class ProductivityParser
         return remindMe && ReminderLead.Contains(words[0]) && words.Count > 1
             ? new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = ReminderText(original) }
             : null;
-    }
-
-    // ---- Alarms ------------------------------------------------------------------------------
-
-    /// <summary>
-    /// An alarm is a reminder titled "Alarm" (it pings and shows like any reminder). Only with a time, or the
-    /// bare "set an alarm": "alarm clock app" and "alarm sounds" are searches.
-    /// </summary>
-    static ProductivityCommand? ParseAlarm(string s, DateTime now)
-    {
-        var m = AlarmCommand.Match(s);
-        if (!m.Success) m = WakeMe.Match(s);
-        if (!m.Success) return null;
-        var when = WhenParser.Normalize(m.Groups["when"].Value.Trim());
-        bool asked = s.StartsWith("set", StringComparison.OrdinalIgnoreCase) || s.StartsWith("wake", StringComparison.OrdinalIgnoreCase);
-        if (when.Length == 0)
-            return asked ? new ProductivityCommand(ProductivityAction.ReminderNeedsTime) { Text = "Alarm" } : null;
-        // "alarm 7 am" / "for 7 am": a lone clock reads as "at 7 am".
-        var due = WhenParser.Parse(when, now) ?? WhenParser.Parse("at " + when, now);
-        if (due is null) return null;
-        return new ProductivityCommand(ProductivityAction.Remind) { Due = due.Value, Text = "Alarm" };
     }
 
     static ProductivityCommand Reminder(DateTime due, IEnumerable<string> words)
