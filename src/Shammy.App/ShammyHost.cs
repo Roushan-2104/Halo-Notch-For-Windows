@@ -33,6 +33,7 @@ internal sealed class ShammyHost : IDisposable
     VolumeService _volume = null!;
     BatteryService _battery = null!;
     GlobalKeys _keys = null!;
+    KeyboardIndicators? _keyboardPills;
     WhisperService _whisper = null!;
     UpdateService _updates = null!;
     int _testActionClicks, _testBubbleClicks;
@@ -58,6 +59,7 @@ internal sealed class ShammyHost : IDisposable
         var services = new ShammyServices(_media, _visualizer, _battery, _shelf, _notifications, _settings);
 
         _notch = new NotchWindow(services);
+        _notch.GlanceProviders = _modules.Glances;
         _notch.FilesDropped += files =>
         {
             int added = _shelf.Add(files);
@@ -211,6 +213,7 @@ internal sealed class ShammyHost : IDisposable
             Post(new Activity("keys-failed", ActivityKind.Message, PriorityMessage, new MessagePayload("", "Hotkey unavailable", true), In(5)));
         _keys.InterceptVolume = _settings.ReplaceVolumeFlyout && _volume is not null;
         _keys.VolumeKey += dir => _volume?.Step(dir);
+        Safe("keyboard pills", () => _keyboardPills = new KeyboardIndicators(_keys, _ui, Post));
         _search = new SearchCoordinator(_notch, _keys, _whisper, _settings, _modules);
         _notch.ExpandedView.ShelfActions = _modules.ShelfActions;
         NotchSound.Enabled = _settings.NotchSounds;
@@ -585,11 +588,56 @@ internal sealed class ShammyHost : IDisposable
                 if (arg == "toggle") _media.TogglePlayPause();
                 else if (arg == "next") _media.Next();
                 return "ok";
+            // ---- v2 resting notch, peek, gestures and keyboard pills ----
+            // "v2-idle": pet mood, eyes and glance state; "v2-idle bounce" makes the pet hop.
+            case "v2-idle":
+                if (arg.Trim() == "bounce") _notch.BounceEyes();
+                return _notch.DescribeIdle();
+            // "v2-hover x,y,ms;x,y,ms;..." runs pointer samples through the hover rule (dry run, nothing opens).
+            case "v2-hover": return DryRunHover(arg);
+            // "pet-mood music" forces a mood (idle|music|notify|timer|listen|think|meeting|tired|sleepy|happy); "pet-mood auto" undoes it.
+            case "pet-mood": return _notch.SetPetMood(arg);
+            case "v2-peek": return _notch.ForcePeek(true);
+            case "v2-rest": return _notch.ForcePeek(false);
+            // "v2-gesture next|prev|volup|voldown [dry]".
+            case "v2-gesture":
+            {
+                var g = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                return g.Length == 0 ? "error: usage v2-gesture next|prev|volup|voldown [dry]"
+                    : _notch.SimulateGesture(g[0].ToLowerInvariant(), g.Contains("dry", StringComparer.OrdinalIgnoreCase));
+            }
+            case "capslock-test":
+                if (_keyboardPills is null) return "error: keyboard pills unavailable";
+                _keyboardPills.ShowCaps(arg.Trim() != "off");
+                return "ok";
+            case "lang-test":
+                if (_keyboardPills is null) return "error: keyboard pills unavailable";
+                _keyboardPills.ShowLanguage(KeyboardIndicators.CurrentLabel(), arg.Trim().Length > 0 ? arg.Trim() : "हिन्दी");
+                return "ok";
             case "quit": Application.Current.Shutdown(); return "bye";
             case "modules": return string.Join(", ", _disposables.OfType<Modules.IShammyModule>().Select(m => m.Name));
             default:
                 return _modules.PipeCommands.TryGetValue(parts[0], out var handler) ? handler(arg) : "error: unknown command";
         }
+    }
+
+    /// <summary>Feeds "x,y,ms" samples (separated by ';' or spaces) to a fresh <see cref="Core.Notch.HoverIntent"/>
+    /// and lists its decisions, e.g. "peek@266 open@970". Append "nopeek" for a clickable pill.</summary>
+    static string DryRunHover(string arg)
+    {
+        var intent = new Core.Notch.HoverIntent { AllowPeek = !arg.Contains("nopeek") };
+        var decisions = new List<string>();
+        foreach (var token in arg.Split(new[] { ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var f = token.Split(',');
+            if (f.Length != 3) continue;
+            if (!double.TryParse(f[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+                !double.TryParse(f[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
+                !double.TryParse(f[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var ms)) return $"error: bad sample '{token}'";
+            var d = intent.Sample(x, y, TimeSpan.FromMilliseconds(ms));
+            if (d != Core.Notch.HoverDecision.None) decisions.Add($"{d.ToString().ToLowerInvariant()}@{ms:0}");
+        }
+        return decisions.Count == 0 ? $"none (stage={intent.Stage} speed={intent.Speed:0.00})" : string.Join(" ", decisions);
     }
 
     /// <summary>
