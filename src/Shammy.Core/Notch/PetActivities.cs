@@ -1,7 +1,7 @@
 namespace Shammy.Core.Notch;
 
 /// <summary>What the pet wears while a live activity owns the compact notch (the Activities board).</summary>
-public enum PetCostume { Call, Music, Timer, Recording, Download, Charging, Earbuds, Notify }
+public enum PetCostume { Call, Music, Timer, Recording, Download, Charging, Earbuds, Notify, Update }
 
 /// <summary>The face (and animation) the pet makes in its costume.</summary>
 public enum PetFace
@@ -33,7 +33,7 @@ public enum PetFace
 }
 
 /// <summary>The one direct action the action circle holds.</summary>
-public enum CircleAction { Mute, Unmute, Pause, Play, Resume, Dismiss, Stop, Open, OpenWhenDone }
+public enum CircleAction { Mute, Unmute, Pause, Play, Resume, Dismiss, Stop, Open, OpenWhenDone, Restart }
 
 /// <summary>
 /// How the circle is coloured. Accent only when its action is the primary "Open/Dismiss" (the one thing to do);
@@ -125,17 +125,18 @@ public static class PetActivities
             ? s.CanOpen ? new CircleSpec(CircleAction.Open, CircleTone.Accent, true, "Open file") : null
             : new CircleSpec(CircleAction.OpenWhenDone, CircleTone.Neutral, false, "Open file, when the download finishes"),
         PetCostume.Notify => s.CanOpen ? new CircleSpec(CircleAction.Open, CircleTone.Accent, true, "Open") : null,
+        PetCostume.Update => new CircleSpec(CircleAction.Restart, CircleTone.Accent, true, "Restart to update"),
         _ => null,
     };
 
     /// <summary>
     /// Ongoing activities that can wait as the dot and swap back: a call, music, a running timer, a recording, a
-    /// download in progress. One-off moments (a notification, plugging in, earbuds, a timer at zero, a finished
+    /// download in progress, an update waiting for its restart. One-off moments (a notification, plugging in, earbuds, a timer at zero, a finished
     /// download) take the pet while they last and never wait in the dot.
     /// </summary>
     public static bool IsOngoing(PetActivityState s) => s.Costume switch
     {
-        PetCostume.Call or PetCostume.Music or PetCostume.Recording => true,
+        PetCostume.Call or PetCostume.Music or PetCostume.Recording or PetCostume.Update => true,
         PetCostume.Timer or PetCostume.Download => !s.Done,
         _ => false,
     };

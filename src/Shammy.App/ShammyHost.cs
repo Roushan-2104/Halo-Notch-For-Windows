@@ -19,7 +19,7 @@ namespace Shammy;
 internal sealed class ShammyHost : IDisposable
 {
     const int PriorityHud = 90, PriorityNotification = 80, PriorityBatteryLow = 75, PriorityCharging = 70, PriorityBluetooth = 60,
-        PriorityDownloadDone = 55, PriorityMessage = 50, PriorityDownloading = 40, PriorityProgress = 30, PriorityMedia = 20;
+        PriorityDownloadDone = 55, PriorityMessage = 50, PriorityDownloading = 40, PriorityProgress = 30, PriorityUpdateReady = 25, PriorityMedia = 20;
 
     readonly AppSettings _settings;
     readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
@@ -38,7 +38,6 @@ internal sealed class ShammyHost : IDisposable
     UpdateService _updates = null!;
     int _testActionClicks, _testBubbleClicks, _held;
     DateTime _lastPing;
-    DispatcherTimer? _updateReminder;
     SearchCoordinator _search = null!;
     DownloadsService _downloads = null!;
     ShelfStore _shelf = null!;
@@ -313,9 +312,6 @@ internal sealed class ShammyHost : IDisposable
         // Settings can switch these too; the tray has its own callbacks for them.
         _settings.Changed += name => _ui.BeginInvoke(() => ApplySettingChange(name));
         _updates.Ready += _ => AnnounceUpdate();
-        // A prompt that was missed (a call outranked it, the notch was busy) comes back later; the update
-        // is also applied whenever Shammy quits, so nothing is lost if it's never clicked.
-        _updateReminder = new DispatcherTimer(TimeSpan.FromHours(2), DispatcherPriority.Background, (_, _) => AnnounceUpdate(), _ui);
         _updates.Start();
         AskAboutStartup();
 
@@ -888,12 +884,11 @@ internal sealed class ShammyHost : IDisposable
     void AnnounceUpdate()
     {
         if (_updates.ReadyVersion is not { } version) return;
-        _updateReminder?.Start();
-        // Above routine messages, so a battery or clipboard toast can't bump it off the notch.
-        Post(new Activity("update-ready", ActivityKind.Message, PriorityDownloadDone,
-            new MessagePayload("", "Update ready · click to restart"), In(20))
+        // Stays until it's pressed, above music but below calls, timers and downloads (it waits as the dot then).
+        // The update is also applied whenever Shammy quits, so nothing is lost if it's never pressed.
+        Post(new Activity("update-ready", ActivityKind.Custom, PriorityUpdateReady, new Modules.UpdateReadyContent(version, RestartForUpdate))
         {
-            Click = RestartForUpdate,
+            Click = () => _notch.ExpandTo(shelf: false),
         });
     }
 
