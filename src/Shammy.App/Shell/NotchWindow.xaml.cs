@@ -151,6 +151,7 @@ public partial class NotchWindow : Window
 
         Expanded.Attach(services);
         // Opening a view in place makes the open notch taller (and Back shorter again).
+        MenusAboveNotch.Install();
         Expanded.HeightChanged += () =>
         {
             if (_mode == NotchMode.Expanded) Transition(NotchMode.Expanded);
