@@ -174,6 +174,15 @@ internal sealed class WeatherFeature : IDisposable
     }
 
     /// <summary>For the test pipe: refresh now and return a one-line summary.</summary>
+    /// <summary>Test pipe only: "Mumbai|19.07|72.87" sets the place, so screenshots don't show where this PC really is.</summary>
+    public string AtForTest(string arg)
+    {
+        var p = arg.Split('|');
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        _data.Location = new GeoLocation(p[0], double.Parse(p[1], inv), double.Parse(p[2], inv), DateTime.UtcNow);
+        return RefreshNowBlocking();
+    }
+
     public string RefreshNowBlocking()
     {
         if (!AmbientNet.IsOnline) return "error: offline";

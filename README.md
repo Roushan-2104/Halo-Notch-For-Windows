@@ -23,7 +23,7 @@
 
 Shammy turns the top-centre of your screen into a living notch, like the iPhone's Dynamic Island, made for Windows.
 
-It answers questions with Google AI Mode, Web or Lens right inside the notch, lets you circle anything on screen to search it, and shows your music, timers, calls, downloads and notifications as little live pills. At rest it's Shammy, a little pair of eyes, beside a glance that rotates through what's worth knowing. Rest the pointer on it for a peek; click (or keep resting) and it opens into a rail of cards.
+It answers questions with Google AI Mode, Web or Lens right inside the notch, lets you circle anything on screen to search it, and keeps your music, timers, calls, downloads and notifications in view. Shammy, a little pair of eyes, lives in the notch and changes to match whatever is going on, with a small action button beside the notch when there's something to press. Rest the pointer on it for a peek; click (or keep resting) and it opens into a rail of cards.
 
 It runs on your PC with **no paid AI**:
 - Google does the answering.
@@ -83,7 +83,10 @@ Tap <kbd>Right Alt</kbd> and start typing. Results rank live, keyboard first (<k
 - **Files** straight from the Windows Search index. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> shows the file in its folder. Hidden and developer folders stay out of the way;
 - **Settings, right there:** `brightness` gives a slider, `sound` gives volume, mute and your output devices, `bluetooth` gives an on/off switch, and words like `wifi` or `night light` open the right Settings page;
 - **Music:** `play …` or `… bajao` plays on YouTube Music; pause, next and previous control what's playing;
+- **Your own things:** notes, clipboard items, snippets and every view of the notch;
 - **Google** is always the last row.
+
+With nothing typed, it shows your recent picks and a *Try* row of ideas. Copied text and notes are never suggested on their own.
 
 </td>
 </tr>
@@ -91,7 +94,7 @@ Tap <kbd>Right Alt</kbd> and start typing. Results rank live, keyboard first (<k
 <td valign="top">
 
 ### ⚡ Instant answers
-Sums, unit and currency conversions and time zones never leave your PC: no search, no wait. Exchange rates are free and refreshed daily.
+Sums, unit and currency conversions and time zones never leave your PC: no search, no wait. Exchange rates are free and refreshed daily. Copy an answer with one click, or save it as a note.
 
 </td>
 <td><img src="docs/images/answer.png" alt="Calculator answer"><br><img src="docs/images/convert.png" alt="Unit conversion"></td>
@@ -118,7 +121,7 @@ Other apps' notifications drop out of the notch with a soft ping instead of Wind
 - **click** to open the app;
 - **right-click** to mute that app.
 
-While you share or record your screen, Shammy shows who a notification is from, but not what it says. An ordinary call hides nothing. Muted apps stay out of the Alerts list too.
+While you share your whole screen or record it, Shammy shows who a notification is from, but not what it says. Sharing just a tab or a window hides nothing, because the notch isn't in the picture, and neither does an ordinary call. Muted apps stay out of the Alerts list too.
 
 </td>
 <td><img src="docs/images/notification.png" alt="Notification card"></td>
@@ -127,23 +130,49 @@ While you share or record your screen, Shammy shows who a notification is from, 
 <td valign="top">
 
 ### ⏱️ Live activities
-Timers, stopwatches, Pomodoro and focus sessions, meeting mic mute, volume and brightness, charging, Bluetooth, downloads and updates all live in the notch as small pills. When two things happen at once, one splits off into a bubble.
+Shammy stays in the middle of the notch and dresses for the occasion, with the details on either side:
+- **a call:** a headset, the time on the call, and a mic button;
+- **music:** happy eyes, the song, and play/pause;
+- **a timer:** a little stopwatch, the time left, and pause;
+- **recording your screen,** a **download,** **charging** or your **earbuds' battery**.
+
+When there's something to press, a small **action circle** sits beside the notch, so you don't have to open anything. Pomodoro and focus sessions, volume and brightness, Bluetooth and updates live here too.
 
 </td>
-<td><img src="docs/images/timer.png" alt="Timer"><br><img src="docs/images/meeting.png" alt="Meeting mic"><br><img src="docs/images/hud-volume.png" alt="Volume"><br><img src="docs/images/charging.png" alt="Charging"><br><img src="docs/images/bluetooth.png" alt="Bluetooth"><br><img src="docs/images/download.png" alt="Download finished"><br><img src="docs/images/update-ready.png" alt="Update ready"></td>
+<td><img src="docs/images/pet-call.png" alt="Shammy on a call"><br><img src="docs/images/pet-music.png" alt="Shammy with music playing"><br><img src="docs/images/pet-timer.png" alt="Shammy with a timer"><br><img src="docs/images/pet-rec.png" alt="Shammy while recording"><br><img src="docs/images/pet-download.png" alt="Shammy with a download"><br><img src="docs/images/pet-charging.png" alt="Shammy while charging"><br><img src="docs/images/pet-earbuds.png" alt="Shammy showing earbud battery"></td>
 </tr>
 <tr>
 <td valign="top">
 
 ### 🗂️ Open it for the cards
-Open the notch and you get a **rail of cards** for what's going on now: Music, Calendar, Timers, Weather, System. Above them sit Shammy's eyes (home), a **chip** for every part of Shammy and the search pill:
-- Clipboard, Shelf, Notes, Alerts, System, Mirror, Calendar, Timers, Music, Weather, Snippets;
-- chips that don't fit are listed under **More**.
+Open the notch and you get a **rail of tiles** for what's going on now: music with its real album cover, weather, your calendar, timers, notes, battery. The notch fits itself to the tiles it has. The tile you're on grows and shows its controls, and the others dim back. Above them sit Shammy (home), a label for every part of Shammy and the search pill:
+- Clipboard, Shelf, Notes, Alerts, System, Mirror, Calendar, Snippets, Settings, Timers, Music, Weather, Alarms;
+- labels that don't fit are listed under **More**.
 
-Click a card or a chip and it opens in place into a bigger view: synced lyrics, today's timeline, your clipboard, notes you can type straight into. **Back** or <kbd>Esc</kbd> returns to the cards.
+Click a tile or a label and it opens in place into a bigger view: synced lyrics, the week's forecast, today's timeline, your clipboard, notes you can type straight into. **Back** or <kbd>Esc</kbd> returns to the tiles.
 
 </td>
-<td><img src="docs/images/expanded.png" alt="Expanded notch"></td>
+<td><img src="docs/images/expanded.png" alt="The open notch with the music tile in focus"><br><img src="docs/images/detail-music.png" alt="Music view"><br><img src="docs/images/detail-weather.png" alt="Weather view"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⏰ Real alarms
+Say *"wake me up at 6:30 every weekday"*, or add one yourself in the Alarms view. Pick the days, label it, and set how long a snooze lasts. An alarm rings until you stop or snooze it, swells up gently from quiet, and shows over fullscreen apps. You can turn off either of those last two.
+
+</td>
+<td><img src="docs/images/alarms.png" alt="Alarms view"></td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🎛️ Make it yours
+**Settings** opens right in the notch and saves as you go, in seven sections: General, Notch & pet, Voice, Notifications, Time & units, Clipboard & privacy, and Calendar. Choose Shammy's eye style and colour, how quickly the notch opens, your microphone, 12 or 24-hour time, and which features run at all.
+
+New here? A **welcome tour** takes about thirty seconds, and that's where you can give the pet its own name. Say or type *"help"* to see it again.
+
+</td>
+<td><img src="docs/images/settings.png" alt="Settings"><br><img src="docs/images/tour.png" alt="Welcome tour"></td>
 </tr>
 <tr>
 <td valign="top">
@@ -172,16 +201,18 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
   - scroll over the notch for volume, swipe sideways to skip.
 - 📋 **Clipboard:**
   - history of what you copy, with pinning and search; clearing it can be undone for a few seconds;
-  - a screenshot catcher you can drag into any app;
+  - a screenshot catcher you can drag into any app, with Copy text, Search with Lens, Send to phone and Add to shelf;
+  - save any copied text as a note;
   - Wi-Fi passwords from QR codes stay out of Windows' clipboard history.
 - ✍️ **Snippets:** type `;date`, `;time`, `;shrug` or your own triggers in any app and they expand.
 - 🚀 **Launcher:** *"open spotify"*, *"open github.com"*, *"open downloads"*.
-- 📅 **Calendar:** paste your Google Calendar's secret iCal address once (no sign-in): the week and your next meeting on a card, today's timeline, a glance, and a *Join* pill five minutes before a call.
+- 📅 **Calendar:** paste your Google Calendar's secret iCal address once (no sign-in): the week and your next meeting on a card, today's timeline, a glance, and a *Join* pill five minutes before a call. Say *"remind me 5 minutes before standup"* for a meeting on your calendar.
 - 🪞 **Mirror:** a quick look in your webcam before a call. The camera runs only while the mirror is open on screen.
 - 🌤️ **Ambient:** weather, and a cricket, stocks or crypto ticker in the resting glance.
 - 🖥️ **System:**
   - a CPU, memory and battery card, with your Bluetooth headsets' battery;
-  - alerts when an app hogs the CPU or the battery drains fast.
+  - alerts when an app hogs the CPU or the battery drains fast, and when your earbuds run low.
+- 🤫 **Quiet mode:** the notch keeps itself quiet during a calendar meeting and a focus session.
 - 🙈 **Fullscreen:** Shammy hides itself for fullscreen games, videos and presentations, and never covers a top taskbar. Only a finished timer or a due alarm or reminder shows over them, without taking focus.
 
 ## Install
@@ -189,7 +220,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 1. Download **`Shammy-Setup.exe`** from the [latest release](https://github.com/Roushan-2104/Shammy-Notch-For-Windows/releases/latest) and run it.
    - It installs for your account only, with no admin prompt.
    - .NET is included.
-2. On first run, Shammy asks once whether it should **start with Windows**. You can change this later in the tray menu.
+2. On first run, Shammy asks once whether it should **start with Windows**. You can change this later in the tray menu. The welcome tour follows.
 
 - **Updates are automatic.** Shammy downloads new versions in the background, usually just a few MB, and the notch offers *Update ready · click to restart*. If you ignore it, the update installs when Shammy next quits.
 - **No installer?** `Shammy-Portable.zip` runs from any folder and updates itself the same way.
@@ -215,6 +246,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 | `lyrics` | Synced lyrics, in the Music card |
 | `timer 25m tea` · `stopwatch` · `pomodoro` · `focus 45m` | A live countdown in the notch |
 | `remind me at 6pm to call mom` · `set an alarm for 7 am` · `kal subah 7 baje ka alarm laga do` · `parso subah 9 baje yaad dilana` · `note: buy milk` | A reminder card when it's due · the Notes card |
+| `wake me up at 6:30 every weekday` · `alarms` · `snooze` | A repeating alarm · the Alarms view · Snoozes one that's ringing |
 | `5 ft in cm` · `100 usd to inr` · `1.2 lakh in dollars` · `10 lakh + 5 lakh` · `5pm ist in pst` · `time in tokyo` | Instant answers (the palette shows the converted amount as you type) |
 | `translate good morning to hindi` | Google Translate, in the notch |
 | `calendar` · `my meetings` · `what's next` | Your next meeting · the Calendar card |
@@ -222,6 +254,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 | `open spotify` · `open vs code` · `open google crome` · `open github.com` · `open downloads` | App, site or folder launcher (nicknames and one typo per word are fine) |
 | `snippet ;sig Best, Roushan` · `snippets` | Text expansion in any app |
 | `weather` · `weather in mumbai tomorrow` · `pune ka mausam` · `ticker cricket` · `ticker stocks RELIANCE.NS` · `pet on` | Weather card · ticker glance · Shammy's eyes on or off |
+| `help` · `tour` | The welcome tour |
 | `volume 50` · `brightness to 70%` · `volume up` · `mute` | Sets the level directly |
 | `mute mic` · `cpu` · `clipboard` · `clear clipboard` · `send to phone` · `take a screenshot` | Mic toggle · System card · Clipboard card · Clears it (with Undo) · QR transfer · Screenshot |
 | *"…only from Reddit"*, *"…from the past week"*, *"…no junk"*, *"…from the docs"* | Search filters, spoken |
@@ -237,7 +270,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
   - the calendar is read only from Google, at the secret address you pasted;
   - the notch shows a "Sent to Google" badge whenever an image is uploaded to Lens.
 - **The results browser:** it can only open web pages, so pages can't launch apps or files.
-- **Notifications:** their text is hidden, in pop-ups and in the Alerts list, only while you share or record your screen (a normal call doesn't hide anything). The list shows it again when sharing ends.
+- **Sharing your screen:** while you share your whole screen or record it, message text is hidden in pop-ups and in the Alerts list, and so are meeting titles, reminders, notes and clipboard text. A normal call, or sharing a single tab or window, doesn't hide anything. It all comes back when sharing ends. A setting can hide message text all the time.
 - **Camera:** the mirror's camera is on only while the mirror is open on screen, and stops when it closes or the PC locks.
 - **Your data:**
   - clipboard history, notes, snippets, your calendar's address and the song titles voice remembers are encrypted with Windows DPAPI under your account. Song memory can be cleared or turned off from the tray;
@@ -259,6 +292,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
 - **Brightness keys:** Shammy shows its HUD, but Windows' own brightness pop-up can't be suppressed, because the firmware handles those keys.
 - **Notifications** are read when Windows' notification store changes. Clicking one opens the app, not the exact chat: Windows doesn't let other apps trigger a toast's own buttons.
 - **Exclusive-fullscreen games** (not borderless or windowed) can draw over a timer or alarm that breaks through fullscreen; you still hear its chime.
+- **Spotting a screen share:** Shammy recognises it from Windows' own signals and from the sharing bar Chrome, Edge, Zoom and Teams show. An app that shows neither isn't noticed, so nothing gets hidden.
 - **The Copilot key** replaces Windows' Copilot/Search action while Shammy runs.
 - **First launch** shows the notch about 3 s after start (WPF's one-time theme load).
 
@@ -301,7 +335,7 @@ src/Shammy.Core      pure logic, unit tested: springs, activity priority, parser
                    reminders, snippets, music), calculator, selection analysis, phone-transfer server
 src/Shammy.App       WPF app
   Shell/           the notch window: state machine, spring animation, shape, colour edge
-  Views/           resting pet and glance, peek, compact pills, the open notch's cards, search bar, results
+  Views/           resting pet and glance, peek, the pet's live activities, the open notch's tiles, search bar, results
   Search/          hotkeys, screen freeze, OCR, microphone, Whisper
   Modules/         self-contained features (music, calendar, productivity, clipboard, mirror, launcher,
                    snippets, ambient, meeting/system, phone send, drop actions, screenshots, selection tools)

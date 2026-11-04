@@ -25,7 +25,9 @@ internal sealed class MediaService : IDisposable
 
     public event Action? Changed;
 
-    public bool HasSession => _session is not null && Title.Length > 0;
+    bool _demo;
+
+    public bool HasSession => (_demo || _session is not null) && Title.Length > 0;
     public string Title { get; private set; } = "";
     public string Artist { get; private set; } = "";
     public ImageSource? Art { get; private set; }
@@ -57,8 +59,25 @@ internal sealed class MediaService : IDisposable
         Attach(_manager.GetCurrentSession());
     }
 
+    /// <summary>Test pipe only: a made-up song, so screenshots don't show what's really playing on this PC.</summary>
+    public void ShowDemoForTest(string title, string artist, ImageSource? art)
+    {
+        Attach(null);
+        _demo = true;
+        Title = title;
+        Artist = artist;
+        Art = art;
+        if (art is System.Windows.Media.Imaging.BitmapSource bmp) ArtColor = ArtPalette.Vibrant(bmp);
+        IsPlaying = true;
+        Duration = TimeSpan.FromMinutes(3.5);
+        _position = TimeSpan.FromMinutes(1.2);
+        _positionStamp = DateTimeOffset.Now;
+        Changed?.Invoke();
+    }
+
     void Attach(GlobalSystemMediaTransportControlsSession? session)
     {
+        if (_demo) return;
         if (_session is not null)
         {
             _session.MediaPropertiesChanged -= OnMediaPropertiesChanged;

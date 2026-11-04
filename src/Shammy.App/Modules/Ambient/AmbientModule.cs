@@ -52,6 +52,7 @@ internal sealed class AmbientModule : IShammyModule
 
         ctx.AddPipeCommand("ambient-weather", _ => _weather.RefreshNowBlocking());
         ctx.AddPipeCommand("ambient-weather-city", arg => _weather.CityBlocking(arg));
+        ctx.AddPipeCommand("ambient-weather-at", arg => _weather.AtForTest(arg));
         ctx.AddPipeCommand("ambient-ticker-preview", arg => _ticker.PreviewBlocking(arg));
         ctx.AddPipeCommand("ambient-state", _ =>
             $"online={NetworkInterface.GetIsNetworkAvailable()}; weather: {_weather.State}; ticker: {_ticker.State}; pet: {(ctx.Settings.PetEnabled ? "on" : "off")}");

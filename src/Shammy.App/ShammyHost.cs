@@ -742,6 +742,23 @@ internal sealed class ShammyHost : IDisposable
                 return "ok";
             case "fullscreen": _notch.SetFullscreen(arg == "on"); return "ok";
             case "volume": _volume?.Step(arg == "up" ? 1 : arg == "down" ? -1 : 0); return "ok";
+            // "media-demo Title|Artist|cover.png": a made-up song for screenshots; real sessions are ignored until restart.
+            case "media-demo":
+            {
+                var m = arg.Split('|');
+                System.Windows.Media.Imaging.BitmapImage? cover = null;
+                if (m.Length > 2)
+                {
+                    cover = new System.Windows.Media.Imaging.BitmapImage();
+                    cover.BeginInit();
+                    cover.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    cover.UriSource = new Uri(m[2]);
+                    cover.EndInit();
+                    cover.Freeze();
+                }
+                _media.ShowDemoForTest(m[0], m.Length > 1 ? m[1] : "", cover);
+                return "ok";
+            }
             case "media":
                 if (arg == "toggle") _media.TogglePlayPause();
                 else if (arg == "next") _media.Next();

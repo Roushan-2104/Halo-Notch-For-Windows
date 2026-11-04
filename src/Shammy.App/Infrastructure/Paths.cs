@@ -29,6 +29,8 @@ internal static class Paths
     /// </summary>
     static string ResolveRoot()
     {
+        // Test pipe only: a separate data folder, so screenshots and tests never touch (or show) the user's own data.
+        if (CommandServer.IsEnabled && Environment.GetEnvironmentVariable("SHAMMY_DATA_ROOT") is { Length: > 0 } testRoot) return testRoot;
         var root = Path.Combine(Local, "Shammy");
         var old = Path.Combine(Local, "Halo");
         if (Directory.Exists(root) || !Directory.Exists(old) || !LooksLikeOurs(old)) return root;
