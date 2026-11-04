@@ -308,6 +308,8 @@ internal sealed class ShammyHost : IDisposable
         Modules.HostLinks.Version = () => _updates.CurrentVersion;
         Modules.HostLinks.UpdateStatus = () => (_updates.LastResult, _updates.IsInstalled);
         Modules.HostLinks.CheckForUpdates = _updates.CheckAsync;
+        Modules.HostLinks.RestartForUpdate = RestartForUpdate;
+        _updates.Changed += Modules.HostLinks.RaiseUpdateChanged;
         // Settings can switch these too; the tray has its own callbacks for them.
         _settings.Changed += name => _ui.BeginInvoke(() => ApplySettingChange(name));
         _updates.Ready += _ => AnnounceUpdate();
@@ -614,6 +616,8 @@ internal sealed class ShammyHost : IDisposable
             case "update-state":
                 return $"installed={_updates.IsInstalled} version={_updates.CurrentVersion} ready={_updates.ReadyVersion ?? "-"} last={_updates.LastResult}";
             case "update-check": return Task.Run(_updates.CheckAsync).GetAwaiter().GetResult();
+            // Starts a check and answers at once, so "update-state" can watch it.
+            case "update-check-bg": _ = _updates.CheckAsync(); return "started";
             case "update-restart":
                 if (_updates.ReadyVersion is null) return "nothing ready";
                 _ui.BeginInvoke(RestartForUpdate);

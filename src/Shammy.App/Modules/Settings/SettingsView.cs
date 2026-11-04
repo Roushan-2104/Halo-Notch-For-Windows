@@ -7,6 +7,7 @@ using Shammy.Core.Notch;
 using Shammy.Core.Productivity;
 using Shammy.Core.Search;
 using Shammy.Core.Settings;
+using Shammy.Core.Updates;
 using Shammy.Infrastructure;
 using Shammy.Modules.Connect;
 using Shammy.Search;
@@ -336,35 +337,45 @@ internal sealed class SettingsView : Grid
             }, FeatureName(name)));
         }
 
-        var (result, installed) = HostLinks.UpdateStatus?.Invoke() ?? ("not checked", false);
-        TextBlock updateHint = null!;
-        Pressable? check = null;
-        if (installed && HostLinks.CheckForUpdates is { } checkNow)
+        UpdateRow();
+    }
+
+    /// <summary>The version, where updates stand, and the one button that makes sense right now.</summary>
+    void UpdateRow()
+    {
+        (string Result, bool Installed) Status() => HostLinks.UpdateStatus?.Invoke() ?? (UpdateText.NotChecked, false);
+        TextBlock hint = null!;
+        var slot = new Border();
+        Pressable check = ScreenKit.Secondary("Check now", async () =>
         {
-            check = ScreenKit.Secondary("Check now", async () =>
+            if (HostLinks.CheckForUpdates is not { } checkNow) return;
+            string result;
+            try { result = await checkNow(); }
+            catch (Exception ex)
             {
-                updateHint.Text = "Checking…";
-                string r;
-                try { r = await checkNow(); }
-                catch (Exception ex)
-                {
-                    Log.Warn("Update check from Settings failed", ex);
-                    r = "check failed";
-                }
-                updateHint.Text = UpdateHint(r, true) + " · just now";
-                Say(r.StartsWith("ready", StringComparison.Ordinal) ? "An update is ready" : r == "up to date" ? "You have the latest version" : "Couldn’t check for updates");
-            });
+                Log.Warn("Update check from Settings failed", ex);
+                result = UpdateText.Failed(ex.GetType().Name);
+            }
+            Say(UpdateText.Said(result));
+        });
+        Pressable restart = ScreenKit.Secondary("Restart to update", () => HostLinks.RestartForUpdate?.Invoke());
+        void Show()
+        {
+            var (result, installed) = Status();
+            hint.Text = UpdateText.Hint(result, installed);
+            slot.Child = !installed || UpdateText.IsBusy(result) ? null : UpdateText.IsReady(result) ? restart : check;
         }
-        Row($"Version {HostLinks.Version?.Invoke() ?? "?"}", UpdateHint(result, installed), check, out updateHint);
+        Row($"Version {HostLinks.Version?.Invoke() ?? "?"}", UpdateText.Hint(Status().Result, Status().Installed), slot, out hint);
+        Show();
+        slot.Loaded += (_, _) =>
+        {
+            HostLinks.UpdateChanged += Show;
+            Show();
+        };
+        slot.Unloaded += (_, _) => HostLinks.UpdateChanged -= Show;
     }
 
     static string VolumeHint(int v) => v == 0 ? "0% · alarms still ring at 20%" : $"{v}% · pings, chimes and alarms";
-
-    static string UpdateHint(string result, bool installed) =>
-        !installed ? "Updates come with the installed copy." :
-        result.StartsWith("ready", StringComparison.Ordinal) ? $"Update {result[5..].Trim()} ready · restart from the tray" :
-        result == "up to date" ? "Up to date" :
-        result.StartsWith("check failed", StringComparison.Ordinal) ? "Couldn’t check · tries again later" : "Checks by itself every few hours";
 
     static readonly Dictionary<string, (string Name, string Hint)> Features = new(StringComparer.OrdinalIgnoreCase)
     {

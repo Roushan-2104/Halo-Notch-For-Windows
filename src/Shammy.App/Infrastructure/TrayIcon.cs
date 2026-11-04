@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using Shammy.Core.Updates;
 using Shammy.Interop;
 
 namespace Shammy.Infrastructure;
@@ -149,23 +150,20 @@ internal sealed class TrayIcon : IDisposable
         menu.Items.Add(new ToolStripSeparator());
         var update = new ToolStripMenuItem("Check for updates") { Enabled = updates.IsInstalled };
         if (!updates.IsInstalled) update.ToolTipText = "Install Shammy with Setup to get automatic updates";
-        update.Click += async (_, _) =>
+        update.Click += (_, _) =>
         {
-            if (updates.ReadyVersion is not null)
-            {
-                onRestartForUpdate();
-                return;
-            }
-            update.Text = "Checking for updates…";
-            update.Enabled = false;
-            var result = await updates.CheckAsync();
-            update.Enabled = true;
-            update.Text = result == "up to date" ? "Shammy is up to date" : "Check for updates";
+            if (updates.ReadyVersion is not null) onRestartForUpdate();
+            else _ = updates.CheckAsync();
         };
-        menu.Opening += (_, _) =>
+        // The label follows the checker, including the background checks, and a check always ends (see UpdateService).
+        void ShowUpdateStatus()
         {
-            if (updates.ReadyVersion is { } v) update.Text = $"Restart to update to {v}";
-        };
+            if (!updates.IsInstalled) return;
+            update.Text = UpdateText.TrayLabel(updates.LastResult);
+            update.Enabled = !UpdateText.IsBusy(updates.LastResult);
+        }
+        updates.Changed += ShowUpdateStatus;
+        menu.Opening += (_, _) => ShowUpdateStatus();
         menu.Items.Add(new ToolStripLabel($"Version {updates.CurrentVersion}") { ForeColor = Color.Gray });
         menu.Items.Add(update);
         menu.Items.Add("Open logs folder", null, (_, _) => Process.Start(new ProcessStartInfo(Paths.Logs) { UseShellExecute = true }));

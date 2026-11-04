@@ -24,6 +24,14 @@ internal static class HostLinks
     /// <summary>Checks for an update now; the result reads like <see cref="UpdateStatus"/>.</summary>
     public static Func<Task<string>>? CheckForUpdates { get; set; }
 
+    /// <summary>Restarts into a downloaded update.</summary>
+    public static Action? RestartForUpdate { get; set; }
+
+    /// <summary>The update checker's status changed; read it from <see cref="UpdateStatus"/>.</summary>
+    public static event Action? UpdateChanged;
+
+    public static void RaiseUpdateChanged() => UpdateChanged?.Invoke();
+
     /// <summary>Every module's glance provider, by id ("weather", "calendar"…).</summary>
     public static IReadOnlyDictionary<string, Func<GlanceItem?>>? Glances { get; set; }
 
