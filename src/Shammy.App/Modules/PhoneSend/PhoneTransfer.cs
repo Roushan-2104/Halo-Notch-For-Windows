@@ -41,7 +41,9 @@ internal sealed class PhoneTransfer : IDisposable
         _server.FileReceived += p => ctx.Ui.BeginInvoke(() => OnReceived(p));
         _server.Warning += (message, ex) => ctx.Warn(message, ex);
         _server.Start();
-        Url = $"http://{address}:{_server.Port}/{_server.Token}";
+        // Test pipe only: an example address on the card, so screenshots don't show where this PC really is.
+        var shown = Infrastructure.CommandServer.IsEnabled && Environment.GetEnvironmentVariable("SHAMMY_TEST_LAN_ADDRESS") is { Length: > 0 } test ? test : address.ToString();
+        Url = $"http://{shown}:{_server.Port}/{_server.Token}";
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, (_, _) => Tick(), ctx.Ui);
         try
         {
