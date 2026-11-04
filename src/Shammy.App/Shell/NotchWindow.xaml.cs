@@ -349,7 +349,7 @@ public partial class NotchWindow : Window
 
     public void BringToFront()
     {
-        if (_hwnd != IntPtr.Zero) Native.BringToTopmost(_hwnd);
+        if (_hwnd != IntPtr.Zero && !MenusAboveNotch.AnyOpen) Native.BringToTopmost(_hwnd);
     }
 
     /// <summary>Keep the notch out of Shammy's own screen freeze (it's drawn live on top anyway).</summary>
