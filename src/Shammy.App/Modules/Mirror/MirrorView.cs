@@ -96,6 +96,7 @@ internal sealed class MirrorView : WallDetail
     }
 
     public long Frames => _camera.Frames;
+    public string Diagnostics => _camera.Diagnostics;
     public string FrameSize => _camera.Size;
     public MirrorProblem Problem { get; private set; }
     public string CameraState => _starting ? "starting" : _camera.Running ? "running" : "stopped";
@@ -135,6 +136,12 @@ internal sealed class MirrorView : WallDetail
             // Closed while the camera was still warming up: release it straight away.
             await _camera.StopAsync();
             UpdateStatus();
+            return;
+        }
+        // Reshown while the earlier start was being cancelled: that start gave up, so go again.
+        if (problem == MirrorProblem.None && !_camera.Running)
+        {
+            await StartAsync();
             return;
         }
         if (problem != MirrorProblem.None)

@@ -19,7 +19,7 @@ namespace Shammy.Views;
 /// </summary>
 public partial class ExpandedView
 {
-    const double Dimmed = 0.58, SlotTop = (204 - WallTile.H) / 2;
+    const double Dimmed = 0.58, SlotTop = (176 - WallTile.H) / 2;
 
     readonly NotchCard _nowPlaying;
     readonly Dictionary<NotchCard, RailSlot> _slots = new();
@@ -129,6 +129,8 @@ public partial class ExpandedView
         }
         RailStrip.RenderTransform = _railShift;
         EmptyText.Visibility = _openId is null && cards.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        // The notch is as wide as its tiles need; an opened view sets its own size.
+        if (_openId is null) SetBodySize(WallRail.OpenWidth(cards.Count), cards.Count == 0 ? EmptyHeight : HomeHeight);
         int focus = WallRail.Keep(ids, _focusedId, cards.Select(LiveOf).ToList());
         if (changed || focus != _focus) SetFocus(focus, animate);
     }
@@ -187,7 +189,7 @@ public partial class ExpandedView
             Panel.SetZIndex(slot.Root, on ? 2 : 1);
             slot.To(on ? WallRail.FocusScale : 1, WallRail.Offset(j, index), on || index < 0 ? 1 : Dimmed, on ? 1 : 0, snap);
         }
-        double start = WallRail.Start(_rail.Count, Math.Max(0, index));
+        double start = WallRail.Start(_rail.Count, Math.Max(0, index), Width - WallRail.Padding);
         if (snap) _railStart.Snap(start);
         else _railStart.AnimateTo(start, 0.45, 0.9);
         ApplyMotion();

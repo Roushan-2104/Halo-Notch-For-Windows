@@ -102,7 +102,7 @@ internal sealed class MirrorModule : IShammyModule
         var v = _view;
         bool open = v is { IsVisible: true };
         return string.Create(CultureInfo.InvariantCulture,
-            $"detail={(open ? "open" : "closed")} camera={(v?.CameraState ?? "stopped")} frames={v?.Frames ?? 0} size={v?.FrameSize ?? "-"} " +
+            $"detail={(open ? "open" : "closed")} camera={(v?.CameraState ?? "stopped")} frames={v?.Frames ?? 0} size={v?.FrameSize ?? "-"} {v?.Diagnostics} " +
             $"mirrored={_store.Mirrored} level={_store.Level} locked={_locked} problem={v?.Problem.ToString() ?? "-"}");
     }
 

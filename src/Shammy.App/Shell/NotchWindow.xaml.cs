@@ -745,7 +745,7 @@ public partial class NotchWindow : Window
         NotchMode.Compact => (_compactWidth, 32, 12),
         NotchMode.Notification => (460, 92, 30),
         NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
-        NotchMode.Expanded => (ExpandedView.OpenWidth, Expanded.Height, 36),
+        NotchMode.Expanded => (Expanded.Width, Expanded.Height, 36),
         NotchMode.Drop => (DropZone.Width, DropZone.Height, 28),
         NotchMode.Listening or NotchMode.Circling or NotchMode.Thinking => (420, 54, 27),
         NotchMode.Typing => (560, 58 + _paletteHeight, _paletteHeight > 0 ? 30 : 29),

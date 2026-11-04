@@ -18,6 +18,19 @@ public static class WallRail
     /// <summary>The open notch's rail width (1012 minus 20 px padding each side).</summary>
     public const double RailWidth = 972;
 
+    /// <summary>The open notch's widest and narrowest; the rail's padding on both sides together.</summary>
+    public const double MaxOpenWidth = 1012, MinOpenWidth = 720, Padding = 40;
+
+    /// <summary>
+    /// How wide the open notch is for this many tiles: just enough for them with the focused one grown and its
+    /// neighbours stepped aside, so a quiet moment isn't a wide black band. The top row keeps it from going narrower.
+    /// </summary>
+    public static double OpenWidth(int count)
+    {
+        double room = Width(count) + 2 * (TileWidth * (FocusScale - 1) / 2 + Shift + Gap) + Padding;
+        return Math.Clamp(Math.Ceiling(room), MinOpenWidth, MaxOpenWidth);
+    }
+
     /// <summary>The relevant cards, left to right by Order (ties keep registration order).</summary>
     public static IReadOnlyList<string> Tiles(IEnumerable<WallCard> cards) =>
         cards.Where(c => c.Relevant).OrderBy(c => c.Order).Select(c => c.Id).ToList();

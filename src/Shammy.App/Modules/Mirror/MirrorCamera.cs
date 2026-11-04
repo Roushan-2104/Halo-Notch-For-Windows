@@ -33,7 +33,8 @@ internal sealed class MirrorCamera
     double _lutFactor = -1;
     int _pending, _width, _height;
     readonly Stopwatch _clock = Stopwatch.StartNew();
-    TimeSpan _lastFrame = TimeSpan.MinValue;
+    // Not TimeSpan.MinValue: "now - _lastFrame" would overflow and throw on every frame.
+    TimeSpan _lastFrame = TimeSpan.FromHours(-1);
     int _generation;
 
     public MirrorCamera(Dispatcher ui) => _ui = ui;
@@ -45,6 +46,12 @@ internal sealed class MirrorCamera
 
     public bool Running => _reader is not null;
     public long Frames { get; private set; }
+
+    /// <summary>For the test pipe: which camera, frames that arrived, those without pixels, and the last failure.</summary>
+    public string Diagnostics => $"source={_sourceName} arrived={_arrived} empty={_empty} error={_lastError ?? "-"}";
+    string _sourceName = "-";
+    long _arrived, _empty;
+    string? _lastError;
     public string Size => _width > 0 ? $"{_width}x{_height}" : "-";
 
     /// <summary>Brightness multiplier (0.6–1.4); 1 leaves frames untouched. Read on the capture thread.</summary>
@@ -70,6 +77,7 @@ internal sealed class MirrorCamera
                 .Select(x => ((MediaFrameSourceGroup Group, MediaFrameSourceInfo Info)?)x)
                 .FirstOrDefault();
             if (pick is not { } chosen) return MirrorProblem.NoCamera;
+            _sourceName = $"{chosen.Group.DisplayName}/{chosen.Info.MediaStreamType}";
 
             var capture = new MediaCapture();
             bool exclusive = true;
@@ -217,6 +225,8 @@ internal sealed class MirrorCamera
                 reader.Dispose();
             }
             capture?.Dispose();
+            // The next start announces a fresh bitmap, so a reopened mirror isn't left with an empty brush.
+            Bitmap = null;
         }
         finally
         {
@@ -227,9 +237,14 @@ internal sealed class MirrorCamera
     // Runs on a capture thread.
     void OnFrameArrived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
     {
+        Interlocked.Increment(ref _arrived);
         using var frame = sender.TryAcquireLatestFrame();
         var bitmap = frame?.VideoMediaFrame?.SoftwareBitmap;
-        if (bitmap is null) return;
+        if (bitmap is null)
+        {
+            Interlocked.Increment(ref _empty);
+            return;
+        }
         var now = _clock.Elapsed;
         if (now - _lastFrame < MinFrameGap || Interlocked.CompareExchange(ref _pending, 1, 0) != 0)
         {
@@ -250,8 +265,10 @@ internal sealed class MirrorCamera
             ApplyBrightness(_pixels);
             _ui.BeginInvoke(DispatcherPriority.Render, () => Present(w, h));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            if (_lastError is null) Shammy.Infrastructure.Log.Warn("Mirror: reading a camera frame failed", ex);
+            _lastError = ex.GetType().Name + " " + ex.HResult.ToString("X8");
             Interlocked.Exchange(ref _pending, 0);
         }
         finally

@@ -154,6 +154,10 @@ internal sealed class CapabilityWatcher : IDisposable
             var screen = Registered("graphicsCaptureProgrammatic", titles);
             foreach (var app in Registered("graphicsCaptureWithoutBorder", titles))
                 if (!screen.Any(s => s.Key == app.Key)) screen.Add(app);
+            // Browsers and most meeting apps capture without touching those keys, but show their own "sharing" bar.
+            foreach (var (_, title) in titles.Value)
+                if (Shammy.Core.Connect.ScreenShareWindows.Sharer(title) is { } sharer && !screen.Any(s => s.Name == sharer))
+                    screen.Add(new CapabilityApp("share:" + sharer, null, sharer, "window"));
             return new CapabilitySnapshot(mic, Registered("webcam", titles), screen);
         }
         catch (Exception ex)

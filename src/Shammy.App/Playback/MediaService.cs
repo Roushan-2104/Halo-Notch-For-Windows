@@ -124,7 +124,8 @@ internal sealed class MediaService : IDisposable
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.DecodePixelWidth = 200;
+                // Sharp enough for the 300 px art panel on a 2x screen.
+                bmp.DecodePixelWidth = 600;
                 bmp.StreamSource = ms;
                 bmp.EndInit();
                 bmp.Freeze();

@@ -20,7 +20,11 @@ namespace Shammy.Views;
 public partial class ExpandedView : UserControl
 {
     /// <summary>The open notch: 1012 wide; the rail makes it 278 tall, a 248-tall view 326.</summary>
-    public const double OpenWidth = 1012, HomeHeight = 12 + 36 + 8 + 204 + 18, DetailHeight = 12 + 36 + 12 + WallDetail.H + 18;
+    public const double OpenWidth = WallRail.MaxOpenWidth, HomeHeight = 12 + 36 + 6 + RailHeight + 14, EmptyHeight = 12 + 36 + 64 + 14,
+        DetailHeight = 12 + 36 + 12 + WallDetail.H + 18;
+
+    /// <summary>Room for a focused tile (140 x 1.15 = 161) and its glow.</summary>
+    const double RailHeight = 176;
 
     /// <summary>The Back + title row above a detail that isn't a Wall detail.</summary>
     const double HeaderBand = 44;
@@ -288,7 +292,7 @@ public partial class ExpandedView : UserControl
         DetailFrame.Visibility = Visibility.Visible;
         SyncChips();
         Refresh();
-        SetBodyHeight(DetailHeight - WallDetail.H + DetailFrame.Height);
+        SetBodySize(OpenWidth, DetailHeight - WallDetail.H + DetailFrame.Height);
         if (IsVisible)
         {
             if (wall && from is { } rect) Morph((WallDetail)content!, rect);
@@ -320,7 +324,6 @@ public partial class ExpandedView : UserControl
         DetailFrame.Clip = null;
         Rail.Visibility = Visibility.Visible;
         SyncChips();
-        SetBodyHeight(HomeHeight);
         DisarmHover();
         RebuildRail(animate: false);
         // Back on the rail with the tile that was open focused; it settles into place.
@@ -360,9 +363,10 @@ public partial class ExpandedView : UserControl
 
     static View CardView(NotchCard c) => new(c.Id, c.Title, ViewKind.Card, Card: c);
 
-    void SetBodyHeight(double height)
+    void SetBodySize(double width, double height)
     {
-        if (Height == height) return;
+        if (Width == width && Height == height) return;
+        Width = width;
         Height = height;
         HeightChanged?.Invoke();
     }

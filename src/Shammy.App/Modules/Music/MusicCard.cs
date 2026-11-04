@@ -88,7 +88,8 @@ internal sealed class MusicCard
     /// <summary>A song playing is live (it wins the focus over the weather); a paused one barely.</summary>
     public int Live => Media.IsPlaying ? 50 : Media.HasSession ? 5 : 0;
 
-    Brush Field => Fields.Music(ArtPalette.Field(Media.Art));
+    /// <summary>The cover itself when the player gives one; otherwise the plum and rust field.</summary>
+    Brush Field => Media.Art is { } art ? Fields.Cover(art) : Fields.Music(ArtPalette.Field(null));
 
     string State => Media.IsPlaying ? "Now playing" : Media.HasSession ? "Paused" : "Nothing playing";
 

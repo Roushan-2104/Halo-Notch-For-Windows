@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:Shammy.Views"
-             Width="1012" Height="278" Focusable="True" FocusVisualStyle="{x:Null}">
+             Width="720" Height="250" Focusable="True" FocusVisualStyle="{x:Null}">
     <!-- The open notch as a Focus Wall (Wall.dc.html): pet-eyes home, tracked chips and search on top; below, one
          rail of artwork tiles with the focused one grown, or one card opened in place out of its tile. -->
     <UserControl.Resources>
@@ -42,7 +42,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="Body" Margin="20,12,20,18">
+    <Grid x:Name="Body" Margin="20,12,20,14">
         <Grid.RowDefinitions>
             <RowDefinition Height="36" />
             <RowDefinition Height="*" />
@@ -100,7 +100,7 @@
         </Grid>
 
         <!-- The rail: tiles are placed in code (Rail.cs); the strip moves to keep the focused tile in view -->
-        <Canvas x:Name="Rail" Grid.Row="1" Height="204" Margin="0,8,0,0" VerticalAlignment="Top" AutomationProperties.Name="Widgets">
+        <Canvas x:Name="Rail" Grid.Row="1" Height="176" Margin="0,6,0,0" VerticalAlignment="Top" AutomationProperties.Name="Widgets">
             <Canvas x:Name="RailStrip" />
         </Canvas>
         <TextBlock x:Name="EmptyText" Grid.Row="1" Text="Nothing going on · press Right Alt to search" FontFamily="{StaticResource WallFontMedium}"

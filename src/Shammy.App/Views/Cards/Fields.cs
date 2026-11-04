@@ -70,6 +70,33 @@ internal static class Fields
     }
 
     /// <summary>The album's colours: a bright spot top-left, the second hue top-right, a deep base.</summary>
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ImageSource, Brush> Covers = new();
+
+    /// <summary>
+    /// The album cover itself as a tile's or detail's artwork, cropped to fill, with a soft shade at the foot so white
+    /// words stay readable on any picture. Baked once per cover: a live image plus gradient would be redrawn with
+    /// every repaint of this software-rendered window.
+    /// </summary>
+    public static Brush Cover(ImageSource art)
+    {
+        if (Covers.TryGetValue(art, out var cached)) return cached;
+        const int w = 600, h = 496;
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var rect = new Rect(0, 0, w, h);
+            dc.DrawRectangle(new ImageBrush(art) { Stretch = Stretch.UniformToFill }, null, rect);
+            dc.DrawRectangle(Linear(180, (Color.FromArgb(0x10, 11, 11, 13), 0), (Color.FromArgb(0x10, 11, 11, 13), 0.35), (Color.FromArgb(0xC8, 11, 11, 13), 1)), null, rect);
+        }
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        var brush = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
+        brush.Freeze();
+        Covers.AddOrUpdate(art, brush);
+        return brush;
+    }
+
     public static Brush Music(ArtFieldColors c) => Cached("music" + c.GetHashCode(), () => Layered(
         Linear(160, (C(c.Base1), 0), (C(c.Base2), 1)),
         new Glow(40, 30, 90, 70, C(c.Glow1)),
