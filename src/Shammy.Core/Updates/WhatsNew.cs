@@ -8,6 +8,10 @@ public static class WhatsNew
 {
     public const int MaxLines = 3;
 
+    /// <summary>Copies up to this version never recorded what they ran, so "nothing recorded" on an existing install
+    /// means this one or older, and every note since is news to them.</summary>
+    const string LastBeforeNotes = "0.5.4";
+
     /// <summary>What fits on one line of the note.</summary>
     public const int MaxLineLength = 52;
 
@@ -36,12 +40,16 @@ public static class WhatsNew
     {
         if (Parse(current) is not { } now) return Array.Empty<string>();
         var last = Parse(lastRun);
-        if (last is null && !existingUser) return Array.Empty<string>();
-        if (last is not null && last >= now) return Array.Empty<string>();
+        if (last is null)
+        {
+            if (!existingUser) return Array.Empty<string>();
+            last = Parse(LastBeforeNotes);
+        }
+        if (last >= now) return Array.Empty<string>();
 
         return Notes
             .Select(n => (Version: Parse(n.Key), Lines: n.Value))
-            .Where(n => n.Version is not null && n.Version <= now && (last is null ? n.Version == now : n.Version > last))
+            .Where(n => n.Version is not null && n.Version <= now && n.Version > last)
             .OrderByDescending(n => n.Version)
             .SelectMany(n => n.Lines)
             .Distinct()

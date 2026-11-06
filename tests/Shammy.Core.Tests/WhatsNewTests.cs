@@ -17,6 +17,22 @@ public class WhatsNewTests
     public void Someone_updating_from_before_the_note_existed_sees_it() =>
         Assert.Equal(WhatsNew.Notes["0.5.5"], WhatsNew.LinesFor(null, "0.5.5", existingUser: true));
 
+    [Fact]
+    public void Someone_jumping_from_before_the_note_sees_everything_since_newest_first()
+    {
+        var expected = WhatsNew.Notes["0.5.6"].Concat(WhatsNew.Notes["0.5.5"]).Take(WhatsNew.MaxLines);
+        Assert.Equal(expected, WhatsNew.LinesFor(null, "0.5.6", existingUser: true));
+        Assert.Equal(expected, WhatsNew.LinesFor("0.5.4", "0.5.6", existingUser: true));
+    }
+
+    [Fact]
+    public void An_existing_copy_still_on_an_old_version_shows_nothing() =>
+        Assert.Empty(WhatsNew.LinesFor(null, "0.5.4", existingUser: true));
+
+    [Fact]
+    public void Someone_who_saw_the_last_note_only_sees_the_new_one() =>
+        Assert.Equal(WhatsNew.Notes["0.5.6"], WhatsNew.LinesFor("0.5.5", "0.5.6", existingUser: true));
+
     [Theory]
     [InlineData("0.5.5", "0.5.5")]
     [InlineData("0.5.6", "0.5.5")]
