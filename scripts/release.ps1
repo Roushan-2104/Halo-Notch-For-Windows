@@ -25,6 +25,7 @@ Set-Location $root
 $repo = "https://github.com/Roushan-2104/Shammy-Notch-For-Windows"
 $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 if (-not $version) { throw "No <Version> in Directory.Build.props" }
+if (-not (Select-String -Path src\Shammy.Core\Updates\WhatsNew.cs -SimpleMatch "[`"$version`"]" -Quiet)) { throw "Add what's-new lines for $version in src\Shammy.Core\Updates\WhatsNew.cs" }
 $publishDir = "artifacts\publish"
 Write-Host "Shammy $version" -ForegroundColor Cyan
 

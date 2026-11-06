@@ -11,12 +11,19 @@ public class NotificationTextTests
     }
 
     [Fact]
-    public void List_rows_hide_title_and_body_while_private()
+    public void List_rows_keep_the_sender_and_hide_the_message_while_private()
     {
         var (title, detail) = NotificationText.ForList("WhatsApp", "Riya", "the door code is 4471", presenting: true);
-        Assert.Equal("WhatsApp", title);
-        Assert.Equal(NotificationText.ListHidden, detail);
-        Assert.DoesNotContain("Riya", title + detail);
+        Assert.Equal("Riya", title);
+        Assert.Equal($"WhatsApp · {NotificationText.ListHidden}", detail);
+        Assert.DoesNotContain("4471", title + detail);
+    }
+
+    [Fact]
+    public void List_rows_with_no_body_hide_the_title_too_while_private()
+    {
+        var (title, detail) = NotificationText.ForList("Bank", "Your OTP is 4471", "", presenting: true);
+        Assert.Equal("Bank", title);
         Assert.DoesNotContain("4471", title + detail);
     }
 
@@ -31,6 +38,27 @@ public class NotificationTextTests
     public void Popups_keep_their_text_unless_private()
     {
         Assert.Equal(("Riya", "hi"), NotificationText.ForPopup("WhatsApp", "Riya", "hi", false));
-        Assert.Equal(("WhatsApp", NotificationText.PopupHidden), NotificationText.ForPopup("WhatsApp", "Riya", "hi", true));
+        Assert.Equal(("Riya", NotificationText.PopupHidden), NotificationText.ForPopup("WhatsApp", "Riya", "hi", true));
+    }
+
+    [Fact]
+    public void A_popup_with_no_body_may_carry_its_message_in_the_title_so_that_hides_too()
+    {
+        Assert.Equal(("Bank", NotificationText.PopupHidden), NotificationText.ForPopup("Bank", "Your OTP is 4471", "  ", true));
+        Assert.Equal(("Bank", NotificationText.PopupAlwaysHidden), NotificationText.ForPopup("Bank", "Your OTP is 4471", "", false, alwaysHide: true));
+    }
+
+    [Fact]
+    public void The_always_hide_setting_does_not_claim_you_are_sharing()
+    {
+        Assert.Equal(("Riya", NotificationText.PopupAlwaysHidden), NotificationText.ForPopup("WhatsApp", "Riya", "hi", false, alwaysHide: true));
+        Assert.Equal(("Riya", NotificationText.PopupHidden), NotificationText.ForPopup("WhatsApp", "Riya", "hi", true, alwaysHide: true));
+    }
+
+    [Fact]
+    public void Hiding_twice_changes_nothing()
+    {
+        var once = NotificationText.ForPopup("WhatsApp", "Riya", "hi", true);
+        Assert.Equal(once, NotificationText.ForPopup("WhatsApp", once.Title, once.Body, true));
     }
 }

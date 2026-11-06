@@ -1,13 +1,17 @@
 namespace Shammy.Core.Notifications;
 
 /// <summary>
-/// What a notification shows. During a call or screen capture others may see the notch, so then only the
-/// app (and, in the list, the time) is shown, never what the message says.
+/// What a notification shows. While the whole screen is shared or recorded others can see the notch, so then who it's
+/// from stays and what it says doesn't. A notification with no body may be carrying its message in the title (a
+/// reminder, a status), so that one shows the app's name instead.
 /// </summary>
 public static class NotificationText
 {
     /// <summary>The pop-up's second line while private.</summary>
-    public const string PopupHidden = "Hidden while you're in a call or sharing your screen";
+    public const string PopupHidden = "Message hidden while you share your screen";
+
+    /// <summary>The pop-up's second line with "always hide message text" on.</summary>
+    public const string PopupAlwaysHidden = "Message hidden";
 
     /// <summary>A Notifications-tab row's second line while private.</summary>
     public const string ListHidden = "Message hidden while sharing your screen";
@@ -18,12 +22,17 @@ public static class NotificationText
     /// </summary>
     public static (string Title, string Detail) ForList(string appName, string title, string body, bool presenting)
     {
-        if (presenting) return (appName, ListHidden);
+        if (presenting)
+            return string.IsNullOrWhiteSpace(body) ? (appName, ListHidden) : (title, $"{appName} · {ListHidden}");
         var flat = string.Join(" ", (body ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         return (title, flat.Length > 0 ? $"{appName} · {flat}" : appName);
     }
 
     /// <summary>The pop-up's title and body.</summary>
-    public static (string Title, string Body) ForPopup(string appName, string title, string body, bool presenting) =>
-        presenting ? (appName, PopupHidden) : (title, body);
+    /// <param name="alwaysHide">The user's setting to hide message text even when nobody can see the screen.</param>
+    public static (string Title, string Body) ForPopup(string appName, string title, string body, bool presenting, bool alwaysHide = false)
+    {
+        if (!presenting && !alwaysHide) return (title, body);
+        return (string.IsNullOrWhiteSpace(body) ? appName : title, presenting ? PopupHidden : PopupAlwaysHidden);
+    }
 }

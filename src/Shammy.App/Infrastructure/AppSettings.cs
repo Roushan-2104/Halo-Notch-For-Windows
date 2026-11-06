@@ -145,6 +145,9 @@ internal sealed class AppSettings
     /// <summary>The first-run welcome tour has been shown (finished, skipped or left); the tray can replay it.</summary>
     public bool TourSeen { get; set; }
 
+    /// <summary>The version that last told the user what's new; a newer one shows its note once.</summary>
+    public string? LastRunVersion { get; set; }
+
     /// <summary>A ringing alarm swells from quiet to full over 30 s; off rings at full volume straight away.</summary>
     public bool AlarmGentleWake { get; set; } = true;
 

@@ -12,6 +12,8 @@ namespace Shammy.Views;
 /// </summary>
 public partial class NotificationView : UserControl
 {
+    public const double CardWidth = 460, CardHeight = 104;
+
     ShammyNotification? _shown;
 
     public NotificationView()

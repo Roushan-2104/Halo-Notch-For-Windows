@@ -116,15 +116,15 @@ Press <kbd>Copilot</kbd> and the screen freezes. Circle a photo, a word or a par
 <td valign="top">
 
 ### 🔔 Notifications, calmly
-Other apps' notifications drop out of the notch with a soft ping instead of Windows' chime:
+Other apps' notifications open right in the notch with a soft ping instead of Windows' chime, so you can read the message without touching anything:
 - **hover** to keep one on screen;
 - **click** to open the app;
 - **right-click** to mute that app.
 
-While you share your whole screen or record it, Shammy shows who a notification is from, but not what it says. Sharing just a tab or a window hides nothing, because the notch isn't in the picture, and neither does an ordinary call. Muted apps stay out of the Alerts list too.
+While you share your whole screen or record it, Shammy shows who a notification is from, but not what it says, and a message already on screen hides its text the moment sharing starts. Sharing just a tab or a window hides nothing, because the notch isn't in the picture, and neither does an ordinary call. Muted apps stay out of the Alerts list too.
 
 </td>
-<td><img src="docs/images/notification.png" alt="Notification card"></td>
+<td><img src="docs/images/notification.png" alt="A message in the notch"><br><img src="docs/images/notification-private.png" alt="The same message while sharing the screen, with its text hidden"></td>
 </tr>
 <tr>
 <td valign="top">
@@ -222,7 +222,7 @@ Like AirDrop, over your own Wi-Fi. Scan the QR code and the phone downloads the 
    - .NET is included.
 2. On first run, Shammy asks once whether it should **start with Windows**. You can change this later in the tray menu. The welcome tour follows.
 
-- **Updates are automatic.** Shammy downloads new versions in the background, usually just a few MB, and the notch offers *Update ready · click to restart*. If you ignore it, the update installs when Shammy next quits.
+- **Updates are automatic.** Shammy downloads new versions in the background, usually just a few MB, and the notch shows the new version with a restart button beside it. If you ignore it, the update installs when Shammy next quits. After an update, a small note tells you what's new.
 - **No installer?** `Shammy-Portable.zip` runs from any folder and updates itself the same way.
 - **First launch:** Shammy downloads a small offline voice model (~148 MB) so you can talk within a minute. Typing and circling work meanwhile. It then checks your PC once and quietly fetches a sharper model in the background: about 574 MB on a PC with a usable graphics card, or 488 MB otherwise. The notch says *Voice upgraded* when it switches.
 - **Hinglish voice (optional):** on a PC with a graphics card, tick *Hinglish voice (Hindi + English)* in the tray menu to switch to a model that understands Hindi mixed with English, like "kal subah 7 baje ka alarm laga do" (a one-time 574 MB download). It writes Hindi in Latin letters, and anything it isn't sure about is checked against the regular English model. It's off by default, and greyed out on PCs that run voice on the processor, where it would be too slow.

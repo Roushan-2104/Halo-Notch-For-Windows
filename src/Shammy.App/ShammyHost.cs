@@ -303,6 +303,7 @@ internal sealed class ShammyHost : IDisposable
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         SystemEvents.TimeChanged += OnTimeChanged;
 
+        PrivacyState.Changed += presenting => _ui.BeginInvoke(() => HideShownNotification(presenting));
         _updates = Own(new UpdateService(_ui));
         Modules.HostLinks.Version = () => _updates.CurrentVersion;
         Modules.HostLinks.UpdateStatus = () => (_updates.LastResult, _updates.IsInstalled);
@@ -421,17 +422,7 @@ internal sealed class ShammyHost : IDisposable
             _held++;
             return;
         }
-        // During a call or screen capture others may see the notch: show who it's from, not what it says
-        // (always, with the AlwaysHideNotificationText setting).
-        if (PrivacyState.Presenting || _settings.AlwaysHideNotificationText)
-        {
-            var (title, body) = Shammy.Core.Notifications.NotificationText.ForPopup(n.AppName, n.Title, n.Body, presenting: true);
-            n = new ShammyNotification
-            {
-                Id = n.Id, AppId = n.AppId, AppName = n.AppName, Icon = n.Icon, Time = n.Time,
-                Title = title, Body = body,
-            };
-        }
+        n = Private(n);
 
         int more = _activities.Get("notification") is { Payload: NotificationPayload p } ? p.More + 1 : 0;
         // Shammy's own soft ping (Windows' sound can be turned off in its notification settings). A burst
@@ -445,6 +436,26 @@ internal sealed class ShammyHost : IDisposable
         {
             Click = () => OpenNotificationApp(n),
         });
+    }
+
+    /// <summary>While the screen is shared or recorded others can see the notch: who it's from stays, what it says doesn't
+    /// (always, with the AlwaysHideNotificationText setting).</summary>
+    ShammyNotification Private(ShammyNotification n)
+    {
+        if (!PrivacyState.Presenting && !_settings.AlwaysHideNotificationText) return n;
+        var (title, body) = Shammy.Core.Notifications.NotificationText.ForPopup(n.AppName, n.Title, n.Body, PrivacyState.Presenting, _settings.AlwaysHideNotificationText);
+        return new ShammyNotification
+        {
+            Id = n.Id, AppId = n.AppId, AppName = n.AppName, Icon = n.Icon, Time = n.Time,
+            Title = title, Body = body,
+        };
+    }
+
+    /// <summary>Sharing started with a message already on screen: its text goes at once, for the time it has left.</summary>
+    void HideShownNotification(bool presenting)
+    {
+        if (presenting && _activities.Get("notification") is { Payload: NotificationPayload p } shown)
+            Post(shown with { Payload = p with { Notification = Private(p.Notification) } });
     }
 
     /// <summary>A reminder in an hour with the app and what it said (read from the list, since a private pop-up hid the text).</summary>

@@ -91,7 +91,7 @@ public partial class NotchWindow : Window
     IReadOnlyList<Activity> _ranked = Array.Empty<Activity>();
     PetLive? _petOwner, _petDot;
     string? _petPreferred;
-    bool _petShowing, _notifyRevealed;
+    bool _petShowing;
 
     internal NotchWindow(ShammyServices services)
     {
@@ -365,8 +365,6 @@ public partial class NotchWindow : Window
     {
         bool wasAction = IsAction(_activity);
         bool wasNotification = _mode == NotchMode.Notification;
-        // A new notification starts as the pet's wide eyes; hovering reveals the card (at once if the pointer is already here).
-        if (current?.Kind == ActivityKind.Notification && !ReferenceEquals(current.Payload, _activity?.Payload)) _notifyRevealed = Root.IsMouseOver;
         _activity = current;
         _secondary = secondary;
         _ranked = ranked ?? (current is null ? Array.Empty<Activity>() : new[] { current });
@@ -700,7 +698,7 @@ public partial class NotchWindow : Window
         else if (_dragging) mode = NotchMode.Drop;
         else if (_cardOpen) mode = NotchMode.Card;
         else if (_activity?.Kind == ActivityKind.Notification && !_hoverExpanded)
-            mode = !_notifyRevealed && PetFor(_activity) is not null ? NotchMode.Compact : NotchMode.Notification;
+            mode = NotchMode.Notification;
         else if (_hoverExpanded) mode = NotchMode.Expanded;
         else if (_peeking) mode = NotchMode.Peek;
         // Music, like every live activity the pet can wear, shows as the pet in costume (ActivityView); a paused
@@ -744,7 +742,7 @@ public partial class NotchWindow : Window
         NotchMode.Peek => (PeekView.PeekWidth, PeekView.PeekHeight, 26),
         NotchMode.Compact when _petShowing => (ActivityView.ViewWidth, ActivityView.ViewHeight, ActivityView.Radius),
         NotchMode.Compact => (_compactWidth, 32, 12),
-        NotchMode.Notification => (460, 92, 30),
+        NotchMode.Notification => (NotificationView.CardWidth, NotificationView.CardHeight, 30),
         NotchMode.Card => (_cardSize.W, _cardSize.H, Math.Min(32, _cardSize.H / 2)),
         NotchMode.Expanded => (Expanded.Width, Expanded.Height, 36),
         NotchMode.Drop => (DropZone.Width, DropZone.Height, 28),
@@ -923,7 +921,7 @@ public partial class NotchWindow : Window
     }
 
     /// <summary>
-    /// The pet itself was clicked: a notification shows its card, a finished timer or download runs its own click
+    /// The pet itself was clicked: a finished timer or download runs its own click
     /// (dismiss, the download card), and anything ongoing opens the notch (its one action is on the circle).
     /// </summary>
     void PetBodyClicked()
@@ -932,12 +930,6 @@ public partial class NotchWindow : Window
         if (owner is null || !PetActivities.BodyClickRunsActivity(owner.State) || owner.Activity.Click is not { } click)
         {
             OpenFromHover();
-            return;
-        }
-        if (owner.State.Costume == PetCostume.Notify)
-        {
-            _notifyRevealed = true;
-            Recompute();
             return;
         }
         click();
@@ -951,7 +943,7 @@ public partial class NotchWindow : Window
         return $"mode={_mode} petCompact={(_mode == NotchMode.Compact && _petShowing ? "yes" : "no")} petOn={_services.Settings.PetEnabled} " +
                $"owner={(o is null ? "-" : $"{o.Activity.Id}:{o.State.Costume}")} face={pet.Face?.ToString() ?? "-"} " +
                $"label='{_activityView.LabelText}' value='{_activityView.ValueText}' {_chrome.Describe()} " +
-               $"preferred={_petPreferred ?? "-"} notifyRevealed={_notifyRevealed} mouth={pet.MouthOpen:0.00} fullscreen={_fullscreen}";
+               $"preferred={_petPreferred ?? "-"} mouth={pet.MouthOpen:0.00} fullscreen={_fullscreen}";
     }
 
     /// <summary>Test hook: click the action circle, or with "dot" the dot (as a user would).</summary>
@@ -1039,12 +1031,6 @@ public partial class NotchWindow : Window
         _wiggle.Reset();
         _restView.Mood.Noticed();
         if (_mode == NotchMode.Card) return;
-        // The pet's wide eyes said something arrived; hovering shows what (the notification card).
-        if (_mode == NotchMode.Compact && _petShowing && _activity?.Kind == ActivityKind.Notification && !_notifyRevealed)
-        {
-            _notifyRevealed = true;
-            Recompute();
-        }
         // Hovering a notification holds it on screen (to read or click) instead of opening the card.
         if (_mode == NotchMode.Notification)
         {
