@@ -18,7 +18,8 @@ internal sealed class UpdateService : IDisposable
 {
     const string RepoUrl = "https://github.com/Roushan-2104/Shammy-Notch-For-Windows";
     static readonly TimeSpan FirstCheck = TimeSpan.FromSeconds(45);
-    static readonly TimeSpan CheckLimit = TimeSpan.FromSeconds(30);
+    // Generous: on a slow connection one small request to GitHub can take over 20 s, and a check makes a few.
+    static readonly TimeSpan CheckLimit = TimeSpan.FromMinutes(2);
 
     /// <summary>A download may take a while on a slow line, but it has to keep moving.</summary>
     static readonly TimeSpan DownloadStall = TestSeconds("SHAMMY_UPDATE_STALL_SECONDS") ?? TimeSpan.FromMinutes(3);
